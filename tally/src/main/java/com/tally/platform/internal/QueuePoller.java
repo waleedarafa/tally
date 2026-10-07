@@ -76,6 +76,8 @@ final class QueuePoller {
         scheduler.shutdownNow();
         workers.shutdown();
         try {
+            // Wait for a poll cycle in progress, so nothing is claimed or recorded once stop returns.
+            scheduler.awaitTermination(10, TimeUnit.SECONDS);
             // Items still running after this are returned by a reaper later.
             workers.awaitTermination(10, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
