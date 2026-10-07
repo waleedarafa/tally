@@ -4,52 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.shared.Money;
-import com.tally.support.AbstractProviderIntegrationTest;
+import com.tally.support.AbstractReconcilingTest;
 import com.tally.support.FakeProvider;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.TestPropertySource;
 
 /** ADR-018: unknown outcomes are reconciled, never retried; recent failures are re-checked. Own context. */
-@TestPropertySource(properties = {
-        "tally.platform.polling-enabled=true",
-        "tally.platform.poll-interval=100ms",
-        "tally.test.context=reconciliation"
-})
-class ReconciliationIT extends AbstractProviderIntegrationTest {
+class ReconciliationIT extends AbstractReconcilingTest {
 
-    @Autowired
-    PaymentApi payments;
-
-    @Autowired
-    MeterRegistry meters;
-
-    @Autowired
-    JdbcTemplate jdbc;
-
-    /**
-     * The job's row is shared by every test context, and earlier contexts may have rescheduled it to
-     * their own clock (years ahead, after AT-3). Bring it due at this context's clock.
-     */
-    @BeforeEach
-    void reconciliationDueNow() {
-        jdbc.update("UPDATE payment.jobs SET status = 'READY', claim_token = NULL, due_at = ?"
-                + " WHERE queue_key = 'payment-reconciliation'", clock.instant().atOffset(ZoneOffset.UTC));
-    }
-
-    double corrected(String from, String to) {
-        Counter counter = meters.find("tally.payment.outcome_corrected").tags("from", from, "to", to).counter();
-        return counter == null ? 0 : counter.count();
-    }
 
     String collect() {
         String reference = "REC-" + UUID.randomUUID();
