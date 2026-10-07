@@ -75,9 +75,12 @@ public class Invoice {
         return i;
     }
 
-    /** Returns whether the invoice changed: only a pending invoice can be paid. */
+    /**
+     * Returns whether the invoice changed. A failed invoice can still be paid: reconciliation may
+     * find that a charge reported as failed went through (ADR-018).
+     */
     public boolean paid(Instant now) {
-        if (status != InvoiceStatus.PAYMENT_PENDING) {
+        if (status == InvoiceStatus.PAID) {
             return false;
         }
         status = InvoiceStatus.PAID;

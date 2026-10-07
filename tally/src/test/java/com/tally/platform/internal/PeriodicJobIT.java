@@ -66,7 +66,7 @@ class PeriodicJobIT extends AbstractIntegrationTest {
     @TestConfiguration(proxyBeanMethods = false)
     static class Jobs {
         @Bean
-        CountingJob reconciliation() {
+        CountingJob testReconciliationJob() {
             return new CountingJob("test-reconciliation");
         }
     }

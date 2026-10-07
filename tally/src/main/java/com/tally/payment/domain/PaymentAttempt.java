@@ -53,6 +53,12 @@ public class PaymentAttempt {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "reconcile_at")
+    private Instant reconcileAt;
+
+    @Column(name = "reconcile_checks", nullable = false)
+    private int reconcileChecks;
+
     protected PaymentAttempt() {
     }
 
@@ -83,6 +89,8 @@ public class PaymentAttempt {
         this.state = AttemptState.FAILED;
         this.failureReason = reason;
         this.updatedAt = now;
+        // A provider can report a failure for a charge that went through: re-checked for 48 hours (ADR-018).
+        this.reconcileAt = ReconciliationSchedule.first(now);
     }
 
     /**
@@ -100,6 +108,46 @@ public class PaymentAttempt {
         requireInFlight();
         this.state = AttemptState.UNKNOWN;
         this.updatedAt = now;
+        this.reconcileAt = ReconciliationSchedule.first(now);
+    }
+
+    /** Reconciliation found the provider charged it (ADR-018). Returns the state it corrected. */
+    public AttemptState reconciledAsCharged(String chargeId, Instant now) {
+        AttemptState was = requireReconcilable();
+        this.state = AttemptState.SUCCEEDED;
+        this.failureReason = null;
+        this.chargeId = chargeId;
+        this.updatedAt = now;
+        this.reconcileAt = null;
+        return was;
+    }
+
+    /** Reconciliation found the charge declined, or never made, while the outcome was UNKNOWN. */
+    public void reconciledAsFailed(FailureReason reason, Instant now) {
+        if (state != AttemptState.UNKNOWN) {
+            throw new IllegalStateException("Attempt " + id + " is " + state + ", not UNKNOWN");
+        }
+        this.state = AttemptState.FAILED;
+        this.failureReason = reason;
+        this.updatedAt = now;
+        this.reconcileChecks = 0;
+        this.reconcileAt = ReconciliationSchedule.first(now);
+    }
+
+    /** A check that changed nothing: back off (5 minutes, 1 hour, then daily; FAILED for 48 hours only). */
+    public void checkedWithoutChange(Instant now) {
+        requireReconcilable();
+        reconcileChecks++;
+        reconcileAt = state == AttemptState.FAILED
+                ? ReconciliationSchedule.afterFailed(reconcileChecks, updatedAt, now).orElse(null)
+                : ReconciliationSchedule.after(reconcileChecks, now);
+    }
+
+    private AttemptState requireReconcilable() {
+        if (state != AttemptState.UNKNOWN && state != AttemptState.FAILED) {
+            throw new IllegalStateException("Attempt " + id + " is " + state + ": nothing to reconcile");
+        }
+        return state;
     }
 
     private void requireInFlight() {
@@ -134,5 +182,9 @@ public class PaymentAttempt {
 
     public Optional<FailureReason> failureReason() {
         return Optional.ofNullable(failureReason);
+    }
+
+    public Optional<Instant> reconcileAt() {
+        return Optional.ofNullable(reconcileAt);
     }
 }
