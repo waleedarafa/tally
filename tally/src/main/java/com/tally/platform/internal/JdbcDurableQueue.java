@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -31,18 +32,23 @@ final class JdbcDurableQueue implements DurableQueue {
     record Claim(QueueItem item, UUID token) {
     }
 
+    /** Does the work for a claim and records its result. Must not throw. */
+    interface Processor {
+        void process(JdbcDurableQueue queue, Claim claim);
+    }
+
     private final QueueDefinition definition;
-    private final QueueHandler handler;
+    private final Processor processor;
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private final String instance;
     private final Duration claimTimeout;
     private final String table;
 
-    JdbcDurableQueue(QueueDefinition definition, QueueHandler handler, JdbcTemplate jdbc, Clock clock,
+    JdbcDurableQueue(QueueDefinition definition, Processor processor, JdbcTemplate jdbc, Clock clock,
             String instance, Duration claimTimeout) {
         this.definition = definition;
-        this.handler = handler;
+        this.processor = processor;
         this.jdbc = jdbc;
         this.clock = clock;
         this.instance = instance;
@@ -52,6 +58,10 @@ final class JdbcDurableQueue implements DurableQueue {
 
     QueueDefinition definition() {
         return definition;
+    }
+
+    Instant now() {
+        return clock.instant();
     }
 
     @Override
@@ -98,17 +108,24 @@ final class JdbcDurableQueue implements DurableQueue {
                 token, at(now), instance, at(now), max);
     }
 
-    /** Runs the handler for one claimed item and records its outcome. Never throws. */
+    /** Does the work for one claimed item and records its result. */
     void handle(Claim claim) {
-        Outcome outcome;
-        try {
-            outcome = handler.handle(claim.item());
-        } catch (Exception e) {
-            log.warn("Queue {} item {} failed", name(), claim.item().key(), e);
-            fail(claim, e);
-            return;
-        }
-        complete(claim, outcome);
+        processor.process(this, claim);
+    }
+
+    /** The processor for a {@link QueueHandler}: its outcome is recorded; an exception marks the item FAILED. */
+    static Processor processorFor(QueueHandler handler) {
+        return (queue, claim) -> {
+            Outcome outcome;
+            try {
+                outcome = handler.handle(claim.item());
+            } catch (Exception e) {
+                log.warn("Queue {} item {} failed", queue.name(), claim.item().key(), e);
+                queue.fail(claim, e);
+                return;
+            }
+            queue.complete(claim, outcome);
+        };
     }
 
     /** Records an outcome, if this claim still owns the item. Returns whether it did. */
@@ -134,7 +151,7 @@ final class JdbcDurableQueue implements DurableQueue {
         return owned(claim, updated);
     }
 
-    /** Periodic jobs: back to READY at {@code next}; a success also records {@code last_success_at}. */
+    /** Periodic jobs: back to READY at {@code next}. A success also records {@code last_success_at}. */
     boolean reschedule(Claim claim, Instant next, Optional<Exception> error) {
         int updated = jdbc.update("UPDATE " + table
                         + " SET status = 'READY', due_at = ?, claim_token = NULL, last_error = ?,"
@@ -169,6 +186,18 @@ final class JdbcDurableQueue implements DurableQueue {
         OffsetDateTime oldest = jdbc.queryForObject("SELECT min(due_at) FROM " + table
                 + " WHERE status IN ('READY', 'IN_PROCESSING') AND due_at <= ?", OffsetDateTime.class, at(now));
         return oldest == null ? 0 : Duration.between(oldest.toInstant(), now).toMillis() / 1000.0;
+    }
+
+    /** When the item with this key last succeeded, and when it was created. */
+    Optional<Instant> lastSuccess(String key) {
+        List<OffsetDateTime> found = jdbc.queryForList(
+                "SELECT last_success_at FROM " + table + " WHERE queue_key = ?", OffsetDateTime.class, key);
+        return found.stream().filter(Objects::nonNull).findFirst().map(OffsetDateTime::toInstant);
+    }
+
+    Optional<Instant> createdAt(String key) {
+        return jdbc.queryForList("SELECT created_at FROM " + table + " WHERE queue_key = ?", OffsetDateTime.class, key)
+                .stream().findFirst().map(OffsetDateTime::toInstant);
     }
 
     long failed() {

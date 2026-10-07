@@ -27,19 +27,27 @@ class JdbcDurableQueues implements DurableQueues {
     }
 
     @Override
-    public synchronized DurableQueue register(QueueDefinition definition, QueueHandler handler) {
+    public DurableQueue register(QueueDefinition definition, QueueHandler handler) {
+        return register(definition, JdbcDurableQueue.processorFor(handler));
+    }
+
+    synchronized JdbcDurableQueue register(QueueDefinition definition, JdbcDurableQueue.Processor processor) {
         if (queues.stream().anyMatch(q -> q.name().equals(definition.name()))) {
             throw new IllegalStateException("Queue " + definition.name() + " is already registered");
         }
         QueueTableCheck.verify(jdbc, definition.table());
-        JdbcDurableQueue queue = create(definition, handler, instance.value());
+        JdbcDurableQueue queue = create(definition, processor, instance.value());
         queues.add(queue);
         return queue;
     }
 
     /** A queue object not added to the registry. Tests use it to act as a second instance. */
     JdbcDurableQueue create(QueueDefinition definition, QueueHandler handler, String instanceName) {
-        return new JdbcDurableQueue(definition, handler, jdbc, clock, instanceName, properties.claimTimeout());
+        return create(definition, JdbcDurableQueue.processorFor(handler), instanceName);
+    }
+
+    JdbcDurableQueue create(QueueDefinition definition, JdbcDurableQueue.Processor processor, String instanceName) {
+        return new JdbcDurableQueue(definition, processor, jdbc, clock, instanceName, properties.claimTimeout());
     }
 
     List<JdbcDurableQueue> queues() {
