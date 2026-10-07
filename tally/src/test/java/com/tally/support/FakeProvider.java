@@ -60,6 +60,12 @@ public final class FakeProvider {
                 .body(new ParameterizedTypeReference<Map<String, Integer>>() { }).get("count");
     }
 
+    /** Totals since the provider started: requests, rateLimited (429), unavailable (503), charged. */
+    public static Map<String, Long> stats() {
+        return http().get().uri("/admin/stats").retrieve()
+                .body(new ParameterizedTypeReference<Map<String, Long>>() { });
+    }
+
     /** How many charges the provider recorded for a reference. */
     public static int chargeCount(String reference) {
         return http().get().uri("/admin/charges/count?reference={r}", reference).retrieve()

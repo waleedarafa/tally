@@ -97,6 +97,9 @@ class ProviderControllerTest {
         }
 
         assertThat(statuses).contains(429).filteredOn(s -> s == 200).hasSizeLessThanOrEqualTo(6);
+        Map<String, Integer> stats = http.get().uri("/admin/stats").retrieve()
+                .body(new ParameterizedTypeReference<>() { });
+        assertThat(stats.get("rateLimited")).isGreaterThanOrEqualTo((int) statuses.stream().filter(s -> s == 429).count());
     }
 
     @Test
