@@ -3,10 +3,8 @@ package com.tally.spikes;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.tally.AbstractIntegrationTest;
-import com.tally.TallyApplication;
 import com.tally.platform.TestClock;
-import com.tally.platform.TestClockConfiguration;
+import com.tally.support.TallyInstances;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,8 +14,6 @@ import java.util.concurrent.CyclicBarrier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.boot.WebApplicationType;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.modulith.events.IncompleteEventPublications;
@@ -37,6 +33,7 @@ import spike.modulith.SpikeListener.Behaviour;
  */
 class SpikeAEventPublicationIT {
 
+    final TallyInstances instances = new TallyInstances();
     final List<ConfigurableApplicationContext> contexts = new ArrayList<>();
 
     /** Permits released to unblock an earlier test's listeners must not let this test's listeners through. */
@@ -49,25 +46,12 @@ class SpikeAEventPublicationIT {
     @AfterEach
     void stopAll() {
         SpikeListener.RELEASE.release(100);
-        contexts.forEach(ConfigurableApplicationContext::close);
+        instances.close();
         contexts.clear();
     }
 
     ConfigurableApplicationContext start(String name, String... properties) {
-        AbstractIntegrationTest.POSTGRES.start();
-        List<String> props = new ArrayList<>(List.of(
-                "spring.datasource.url=" + AbstractIntegrationTest.POSTGRES.getJdbcUrl(),
-                "spring.datasource.username=" + AbstractIntegrationTest.POSTGRES.getUsername(),
-                "spring.datasource.password=" + AbstractIntegrationTest.POSTGRES.getPassword(),
-                "spring.flyway.locations=classpath:db/migration,classpath:db/testmigration",
-                "tally.platform.polling-enabled=false",
-                "spring.application.name=" + name));
-        props.addAll(List.of(properties));
-        ConfigurableApplicationContext context = new SpringApplicationBuilder(
-                TallyApplication.class, TestClockConfiguration.class, SpikeConfiguration.class)
-                .web(WebApplicationType.NONE)
-                // As command-line arguments: builder "properties" are defaults that application.yml overrides.
-                .run(props.stream().map(p -> "--" + p).toArray(String[]::new));
+        ConfigurableApplicationContext context = instances.start(name, SpikeConfiguration.class, properties);
         contexts.add(context);
         return context;
     }
