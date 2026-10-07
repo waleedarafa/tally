@@ -10,11 +10,15 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Base class for integration tests: the full application against a real PostgreSQL, with a
- * {@link TestClock} in place of the system clock (D4).
+ * {@link TestClock} in place of the system clock (D4). Pollers are off: tests drive queues
+ * directly, unless a test switches polling on. Test-only tables come from {@code db/testmigration}.
  * One container is shared by every test class in the run (singleton container pattern),
  * so Spring can also reuse its cached contexts.
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+        "spring.flyway.locations=classpath:db/migration,classpath:db/testmigration",
+        "tally.platform.polling-enabled=false"
+})
 @Import(TestClockConfiguration.class)
 public abstract class AbstractIntegrationTest {
 
