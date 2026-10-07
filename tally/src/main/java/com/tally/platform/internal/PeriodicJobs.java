@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -17,7 +18,8 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Component;
 
 /**
- * Turns every {@link PeriodicJob} bean into a self-rescheduling row in its module's job table.
+ * Turns every {@link PeriodicJob} bean, and every invariant check, into a self-rescheduling row in its
+ * module's job table.
  * Each job table becomes one queue, polled like any other; its rows are dispatched by key.
  * Runs before the pollers start.
  */
@@ -27,12 +29,15 @@ class PeriodicJobs implements SmartInitializingSingleton {
     private static final Logger log = LoggerFactory.getLogger(PeriodicJobs.class);
 
     private final ObjectProvider<PeriodicJob> beans;
+    private final InvariantJobs invariants;
     private final JdbcDurableQueues queues;
     private final JobRegistry registry;
     private final Clock clock;
 
-    PeriodicJobs(ObjectProvider<PeriodicJob> beans, JdbcDurableQueues queues, JobRegistry registry, Clock clock) {
+    PeriodicJobs(ObjectProvider<PeriodicJob> beans, InvariantJobs invariants, JdbcDurableQueues queues,
+            JobRegistry registry, Clock clock) {
         this.beans = beans;
+        this.invariants = invariants;
         this.queues = queues;
         this.registry = registry;
         this.clock = clock;
@@ -40,7 +45,7 @@ class PeriodicJobs implements SmartInitializingSingleton {
 
     @Override
     public void afterSingletonsInstantiated() {
-        Map<String, List<PeriodicJob>> byTable = beans.orderedStream()
+        Map<String, List<PeriodicJob>> byTable = Stream.concat(beans.orderedStream(), invariants.jobs().stream())
                 .collect(Collectors.groupingBy(PeriodicJob::table));
         byTable.forEach((table, jobs) -> {
             Map<String, PeriodicJob> byName = jobs.stream()
