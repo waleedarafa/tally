@@ -8,4 +8,7 @@ public interface DurableQueues {
      * described on {@link QueueDefinition}.
      */
     DurableQueue register(QueueDefinition definition, QueueHandler handler);
+
+    /** As {@link #register(QueueDefinition, QueueHandler)}, claiming only while {@code gate} is open. */
+    DurableQueue register(QueueDefinition definition, QueueHandler handler, ClaimGate gate);
 }

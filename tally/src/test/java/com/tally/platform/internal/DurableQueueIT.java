@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -172,6 +173,21 @@ class DurableQueueIT extends AbstractIntegrationTest {
         assertThat(crashed.complete(abandoned, Outcome.done())).isFalse();
         assertThat(status("k")).isEqualTo("READY");
         assertThat(handled.getFirst().attempts()).isEqualTo(2);
+    }
+
+    @Test
+    void aClosedGateClaimsNothingAndTheItemsWait() {
+        AtomicBoolean open = new AtomicBoolean(false);
+        JdbcDurableQueue queue = queues.create(WORK, JdbcDurableQueue.processorFor(recording(Outcome.done())),
+                open::get, "test-instance");
+        queue.enqueue("k", clock.instant(), "p");
+
+        assertThat(queue.processDue()).isZero();
+        assertThat(status("k")).isEqualTo("READY");
+        assertThat(queue.waiting()).isEqualTo(1);
+
+        open.set(true);
+        assertThat(queue.processDue()).isEqualTo(1);
     }
 
     @Test

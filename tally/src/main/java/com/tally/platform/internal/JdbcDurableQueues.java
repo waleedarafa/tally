@@ -1,5 +1,6 @@
 package com.tally.platform.internal;
 
+import com.tally.platform.ClaimGate;
 import com.tally.platform.DurableQueue;
 import com.tally.platform.DurableQueues;
 import com.tally.platform.QueueDefinition;
@@ -30,15 +31,21 @@ class JdbcDurableQueues implements DurableQueues {
 
     @Override
     public DurableQueue register(QueueDefinition definition, QueueHandler handler) {
-        return register(definition, JdbcDurableQueue.processorFor(handler));
+        return register(definition, handler, ClaimGate.ALWAYS_OPEN);
     }
 
-    synchronized JdbcDurableQueue register(QueueDefinition definition, JdbcDurableQueue.Processor processor) {
+    @Override
+    public DurableQueue register(QueueDefinition definition, QueueHandler handler, ClaimGate gate) {
+        return register(definition, JdbcDurableQueue.processorFor(handler), gate);
+    }
+
+    synchronized JdbcDurableQueue register(QueueDefinition definition, JdbcDurableQueue.Processor processor,
+            ClaimGate gate) {
         if (queues.stream().anyMatch(q -> q.name().equals(definition.name()))) {
             throw new IllegalStateException("Queue " + definition.name() + " is already registered");
         }
         QueueTableCheck.verify(jdbc, definition.table());
-        JdbcDurableQueue queue = create(definition, processor, instance.value());
+        JdbcDurableQueue queue = create(definition, processor, gate, instance.value());
         queues.add(queue);
         listeners.forEach(l -> l.accept(queue));
         return queue;
@@ -52,11 +59,16 @@ class JdbcDurableQueues implements DurableQueues {
 
     /** A queue object not added to the registry. Tests use it to act as a second instance. */
     JdbcDurableQueue create(QueueDefinition definition, QueueHandler handler, String instanceName) {
-        return create(definition, JdbcDurableQueue.processorFor(handler), instanceName);
+        return create(definition, JdbcDurableQueue.processorFor(handler), ClaimGate.ALWAYS_OPEN, instanceName);
     }
 
     JdbcDurableQueue create(QueueDefinition definition, JdbcDurableQueue.Processor processor, String instanceName) {
-        return new JdbcDurableQueue(definition, processor, jdbc, clock, instanceName, properties.claimTimeout());
+        return create(definition, processor, ClaimGate.ALWAYS_OPEN, instanceName);
+    }
+
+    JdbcDurableQueue create(QueueDefinition definition, JdbcDurableQueue.Processor processor, ClaimGate gate,
+            String instanceName) {
+        return new JdbcDurableQueue(definition, processor, gate, jdbc, clock, instanceName, properties.claimTimeout());
     }
 
     List<JdbcDurableQueue> queues() {

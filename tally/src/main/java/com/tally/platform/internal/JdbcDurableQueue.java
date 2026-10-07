@@ -1,5 +1,6 @@
 package com.tally.platform.internal;
 
+import com.tally.platform.ClaimGate;
 import com.tally.platform.DurableQueue;
 import com.tally.platform.Outcome;
 import com.tally.platform.QueueDefinition;
@@ -39,16 +40,18 @@ final class JdbcDurableQueue implements DurableQueue {
 
     private final QueueDefinition definition;
     private final Processor processor;
+    private final ClaimGate gate;
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private final String instance;
     private final Duration claimTimeout;
     private final String table;
 
-    JdbcDurableQueue(QueueDefinition definition, Processor processor, JdbcTemplate jdbc, Clock clock,
+    JdbcDurableQueue(QueueDefinition definition, Processor processor, ClaimGate gate, JdbcTemplate jdbc, Clock clock,
             String instance, Duration claimTimeout) {
         this.definition = definition;
         this.processor = processor;
+        this.gate = gate;
         this.jdbc = jdbc;
         this.clock = clock;
         this.instance = instance;
@@ -85,11 +88,17 @@ final class JdbcDurableQueue implements DurableQueue {
         return claims.size();
     }
 
-    /** Claims up to {@code max} due items with FOR UPDATE SKIP LOCKED, so instances never share an item. */
+    /**
+     * Claims up to {@code max} due items with FOR UPDATE SKIP LOCKED, so instances never share an item.
+     * Claims nothing while the queue's gate is closed.
+     */
     List<Claim> claim(int max) {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException(
                     "Queue " + name() + " claimed inside a transaction; claims must commit before work starts (ADR-005)");
+        }
+        if (!gate.open()) {
+            return List.of();
         }
         UUID token = UUID.randomUUID();
         Instant now = clock.instant();

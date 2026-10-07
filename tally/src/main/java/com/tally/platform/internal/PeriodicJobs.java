@@ -1,5 +1,6 @@
 package com.tally.platform.internal;
 
+import com.tally.platform.ClaimGate;
 import com.tally.platform.Outcome;
 import com.tally.platform.PeriodicJob;
 import com.tally.platform.QueueDefinition;
@@ -45,7 +46,7 @@ class PeriodicJobs implements SmartInitializingSingleton {
             Map<String, PeriodicJob> byName = jobs.stream()
                     .collect(Collectors.toMap(PeriodicJob::name, Function.identity()));
             JdbcDurableQueue queue = queues.register(
-                    QueueDefinition.of(queueName(table), table), processor(byName));
+                    QueueDefinition.of(queueName(table), table), processor(byName), ClaimGate.ALWAYS_OPEN);
             jobs.forEach(job -> schedule(queue, job));
         });
     }
