@@ -2,6 +2,7 @@ package com.tally;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Clock;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,5 +20,13 @@ class TallyApplicationIT extends AbstractIntegrationTest {
 
         assertThat(schemas).contains(
                 "account", "catalog", "subscription", "invoicing", "payment", "entitlement");
+    }
+
+    @Autowired
+    Clock injectedClock;
+
+    @Test
+    void injectsTheTestClock() {
+        assertThat(injectedClock).isSameAs(clock);
     }
 }
