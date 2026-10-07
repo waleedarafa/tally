@@ -8,6 +8,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -53,6 +54,13 @@ public class Invoice {
 
     @Column(name = "paid_at")
     private Instant paidAt;
+
+    /**
+     * Optimistic lock. A listener may run twice at the same time (Spike A): without it, two concurrent
+     * deliveries of one PaymentSucceeded could both mark the invoice paid and both publish InvoicePaid.
+     */
+    @Version
+    private long version;
 
     protected Invoice() {
     }
