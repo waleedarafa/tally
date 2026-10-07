@@ -773,3 +773,75 @@ These were proposed in the plan and built with the recommended choice. Each is e
 2. **Job health is a structural rule for now** (FF-10, above), with a runtime metric check to follow in step 4.
 3. **`DomainEvent.accountId()` is a `UUID`.** No account ID type exists yet. If account IDs become a value type, this changes before any event is published.
 4. **No explicit ArchUnit version.** Spring Boot doesn't manage ArchUnit, so ADR-026's rule ("versions pinned through Spring Boot's dependency management") can't cover it. Instead of pinning a version, ArchUnit 1.4.2 comes in through `spring-modulith-starter-test`: the version Spring Modulith 2.1.1 is built against, and one that supports Java 25. The rules use ArchUnit's core API directly, so `archunit-junit5` isn't needed.
+
+## Added in build step 4: FF-10b, job health at runtime
+
+Step 2's FF-10 is static: a class implementing `BackgroundJob` must also implement `HealthSignal`. Step 4 adds the runtime half that was promised then. `EveryJobHasHealthMetricsIT` starts the application with polling switched on. It checks that every job the platform registered (queue pollers, reapers, periodic jobs) and every `BackgroundJob` bean has a `tally.job.last_success_age_seconds` gauge, and that every registered queue has `tally.queue.oldest_due_age_seconds` and `tally.queue.waiting`.
+
+| Case | Fitness function | Guards | Failing test | Result |
+|---|---|---|---|---|
+| v10b | FF-10b: every running job and queue has its health metrics | ADR-023 | `EveryJobHasHealthMetricsIT.everyJobAndQueueHasItsHealthMetrics` | fails as expected (exit 1) |
+
+Run against commit `84a4254` ("Slice 1 step 4: health metrics for every queue and job"), using the same script as above, which now also reads the Failsafe reports.
+
+### v10b: a job outside the platform has no health metric (FF-10b)
+
+**Violation.** A bean in `account` implements `BackgroundJob` and `HealthSignal`, so it passes FF-10. But it is not registered with the platform, so no metric reports it. Only the runtime check catches this.
+
+`tally/src/main/java/com/tally/account/ViolationUnmonitoredJob.java`
+```java
+package com.tally.account;
+
+import com.tally.platform.BackgroundJob;
+import com.tally.platform.HealthSignal;
+import java.time.Instant;
+import java.util.Optional;
+import org.springframework.stereotype.Component;
+
+/**
+ * DELIBERATE VIOLATION: a background job that runs outside the platform's registry, so no
+ * health metric is ever registered for it (ADR-023). It satisfies the static rule (FF-10).
+ */
+@Component
+public class ViolationUnmonitoredJob implements BackgroundJob, HealthSignal {
+
+    @Override
+    public String name() {
+        return "account-cleanup";
+    }
+
+    @Override
+    public Optional<Instant> lastSuccess() {
+        return Optional.empty();
+    }
+
+    @Override
+    public long waitingWork() {
+        return 0;
+    }
+}
+```
+
+**Build output** (`./mvnw -B verify`, Maven summary):
+```
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 9.569 s <<< FAILURE! -- in com.tally.platform.internal.EveryJobHasHealthMetricsIT
+[ERROR] com.tally.platform.internal.EveryJobHasHealthMetricsIT.everyJobAndQueueHasItsHealthMetrics -- Time elapsed: 0.697 s <<< FAILURE!
+[ERROR] Failures: 
+[ERROR]   EveryJobHasHealthMetricsIT.everyJobAndQueueHasItsHealthMetrics:59 [Every background job and queue reports health (ADR-023)] 
+[ERROR] Tests run: 20, Failures: 1, Errors: 0, Skipped: 0
+[INFO] BUILD FAILURE
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-failsafe-plugin:3.5.6:verify (default) on project tally: There are test failures.
+```
+
+**Failure message** (Failsafe report):
+```
+Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 9.569 s <<< FAILURE! -- in com.tally.platform.internal.EveryJobHasHealthMetricsIT
+com.tally.platform.internal.EveryJobHasHealthMetricsIT.everyJobAndQueueHasItsHealthMetrics -- Time elapsed: 0.697 s <<< FAILURE!
+java.lang.AssertionError: 
+[Every background job and queue reports health (ADR-023)] 
+Expecting empty but was: ["job account-cleanup: tally.job.last_success_age_seconds"]
+```
+
+After the violation was removed, `./mvnw -B verify` was green again (see the step 4 commit that adds this section).
+
+Until step 5 adds the first production queue, FF-10b passes on the main application with no production jobs to check. Its mechanism is covered by `HealthMetricsIT` and `QueuePollingIT`, which register test queues and jobs.
