@@ -1,6 +1,6 @@
 # Tally: standing instructions for the coding agent
 
-Tally is a subscription billing system built as a learning project, modelled loosely on Kill Bill.
+Tally is a subscription billing system built as a learning project, modelled loosely on [Kill Bill](https://github.com/killbill/killbill) ([subscription billing overview](https://killbill.io/subscription-billing)).
 Architecture work happens outside this repository. Your job is to implement it faithfully, and to report back where reality differs from the design.
 
 ## Read first
