@@ -27,7 +27,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 public abstract class AbstractIntegrationTest {
 
     @ServiceConnection
-    protected static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
+    // Every cached Spring context keeps its own connection pool (10 by default); the default limit
+    // of 100 connections runs out once a dozen contexts are alive in one test run.
+    protected static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine")
+            .withCommand("postgres", "-c", "max_connections=500");
 
     static {
         POSTGRES.start();
