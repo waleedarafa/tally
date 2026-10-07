@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: tally
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tally
+    username: tally
+    password: tally
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    # One schema per data-owning module (CLAUDE.md, rule 2). Flyway's history table lives in "public".
+    default-schema: public
