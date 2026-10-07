@@ -1,0 +1,67 @@
+package com.tally.support;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.Map;
+import java.util.stream.Stream;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.web.client.RestClient;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.images.builder.ImageFromDockerfile;
+
+/**
+ * The fake provider as a container, built from the jar the reactor built first, so Tally's calls
+ * cross a real network (ADR-020). One container per test run.
+ */
+public final class FakeProvider {
+
+    private static final Path MODULE = Path.of("..", "fake-provider").toAbsolutePath().normalize();
+
+    private static final GenericContainer<?> CONTAINER = new GenericContainer<>(
+            new ImageFromDockerfile("tally-fake-provider-test", false)
+                    .withFileFromPath("Dockerfile", MODULE.resolve("Dockerfile"))
+                    .withFileFromPath("target/fake-provider-test.jar", jar()))
+            .withExposedPorts(8081)
+            .waitingFor(Wait.forHttp("/admin/charges/count?reference=startup").forStatusCode(200)
+                    .withStartupTimeout(Duration.ofMinutes(2)));
+
+    private FakeProvider() {
+    }
+
+    public static synchronized String baseUrl() {
+        if (!CONTAINER.isRunning()) {
+            CONTAINER.start();
+        }
+        return "http://" + CONTAINER.getHost() + ":" + CONTAINER.getMappedPort(8081);
+    }
+
+    private static RestClient http() {
+        return RestClient.create(baseUrl());
+    }
+
+    /** A token, as the hosted card form would give the customer's browser (ADR-015). */
+    public static String token() {
+        return http().post().uri("/tokens").retrieve()
+                .body(new ParameterizedTypeReference<Map<String, String>>() { }).get("token");
+    }
+
+    /** How many charges the provider recorded for a reference. */
+    public static int chargeCount(String reference) {
+        return http().get().uri("/admin/charges/count?reference={r}", reference).retrieve()
+                .body(new ParameterizedTypeReference<Map<String, Integer>>() { }).get("count");
+    }
+
+    private static Path jar() {
+        try (Stream<Path> files = Files.list(MODULE.resolve("target"))) {
+            return files.filter(p -> p.getFileName().toString().matches("fake-provider-.*\\.jar"))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Build the fake provider first: ./mvnw verify from the repository root"));
+        } catch (IOException e) {
+            throw new IllegalStateException("Build the fake provider first: ./mvnw verify from the repository root", e);
+        }
+    }
+}

@@ -1,0 +1,16 @@
+package com.tally.payment;
+
+import com.tally.shared.DomainEvent;
+import com.tally.shared.Money;
+import java.time.Instant;
+import java.util.UUID;
+
+/** Pinned by name (ADR-009): never rename or move this class; change it additively only. */
+public record PaymentSucceeded(
+        UUID eventId,
+        Instant occurredAt,
+        UUID accountId,
+        String reference,
+        Money amount,
+        String chargeId) implements DomainEvent {
+}
