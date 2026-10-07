@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory;
  * Owns the threads for one queue on this instance (ADR-027): a poller that claims due items,
  * a fixed worker pool that runs them (a bulkhead per queue), and the queue's reaper.
  * The poller claims no more items than it has free workers, so a claimed item never waits
- * locally long enough to be reaped from under it.
+ * locally long enough to be reaped from under it, and it keeps every worker busy while work is due.
  */
 final class QueuePoller {
 
@@ -60,7 +60,8 @@ final class QueuePoller {
             return;
         }
         String name = queue.name();
-        scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("poller-" + name).factory());
+        // Two threads: the poll loop can stay busy through a long backlog without holding up the reaper.
+        scheduler = Executors.newScheduledThreadPool(2, Thread.ofPlatform().name("poller-" + name + "-", 1).factory());
         workers = Executors.newFixedThreadPool(queue.definition().workers(),
                 Thread.ofPlatform().name("worker-" + name + "-", 1).factory());
         long poll = properties.pollInterval().toMillis();
@@ -91,19 +92,23 @@ final class QueuePoller {
         return scheduler != null;
     }
 
-    /** Claims while there is due work and a free worker; records success when a cycle completes. */
+    /**
+     * Claims as long as there is due work: waits for a free worker, claims as many items as there are
+     * free workers (up to the batch size), hands them out, and goes on until a claim comes back short
+     * (the queue is drained, or its gate is closed). Every claim made counts as a successful cycle, so a
+     * poller kept busy by a long backlog is not reported overdue; one stuck waiting for workers is.
+     */
     private void poll() {
+        int batch = queue.definition().batchSize();
         try {
-            int claimed;
-            do {
-                int capacity = Math.min(freeWorkers.availablePermits(), queue.definition().batchSize());
-                if (capacity == 0) {
-                    break;
-                }
+            while (true) {
+                freeWorkers.acquire();
+                int held = 1 + freeWorkers.drainPermits();
+                int capacity = Math.min(held, batch);
+                freeWorkers.release(held - capacity);
                 List<JdbcDurableQueue.Claim> claims = queue.claim(capacity);
-                claimed = claims.size();
+                freeWorkers.release(capacity - claims.size());
                 for (JdbcDurableQueue.Claim claim : claims) {
-                    freeWorkers.acquireUninterruptibly();
                     workers.execute(() -> {
                         try {
                             queue.handle(claim);
@@ -112,8 +117,14 @@ final class QueuePoller {
                         }
                     });
                 }
-            } while (claimed == queue.definition().batchSize());
-            lastPoll.set(clock.instant());
+                lastPoll.set(clock.instant());
+                if (claims.size() < capacity) {
+                    return;
+                }
+            }
+        } catch (InterruptedException e) {
+            // Stopping.
+            Thread.currentThread().interrupt();
         } catch (RuntimeException e) {
             // Keep the poller alive; the job's "last success" age shows the trouble.
             log.error("Queue {}: poll failed", queue.name(), e);
