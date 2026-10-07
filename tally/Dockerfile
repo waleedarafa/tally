@@ -9,9 +9,12 @@ RUN java -Djarmode=tools -jar app.jar extract --layers --launcher --destination 
 
 FROM eclipse-temurin:25-jre
 ARG REVISION=unknown
+# Overrides the labels inherited from the base image, which describe Ubuntu.
 LABEL org.opencontainers.image.title="tally" \
+      org.opencontainers.image.description="Tally subscription billing" \
+      org.opencontainers.image.version="${REVISION}" \
       org.opencontainers.image.revision="${REVISION}"
-RUN useradd --system --uid 10001 --no-create-home tally
+RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin tally
 WORKDIR /app
 COPY --from=layers /build/extracted/dependencies/ ./
 COPY --from=layers /build/extracted/spring-boot-loader/ ./
