@@ -7,7 +7,7 @@ import java.time.Clock;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
-/** Payment's durable queue of attempts to make (ADR-017), with its own worker pool (ADR-005). */
+/** Payment's durable queue of attempts to make (ADR-017), with its own worker pool: the bulkhead (ADR-005). */
 @Component
 class CollectionQueue {
 
@@ -16,8 +16,10 @@ class CollectionQueue {
     private final DurableQueue queue;
     private final Clock clock;
 
-    CollectionQueue(DurableQueues queues, CollectionWorker worker, PaymentProperties properties, Clock clock) {
-        this.queue = queues.register(DEFINITION.withWorkers(properties.workers()), worker);
+    CollectionQueue(DurableQueues queues, CollectionWorker worker, ProviderIsolation isolation,
+            PaymentProperties properties, Clock clock) {
+        // While the provider's circuit breaker is open, workers stop claiming (brief section 5).
+        this.queue = queues.register(DEFINITION.withWorkers(properties.workers()), worker, isolation);
         this.clock = clock;
     }
 

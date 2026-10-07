@@ -28,6 +28,9 @@
         <java.version>25</java.version>
         <!-- Spring Modulith 2.1.x is the line built against Spring Boot 4.1.x. -->
         <spring-modulith.version>2.1.1</spring-modulith.version>
+        <!-- Not managed by Spring Boot. Core modules only: resilience4j-spring-boot4 2.4.0 is built
+             against Spring Boot 4.0.0, not the 4.1 line we use (brief section 5, ADR-026). -->
+        <resilience4j.version>2.4.0</resilience4j.version>
     </properties>
 
     <dependencyManagement>
@@ -36,6 +39,13 @@
                 <groupId>org.springframework.modulith</groupId>
                 <artifactId>spring-modulith-bom</artifactId>
                 <version>${spring-modulith.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-bom</artifactId>
+                <version>${resilience4j.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

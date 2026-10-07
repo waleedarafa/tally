@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.springframework.core.ParameterizedTypeReference;
@@ -46,6 +47,17 @@ public final class FakeProvider {
     public static String token() {
         return http().post().uri("/tokens").retrieve()
                 .body(new ParameterizedTypeReference<Map<String, String>>() { }).get("token");
+    }
+
+    /** Sets the provider's modes, for example {@code mode("OUTAGE")} or {@code mode("SLOW(200)", "LIE")}. */
+    public static void mode(String... modes) {
+        http().post().uri("/admin/mode").body(Map.of("modes", List.of(modes))).retrieve().toBodilessEntity();
+    }
+
+    /** How many charge requests reached the provider for a reference, including those it refused. */
+    public static int requestCount(String reference) {
+        return http().get().uri("/admin/requests/count?reference={r}", reference).retrieve()
+                .body(new ParameterizedTypeReference<Map<String, Integer>>() { }).get("count");
     }
 
     /** How many charges the provider recorded for a reference. */

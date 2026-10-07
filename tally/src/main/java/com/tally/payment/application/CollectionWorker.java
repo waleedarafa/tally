@@ -7,6 +7,7 @@ import com.tally.payment.domain.PaymentAttempt;
 import com.tally.payment.domain.PaymentAttemptRepository;
 import com.tally.payment.domain.PaymentGateway;
 import com.tally.payment.domain.PaymentGateway.ChargeResult;
+import com.tally.payment.domain.PaymentGateway.NotChargedException;
 import com.tally.platform.Outcome;
 import com.tally.platform.QueueHandler;
 import com.tally.platform.QueueItem;
@@ -20,7 +21,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Makes one collection attempt (ADR-005): claim and commit, call the provider with no transaction
- * open, then record the result and publish its event in a new transaction.
+ * open, then record the result and publish its event in a new transaction. A call the provider
+ * certainly did not charge goes back to the queue; any other failure leaves the outcome UNKNOWN,
+ * never retried (ADR-018).
  */
 @Component
 class CollectionWorker implements QueueHandler {
@@ -28,15 +31,15 @@ class CollectionWorker implements QueueHandler {
     private static final Logger log = LoggerFactory.getLogger(CollectionWorker.class);
 
     private final PaymentAttemptRepository attempts;
-    private final PaymentGateway gateway;
+    private final ProviderIsolation provider;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate transactions;
     private final Clock clock;
 
-    CollectionWorker(PaymentAttemptRepository attempts, PaymentGateway gateway, ApplicationEventPublisher events,
+    CollectionWorker(PaymentAttemptRepository attempts, ProviderIsolation provider, ApplicationEventPublisher events,
             TransactionTemplate transactions, Clock clock) {
         this.attempts = attempts;
-        this.gateway = gateway;
+        this.provider = provider;
         this.events = events;
         this.transactions = transactions;
         this.clock = clock;
@@ -55,7 +58,13 @@ class CollectionWorker implements QueueHandler {
         PaymentAttempt attempt = attempts.findById(attemptId).orElseThrow();
         ChargeResult result;
         try {
-            result = gateway.charge(attempt.paymentToken(), attempt.amount(), attempt.reference());
+            result = provider.charge(attempt.paymentToken(), attempt.amount(), attempt.reference());
+        } catch (NotChargedException e) {
+            // Certainly not charged: rate limited, provider unavailable, or held back by the breaker.
+            log.info("Attempt {} for {} not charged ({}); back to the queue", attemptId, attempt.reference(), e.why());
+            transactions.executeWithoutResult(tx -> attempts.findById(attemptId).orElseThrow()
+                    .returnToPending(clock.instant()));
+            return Outcome.retryAt(clock.instant().plus(e.retryAfter()));
         } catch (RuntimeException e) {
             // The charge may have happened. Never retried in slice 1; reconciled (ADR-018).
             log.warn("Attempt {} for {}: outcome unknown", attemptId, attempt.reference(), e);

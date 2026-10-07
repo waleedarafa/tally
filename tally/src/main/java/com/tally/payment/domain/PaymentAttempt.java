@@ -85,6 +85,16 @@ public class PaymentAttempt {
         this.updatedAt = now;
     }
 
+    /**
+     * The provider certainly did not charge (it refused the call, or the call never reached it): the
+     * attempt goes back to the queue. Not a retry of an unknown outcome.
+     */
+    public void returnToPending(Instant now) {
+        requireInFlight();
+        this.state = AttemptState.PENDING;
+        this.updatedAt = now;
+    }
+
     /** The provider may or may not have charged. Never retried; reconciled (ADR-018). */
     public void unknown(Instant now) {
         requireInFlight();
