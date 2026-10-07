@@ -19,6 +19,8 @@ CREATE INDEX ON platform_test.work_queue (due_at) WHERE status IN ('READY', 'IN_
 
 CREATE TABLE platform_test.jobs (LIKE platform_test.work_queue INCLUDING ALL);
 CREATE TABLE platform_test.polled_queue (LIKE platform_test.work_queue INCLUDING ALL);
+CREATE TABLE platform_test.health_queue (LIKE platform_test.work_queue INCLUDING ALL);
+CREATE TABLE platform_test.health_jobs (LIKE platform_test.work_queue INCLUDING ALL);
 
 -- A table without the queue shape, to check registration fails fast.
 CREATE TABLE platform_test.not_a_queue (id BIGSERIAL PRIMARY KEY, queue_key TEXT NOT NULL);

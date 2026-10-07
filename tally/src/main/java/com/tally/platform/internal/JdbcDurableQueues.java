@@ -7,6 +7,7 @@ import com.tally.platform.QueueHandler;
 import java.time.Clock;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +20,7 @@ class JdbcDurableQueues implements DurableQueues {
     private final PlatformProperties properties;
     private final InstanceId instance = InstanceId.fromEnvironment();
     private final List<JdbcDurableQueue> queues = new CopyOnWriteArrayList<>();
+    private final List<Consumer<JdbcDurableQueue>> listeners = new CopyOnWriteArrayList<>();
 
     JdbcDurableQueues(JdbcTemplate jdbc, Clock clock, PlatformProperties properties) {
         this.jdbc = jdbc;
@@ -38,7 +40,14 @@ class JdbcDurableQueues implements DurableQueues {
         QueueTableCheck.verify(jdbc, definition.table());
         JdbcDurableQueue queue = create(definition, processor, instance.value());
         queues.add(queue);
+        listeners.forEach(l -> l.accept(queue));
         return queue;
+    }
+
+    /** Calls {@code listener} for every registered queue, now and when registered later. */
+    synchronized void onRegistered(Consumer<JdbcDurableQueue> listener) {
+        listeners.add(listener);
+        queues.forEach(listener);
     }
 
     /** A queue object not added to the registry. Tests use it to act as a second instance. */

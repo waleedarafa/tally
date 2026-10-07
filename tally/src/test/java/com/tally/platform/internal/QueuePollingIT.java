@@ -8,6 +8,7 @@ import com.tally.platform.DurableQueue;
 import com.tally.platform.DurableQueues;
 import com.tally.platform.Outcome;
 import com.tally.platform.QueueDefinition;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
@@ -58,6 +59,9 @@ class QueuePollingIT extends AbstractIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    MeterRegistry meters;
 
     @BeforeEach
     void reset() {
@@ -114,5 +118,8 @@ class QueuePollingIT extends AbstractIntegrationTest {
         await().during(Duration.ofMillis(300)).atMost(Duration.ofSeconds(2)).until(() -> handled.isEmpty());
         assertThat(jobs.find("queue-poller.test-polled").orElseThrow().lastSuccess()).contains(lastSuccess);
         assertThat(jobs.find("queue-poller.test-polled").orElseThrow().waitingWork()).isEqualTo(1);
+        assertThat(meters.get("tally.job.last_success_age_seconds").tag("job", "queue-poller.test-polled")
+                .gauge().value()).isGreaterThanOrEqualTo(600);
+        assertThat(meters.get("tally.queue.waiting").tag("queue", "test-polled").gauge().value()).isEqualTo(1);
     }
 }

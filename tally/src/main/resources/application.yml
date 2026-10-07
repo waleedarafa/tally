@@ -12,3 +12,9 @@ spring:
   flyway:
     # One schema per data-owning module (CLAUDE.md, rule 2). Flyway's history table lives in "public".
     default-schema: public
+management:
+  endpoints:
+    web:
+      exposure:
+        # Queue and job health (ADR-023) is read from /actuator/metrics.
+        include: health,metrics
