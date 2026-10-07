@@ -46,9 +46,12 @@ class ProviderIsolation implements ClaimGate {
                 .ignoreException(e -> e instanceof NotChargedException n && n.why() == NotChargedException.Why.RATE_LIMITED)
                 .build());
         int perInstance = Math.max(1, properties.provider().rateLimitPerSecond() / Math.max(1, properties.instances()));
+        // One permit every (1 s / share), not the whole share once a second: the provider counts its own
+        // seconds, and a burst at the end of one of our windows plus one at the start of the next landed in
+        // a single provider second (AT-10: 2.5% of calls refused with 429 before this change).
         this.limiter = RateLimiter.of("payment-provider", RateLimiterConfig.custom()
-                .limitForPeriod(perInstance)
-                .limitRefreshPeriod(Duration.ofSeconds(1))
+                .limitForPeriod(1)
+                .limitRefreshPeriod(Duration.ofNanos(1_000_000_000L / perInstance))
                 .timeoutDuration(properties.provider().rateLimitWait())
                 .build());
         Gauge.builder("tally.payment.breaker.state", breaker, ProviderIsolation::stateValue)
