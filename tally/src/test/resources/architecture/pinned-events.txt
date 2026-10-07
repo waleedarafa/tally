@@ -5,3 +5,5 @@
 com.tally.subscription.SubscriptionChanged
 com.tally.payment.PaymentFailed
 com.tally.payment.PaymentSucceeded
+com.tally.invoicing.InvoiceIssued
+com.tally.invoicing.InvoicePaid
