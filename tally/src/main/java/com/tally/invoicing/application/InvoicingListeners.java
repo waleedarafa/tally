@@ -2,13 +2,12 @@ package com.tally.invoicing.application;
 
 import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
-import com.tally.catalog.BillingPeriod;
-import com.tally.catalog.CatalogApi;
-import com.tally.catalog.PriceQuote;
 import com.tally.invoicing.InvoiceIssued;
 import com.tally.invoicing.InvoicePaid;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.InvoiceRepository;
+import com.tally.invoicing.domain.SubscriptionBilling;
+import com.tally.invoicing.domain.SubscriptionBillingRepository;
 import com.tally.payment.FailureReason;
 import com.tally.payment.PaymentApi;
 import com.tally.payment.PaymentFailed;
@@ -34,39 +33,44 @@ class InvoicingListeners {
     private static final Logger log = LoggerFactory.getLogger(InvoicingListeners.class);
 
     private final InvoiceRepository invoices;
+    private final SubscriptionBillingRepository subscriptions;
+    private final InvoiceIssuer issuer;
+    private final BillingSchedule schedule;
     private final AccountApi accounts;
-    private final CatalogApi catalog;
     private final PaymentApi payments;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    InvoicingListeners(InvoiceRepository invoices, AccountApi accounts, CatalogApi catalog, PaymentApi payments,
-            ApplicationEventPublisher events, Clock clock) {
+    InvoicingListeners(InvoiceRepository invoices, SubscriptionBillingRepository subscriptions, InvoiceIssuer issuer,
+            BillingSchedule schedule, AccountApi accounts, PaymentApi payments, ApplicationEventPublisher events,
+            Clock clock) {
         this.invoices = invoices;
+        this.subscriptions = subscriptions;
+        this.issuer = issuer;
+        this.schedule = schedule;
         this.accounts = accounts;
-        this.catalog = catalog;
         this.payments = payments;
         this.events = events;
         this.clock = clock;
     }
 
-    /** First invoice, at subscribe: one full month, no proration, no tax (brief section 1). */
+    /**
+     * First invoice, at subscribe: one period from the local day the subscription starts, no
+     * proration, no tax (brief section 1). Records the billing calendar and schedules the first
+     * renewal in the same transaction.
+     */
     @ApplicationModuleListener
     void on(SubscriptionChanged changed) {
         if (changed.type() != SubscriptionChangeType.STARTED) {
             return;
         }
         AccountView account = accounts.get(changed.accountId()).orElseThrow();
-        // The billing period starts on the local calendar day the subscription starts.
-        LocalDate periodStart = LocalDate.ofInstant(changed.occurredAt(), account.timeZone());
-        if (invoices.existsByAccountIdAndPeriodStart(changed.accountId(), periodStart)) {
-            return;
-        }
-        PriceQuote quote = catalog.quote(changed.accountId(), changed.planId(), BillingPeriod.MONTHLY);
-        Invoice invoice = invoices.save(Invoice.issue(changed.accountId(), changed.subscriptionId(),
-                changed.planId(), quote.price(), periodStart, periodStart.plusMonths(1), clock.instant()));
-        events.publishEvent(new InvoiceIssued(UUID.randomUUID(), clock.instant(), invoice.accountId(),
-                invoice.id(), invoice.paymentReference(), invoice.amount()));
+        LocalDate startedOn = LocalDate.ofInstant(changed.occurredAt(), account.timeZone());
+        SubscriptionBilling billing = subscriptions.findById(changed.subscriptionId()).orElseGet(() -> subscriptions.save(
+                new SubscriptionBilling(changed.subscriptionId(), changed.accountId(), changed.planId(), startedOn)));
+        LocalDate periodEnd = billing.calendar().nextBillingDate(startedOn);
+        issuer.issue(changed.accountId(), changed.subscriptionId(), changed.planId(), startedOn, periodEnd);
+        schedule.schedule(changed.accountId(), changed.subscriptionId(), periodEnd, account.timeZone());
     }
 
     /** Every committed InvoiceIssued leads to exactly one collection request (D2). Payment is idempotent per reference. */
