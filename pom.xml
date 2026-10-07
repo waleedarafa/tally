@@ -18,9 +18,10 @@
     <packaging>pom</packaging>
     <name>Tally (parent)</name>
 
+    <!-- fake-provider first: Tally's integration tests run it as a container built from its jar. -->
     <modules>
-        <module>tally</module>
         <module>fake-provider</module>
+        <module>tally</module>
     </modules>
 
     <properties>
