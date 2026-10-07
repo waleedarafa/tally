@@ -58,7 +58,7 @@ class PeriodicJobs implements SmartInitializingSingleton {
     /** Ensures the job's row exists (due now if new) and registers the job's health signal. */
     private void schedule(JdbcDurableQueue queue, PeriodicJob job) {
         queue.enqueue(job.name(), clock.instant(), "");
-        registry.register(new RegisteredJob(job.name(),
+        registry.register(new RegisteredJob(job.name(), job.interval(),
                 queue.createdAt(job.name()).orElse(clock.instant()),
                 () -> queue.lastSuccess(job.name()),
                 job::waitingWork));

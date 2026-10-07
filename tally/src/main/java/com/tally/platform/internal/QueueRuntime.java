@@ -53,8 +53,10 @@ class QueueRuntime implements SmartLifecycle {
             JdbcDurableQueue queue = queues.queues().stream().filter(q -> q.name().equals(name)).findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Unknown queue " + name));
             QueuePoller created = new QueuePoller(queue, clock, properties);
-            jobs.register(new RegisteredJob(created.pollerJobName(), clock.instant(), created::lastPoll, queue::waiting));
-            jobs.register(new RegisteredJob(created.reaperJobName(), clock.instant(), created::lastReap, () -> 0));
+            jobs.register(new RegisteredJob(created.pollerJobName(), properties.pollInterval(), clock.instant(),
+                    created::lastPoll, queue::waiting));
+            jobs.register(new RegisteredJob(created.reaperJobName(), properties.reaperInterval(), clock.instant(),
+                    created::lastReap, () -> 0));
             return created;
         });
         poller.start();

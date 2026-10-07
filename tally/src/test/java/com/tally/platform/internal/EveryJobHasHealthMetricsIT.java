@@ -44,8 +44,10 @@ class EveryJobHasHealthMetricsIT extends AbstractIntegrationTest {
 
         List<String> missing = new ArrayList<>();
         for (String job : jobs) {
-            if (meters.find("tally.job.last_success_age_seconds").tag("job", job).gauge() == null) {
-                missing.add("job " + job + ": tally.job.last_success_age_seconds");
+            for (String metric : List.of("tally.job.last_success_age_seconds", "tally.job.overdue")) {
+                if (meters.find(metric).tag("job", job).gauge() == null) {
+                    missing.add("job " + job + ": " + metric);
+                }
             }
         }
         for (JdbcDurableQueue queue : queues.queues()) {

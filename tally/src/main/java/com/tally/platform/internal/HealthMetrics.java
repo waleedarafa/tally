@@ -3,7 +3,6 @@ package com.tally.platform.internal;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
-import java.time.Duration;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,10 +16,16 @@ import org.springframework.stereotype.Component;
  *   <li>{@code tally.job.last_success_age_seconds{job}}: since the last success, or since
  *       registration if the job has never succeeded</li>
  *   <li>{@code tally.job.waiting{job}}: work waiting for the job</li>
+ *   <li>{@code tally.job.overdue{job}}: 1 when the last success is older than twice the job's interval,
+ *       and at least 5 minutes (ADR-023); otherwise 0</li>
+ *   <li>{@code tally.queue.overdue{queue}}: 1 when the oldest due item is 5 minutes late (D7); otherwise 0</li>
  * </ul>
  */
 @Component
 class HealthMetrics {
+
+    /** D7: an alert when the oldest due item is 5 minutes late. */
+    static final double QUEUE_OVERDUE_SECONDS = 300;
 
     private final MeterRegistry meters;
     private final Clock clock;
@@ -39,6 +44,8 @@ class HealthMetrics {
                 .tag("queue", queue.name()).strongReference(true).register(meters);
         Gauge.builder("tally.queue.failed", queue, JdbcDurableQueue::failed)
                 .tag("queue", queue.name()).strongReference(true).register(meters);
+        Gauge.builder("tally.queue.overdue", queue, q -> q.oldestDueAgeSeconds() >= QUEUE_OVERDUE_SECONDS ? 1 : 0)
+                .tag("queue", queue.name()).strongReference(true).register(meters);
     }
 
     private void bindJob(RegisteredJob job) {
@@ -46,9 +53,11 @@ class HealthMetrics {
                 .tag("job", job.name()).baseUnit("seconds").strongReference(true).register(meters);
         Gauge.builder("tally.job.waiting", job, RegisteredJob::waitingWork)
                 .tag("job", job.name()).strongReference(true).register(meters);
+        Gauge.builder("tally.job.overdue", job, j -> j.overdue(clock.instant()) ? 1 : 0)
+                .tag("job", job.name()).strongReference(true).register(meters);
     }
 
     private double lastSuccessAgeSeconds(RegisteredJob job) {
-        return Duration.between(job.lastSuccess().orElse(job.registeredAt()), clock.instant()).toMillis() / 1000.0;
+        return job.lastSuccessAge(clock.instant()).toMillis() / 1000.0;
     }
 }

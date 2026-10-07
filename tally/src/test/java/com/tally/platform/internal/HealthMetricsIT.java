@@ -96,9 +96,12 @@ class HealthMetricsIT extends AbstractIntegrationTest {
         assertThat(gauge("tally.queue.waiting", "queue", "test-health")).isEqualTo(2);
         assertThat(gauge("tally.queue.oldest_due_age_seconds", "queue", "test-health")).isEqualTo(120);
 
-        // Nobody processes the queue: the oldest item keeps ageing (D7).
+        assertThat(gauge("tally.queue.overdue", "queue", "test-health")).isZero();
+
+        // Nobody processes the queue: the oldest item keeps ageing, and is overdue past 5 minutes (D7).
         clock.advance(Duration.ofMinutes(5));
         assertThat(gauge("tally.queue.oldest_due_age_seconds", "queue", "test-health")).isEqualTo(420);
+        assertThat(gauge("tally.queue.overdue", "queue", "test-health")).isEqualTo(1);
 
         healthQueue.enqueue("bad-1", clock.instant(), "p");
         healthQueue.processDue();
@@ -118,8 +121,14 @@ class HealthMetricsIT extends AbstractIntegrationTest {
         assertThat(gauge("tally.job.last_success_age_seconds", "job", "test-health-job")).isZero();
         assertThat(gauge("tally.job.waiting", "job", "test-health-job")).isEqualTo(3);
 
-        // The job stops running: its last success ages (D13).
-        clock.advance(Duration.ofMinutes(10));
+        assertThat(gauge("tally.job.overdue", "job", "test-health-job")).isZero();
+
+        // The job stops running: its last success ages (D13). Its interval is 1 minute, so it is
+        // overdue after the 5-minute minimum (ADR-023), not after 2 minutes.
+        clock.advance(Duration.ofMinutes(5));
+        assertThat(gauge("tally.job.overdue", "job", "test-health-job")).isZero();
+        clock.advance(Duration.ofMinutes(5));
         assertThat(gauge("tally.job.last_success_age_seconds", "job", "test-health-job")).isEqualTo(600);
+        assertThat(gauge("tally.job.overdue", "job", "test-health-job")).isEqualTo(1);
     }
 }
