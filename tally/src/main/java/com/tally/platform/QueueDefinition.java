@@ -37,8 +37,13 @@ import java.util.regex.Pattern;
  *                  {@code invoicing.invoice_one_per_account_and_period}. Required for every queue a
  *                  module registers; only the platform's periodic job tables, whose rows are never
  *                  finished and so never deleted, have none.
+ * @param money     whether the queue's work moves money or decides what a customer owes (ADR-037).
+ *                  A failed item in a money queue waits for a person and must alert; its health
+ *                  metrics carry the tag {@code money="true"}, which the alert rules (slice 2, step
+ *                  0) select on.
  */
-public record QueueDefinition(String name, String table, int workers, int batchSize, String duplicateGuard) {
+public record QueueDefinition(String name, String table, int workers, int batchSize, String duplicateGuard,
+        boolean money) {
 
     private static final Pattern NAME = Pattern.compile("[a-z][a-z0-9-]*");
     private static final Pattern TABLE = Pattern.compile("[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*");
@@ -64,14 +69,19 @@ public record QueueDefinition(String name, String table, int workers, int batchS
         if (duplicateGuard == null) {
             throw new IllegalArgumentException("Queue " + name + " must name its duplicate guard (ADR-037)");
         }
-        return new QueueDefinition(name, table, 1, 10, duplicateGuard);
+        return new QueueDefinition(name, table, 1, 10, duplicateGuard, false);
+    }
+
+    /** Flags the queue as a money queue (ADR-037). */
+    public QueueDefinition asMoneyQueue() {
+        return new QueueDefinition(name, table, workers, batchSize, duplicateGuard, true);
     }
 
     public QueueDefinition withWorkers(int workers) {
-        return new QueueDefinition(name, table, workers, batchSize, duplicateGuard);
+        return new QueueDefinition(name, table, workers, batchSize, duplicateGuard, money);
     }
 
     public QueueDefinition withBatchSize(int batchSize) {
-        return new QueueDefinition(name, table, workers, batchSize, duplicateGuard);
+        return new QueueDefinition(name, table, workers, batchSize, duplicateGuard, money);
     }
 }

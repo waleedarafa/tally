@@ -14,7 +14,7 @@ class CollectionQueue {
     // The permanent guard (ADR-037): at most one open attempt per reference. Each item names one attempt,
     // and an attempt is sent only by its PENDING to IN_FLIGHT transition, which happens once.
     static final QueueDefinition DEFINITION = QueueDefinition.of("payment-collection", "payment.collection_queue",
-            "payment.payment_attempt_one_open_per_reference");
+            "payment.payment_attempt_one_open_per_reference").asMoneyQueue();
 
     private final DurableQueue queue;
     private final Clock clock;
