@@ -96,12 +96,14 @@ class AT11StopEachWorkerAndJobIT extends AbstractIntegrationTest {
             assertThat(overdueByJob()).allSatisfy((job, value) -> assertThat(value).as(job).isZero());
             assertThat(meters.get("tally.queue.overdue").tag("queue", "payment-collection").gauge().value()).isZero();
 
-            // Just past 5 minutes: every job with a short interval is overdue, and so is the waiting payment
-            // (D7); the daily invariant checks are not, yet.
+            // Just past 5 minutes: every job whose threshold is 5 minutes is overdue, and so is the waiting
+            // payment (D7); jobs with longer intervals (hourly retention, daily invariant checks) are not, yet.
+            Duration stopped = Duration.ofMinutes(5).plusSeconds(1);
             clock.advance(Duration.ofMinutes(1).plusSeconds(1));
             Map<String, Double> afterFiveMinutes = overdueByJob();
-            afterFiveMinutes.forEach((job, value) ->
-                    assertThat(value).as(job).isEqualTo(job.startsWith("invariant.") ? 0 : 1));
+            registry.jobs().forEach(job -> assertThat(afterFiveMinutes.get(job.name())).as(job.name())
+                    .isEqualTo(job.overdueAfter().compareTo(stopped) <= 0 ? 1 : 0));
+            assertThat(afterFiveMinutes).as("jobs overdue after 5 minutes").containsValue(1.0);
             assertThat(meters.get("tally.queue.overdue").tag("queue", "payment-collection").gauge().value())
                     .isEqualTo(1);
 

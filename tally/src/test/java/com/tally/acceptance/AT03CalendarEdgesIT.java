@@ -37,6 +37,8 @@ import org.springframework.test.context.TestPropertySource;
  */
 @TestPropertySource(properties = {
         "tally.platform.polling-enabled=true",
+        // The test reads the billing queue's rows across 26 months of business time; keep them all.
+        "tally.retention.keep=3650d",
         "tally.platform.poll-interval=100ms",
         "tally.test.context=at03"
 })
