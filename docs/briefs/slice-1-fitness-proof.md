@@ -876,3 +876,26 @@ java.lang.AssertionError: Rule 'no classes that reside in a package 'com.tally.p
 ```
 
 After both violations were removed, `./mvnw -B verify` was green (the commit that adds this section).
+
+## Added after slice 1b: FF-12, unknown enum values (CLAUDE.md rule 7)
+
+**FF-12.** `architecture.EnumsHaveUnknownDefaultTest`. Every enum that crosses a module boundary (a top-level enum in a module's base package) or is stored in an event (a component of a `DomainEvent`) has a constant `UNKNOWN` marked `@JsonEnumDefaultValue`. The test also pins the list of enums it covers, so a new one shows up in review. `spring.jackson.datatype.enum.read-unknown-enum-values-using-default-value=true` makes Jackson use that default. Spring Modulith stores event publications with the same `JsonMapper`.
+
+### v13: an event enum without an UNKNOWN default (FF-12)
+
+**Violation.** `FailureReason.UNKNOWN` lost its `@JsonEnumDefaultValue`.
+
+**Build output** (`./mvnw -B -pl tally test -Dtest=EnumsHaveUnknownDefaultTest`):
+```
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 2.379 s <<< FAILURE! -- in com.tally.architecture.EnumsHaveUnknownDefaultTest
+[Enums without an UNKNOWN constant marked @JsonEnumDefaultValue (CLAUDE.md rule 7)] 
+Expecting empty but was: ["com.tally.payment.FailureReason"]
+```
+
+**Behaviour test.** `platform.internal.UnknownEnumValuesIT` stores publications that a newer release could leave behind: a `PaymentFailed` with reason `AUTHENTICATION_REQUIRED`, and a `SubscriptionChanged` of type `PAUSED`. It resubmits them and expects every listener to complete without acting. With the Jackson setting switched off, the test fails, and so does resubmission itself:
+```
+[ERROR] Tests run: 2, Failures: 0, Errors: 2, Skipped: 0, Time elapsed: 15.74 s <<< FAILURE! -- in com.tally.platform.internal.UnknownEnumValuesIT
+[ERROR]   UnknownEnumValuesIT.storedEventsWithUnknownValuesAreDeliveredWithoutFailing:79 ? InvalidFormat Cannot deserialize value of type `com.tally.payment.FailureReason` from String "AUTHENTICATION_REQUIRED": not one of the values accepted for Enum class: [U
+```
+
+After both violations were removed, `./mvnw -B verify` was green (the commit that adds this section).
