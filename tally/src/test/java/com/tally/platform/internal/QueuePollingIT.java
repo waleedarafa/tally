@@ -31,6 +31,9 @@ import org.springframework.test.context.TestPropertySource;
 })
 class QueuePollingIT extends AbstractIntegrationTest {
 
+    /** A unique constraint on a test business table: the permanent duplicate guard (ADR-037). */
+    static final String GUARD = "platform_test.work_done_one_per_key";
+
     static final Set<String> handled = ConcurrentHashMap.newKeySet();
     static volatile CountDownLatch gate = new CountDownLatch(0);
 
@@ -39,7 +42,7 @@ class QueuePollingIT extends AbstractIntegrationTest {
 
         @Bean
         DurableQueue polledQueue(DurableQueues queues) {
-            QueueDefinition definition = QueueDefinition.of("test-polled", "platform_test.polled_queue").withWorkers(2);
+            QueueDefinition definition = QueueDefinition.of("test-polled", "platform_test.polled_queue", GUARD).withWorkers(2);
             return queues.register(definition, item -> {
                 gate.await(30, TimeUnit.SECONDS);
                 handled.add(item.key());

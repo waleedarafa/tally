@@ -30,3 +30,5 @@ D5, D8, D9.
 
 ## Notes
 Recorded retroactively in the Step 7 review; decided in domain discovery.
+
+Cross-reference added after slice 1: extended by ADR-034 (checkout is a process module, not a bounded context).

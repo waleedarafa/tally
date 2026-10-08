@@ -28,3 +28,5 @@ Marketing repeatedly needs promotions with new calculations: the deferred rules-
 
 ## Notes
 Split out of ADR-007 in Phase 0, with the scope correction from the Step 8 evaluation.
+
+Cross-reference added after slice 1: the collected-versus-invoiced check is implemented by ADR-033.

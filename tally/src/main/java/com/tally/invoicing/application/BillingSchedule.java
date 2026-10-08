@@ -31,7 +31,10 @@ class BillingSchedule implements QueueHandler {
 
     private static final Logger log = LoggerFactory.getLogger(BillingSchedule.class);
 
-    static final QueueDefinition DEFINITION = QueueDefinition.of("billing-schedule", "invoicing.billing_schedule");
+    // The permanent guard (ADR-037): one invoice per account and billing date. Re-running a billing item
+    // whose row retention deleted finds the invoice and issues nothing (D1).
+    static final QueueDefinition DEFINITION = QueueDefinition.of("billing-schedule", "invoicing.billing_schedule",
+            "invoicing.invoice_one_per_account_and_period");
 
     private final DurableQueue queue;
     private final SubscriptionBillingRepository subscriptions;

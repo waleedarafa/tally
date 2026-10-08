@@ -30,3 +30,5 @@ A second consumer needs the billing timeline: extract it as an open-host service
 
 ## Notes
 Recorded retroactively in the Step 7 review; decided in the context map lesson. Guard against vetoing customers added in the domain discovery backfill.
+
+Cross-reference added after slice 1: extended by ADR-035 (Catalog and Pricing may read Account).

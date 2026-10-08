@@ -33,12 +33,12 @@ import org.springframework.test.context.TestPropertySource;
  * happens at local midnight in a non-UTC zone; and stays correct across daylight-saving changes.
  *
  * <p>Runs the real renewal path (billing queue, invoicing, payment, provider), moving the clock from
- * one due billing item to the next, from January 2026 to April 2028 (2028 is a leap year).
+ * one due billing item to the next, from January 2026 to April 2028 (2028 is a leap year). Retention
+ * runs on its production settings, so finished billing rows older than 30 days are deleted on the
+ * way: billing times are checked on the invoices.
  */
 @TestPropertySource(properties = {
         "tally.platform.polling-enabled=true",
-        // The test reads the billing queue's rows across 26 months of business time; keep them all.
-        "tally.retention.keep=3650d",
         "tally.platform.poll-interval=100ms",
         "tally.test.context=at03"
 })
@@ -68,11 +68,14 @@ class AT03CalendarEdgesIT extends AbstractProviderIntegrationTest {
         return account;
     }
 
-    Map<LocalDate, Instant> schedule(UUID account) {
-        return jdbc.query("SELECT queue_key, due_at FROM invoicing.billing_schedule WHERE queue_key LIKE ?",
-                (rs, n) -> Map.entry(LocalDate.parse(rs.getString("queue_key").split(":")[1]),
-                        rs.getObject("due_at", OffsetDateTime.class).toInstant()),
-                account + ":%").stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    /**
+     * When each renewal was billed: the invoice's issue time, by billing date. The first invoice is
+     * issued at subscribe, not on the calendar, so it is left out. Read from invoices, not from the
+     * billing queue, whose finished rows the retention job deletes after 30 days (ADR-037).
+     */
+    Map<LocalDate, Instant> renewalsBilledAt(UUID account) {
+        return invoicing.invoicesFor(account).stream().skip(1)
+                .collect(Collectors.toMap(InvoiceView::periodStart, InvoiceView::issuedAt));
     }
 
     Instant nextDue(List<UUID> accounts) {
@@ -121,7 +124,7 @@ class AT03CalendarEdgesIT extends AbstractProviderIntegrationTest {
         }
 
         // Local midnight in a non-UTC zone, on both sides of each daylight-saving change.
-        Map<LocalDate, Instant> nySchedule = schedule(newYork);
+        Map<LocalDate, Instant> nySchedule = renewalsBilledAt(newYork);
         nySchedule.forEach((date, due) -> assertThat(due).isEqualTo(date.atStartOfDay(NEW_YORK).toInstant()));
         assertThat(nySchedule.get(LocalDate.parse("2026-02-28"))).isEqualTo(Instant.parse("2026-02-28T05:00:00Z"));
         assertThat(nySchedule.get(LocalDate.parse("2026-03-31"))).isEqualTo(Instant.parse("2026-03-31T04:00:00Z"));
@@ -131,7 +134,7 @@ class AT03CalendarEdgesIT extends AbstractProviderIntegrationTest {
         // Santiago: on the day midnight does not exist, billing happens at 01:00 local, the day's first instant.
         assertThat(invoicing.invoicesFor(santiago)).extracting(InvoiceView::periodStart)
                 .contains(LocalDate.parse("2026-09-06")).allMatch(d -> d.getDayOfMonth() == 6);
-        Instant gapDay = schedule(santiago).get(LocalDate.parse("2026-09-06"));
+        Instant gapDay = renewalsBilledAt(santiago).get(LocalDate.parse("2026-09-06"));
         assertThat(gapDay).isEqualTo(Instant.parse("2026-09-06T04:00:00Z"));
         assertThat(gapDay.atZone(SANTIAGO).toLocalTime()).hasToString("01:00");
 
@@ -141,7 +144,11 @@ class AT03CalendarEdgesIT extends AbstractProviderIntegrationTest {
             assertThat(invoices).extracting(InvoiceView::periodStart).doesNotHaveDuplicates();
             invoices.forEach(i -> assertThat(FakeProvider.chargeCount(i.paymentReference())).isEqualTo(1));
         }
-        System.out.printf("AT-3: %d clock jumps, %d New York and %d Santiago invoices%n", jumps,
-                nyInvoices.size(), invoicing.invoicesFor(santiago).size());
+        long finishedRowsLeft = jdbc.queryForObject("SELECT count(*) FROM invoicing.billing_schedule WHERE status = 'DONE'"
+                + " AND split_part(queue_key, ':', 1) = ANY (?::text[])", Long.class,
+                (Object) both.stream().map(UUID::toString).toArray(String[]::new));
+        System.out.printf("AT-3: %d clock jumps, %d New York and %d Santiago invoices, %d finished billing rows"
+                + " left after retention%n", jumps, nyInvoices.size(), invoicing.invoicesFor(santiago).size(),
+                finishedRowsLeft);
     }
 }

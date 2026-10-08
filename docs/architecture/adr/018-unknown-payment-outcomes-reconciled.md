@@ -25,3 +25,5 @@ Slice 2 adds idempotency keys. A new record will allow safe retries with exponen
 
 ## Notes
 Split out of ADR-005 in Phase 0, because it changes on a different schedule. Scope widened to recent `FAILED` attempts while writing the slice 1 brief (still Phase 0, before any code).
+
+Cross-reference added after slice 1: extended by ADR-030 (retry only when no charge is certain).

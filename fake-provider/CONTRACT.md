@@ -10,6 +10,26 @@ Each assumption below says:
 
 Assumptions marked **critical** decide whether a customer is charged twice, charged without Tally knowing, or not charged while access is granted.
 
+## Questions for a real provider, with the evidence so far
+
+Reference provider: Stripe's public documentation (ADR-030; `docs/briefs/slice-1-review.md`, part 2, point 5). Sources are listed at the end.
+
+**Q-A. Does a 503 mean the provider did not charge?** (A6)
+- **Answer for Stripe: no.** Stripe says to treat a `500` as indeterminate, and groups 500, 502, 503 and 504 together as server errors. After an incident, it may roll a failed request forward and notify later.
+- **Consequence:** our 503 rule (retry it) holds only for this fake provider (ADR-030). Slice 2's idempotency keys remove it.
+- **Contrast, a 429 is safe:** Stripe's rate limiters run before its idempotency layer, so a 429 request was not executed (A7). Network errors leave the client not knowing whether the request arrived (A10).
+
+**Q-B. How long until a charge appears in a lookup?** (A10, A11)
+- **Answer: open.** The documentation reviewed does not say.
+- Reconciliation's first check at 5 minutes assumes it is less than that. Confirm with the chosen provider before going live.
+
+**Q-C. What does a token need for renewals without the customer present?** (A17; driver D15)
+- **Answer:** card networks distinguish customer-initiated from merchant-initiated charges. Where strong customer authentication applies:
+  - the card must be saved for later use, with the customer's agreement, at the first checkout (Stripe: SetupIntents);
+  - a bank may still demand authentication at renewal.
+- **Consequence:** a third failure reason, "the customer must come back", which is neither soft nor hard. The fake has no mode for it yet (slice 2 design).
+- **Lesson:** an anticorruption layer hides a provider's vocabulary. It cannot hide obligations set by card networks or regulators; those reach into Tally's own model.
+
 ## 1. Request and response shape
 
 **A1. One synchronous call charges a stored token, and the answer is final.**
@@ -50,13 +70,13 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **Fake:** in `OUTAGE` mode, it answers 503 before touching the ledger.
 - **Tally relies on it in:** `HttpPaymentGateway` (`NotChargedException.Why.UNAVAILABLE`); the attempt goes back to `PENDING` and is retried (D7, R4).
 - **If a real provider differs:** a 503 or 502 from a load balancer or gateway in front of the provider can arrive after the charge was made. A retry is then a second charge, because slice 1 sends no idempotency key (A8).
-- **Check:** ask the provider which 5xx responses guarantee that no charge was made. If none do, treat 503 as `UNKNOWN`, or send an idempotency key first.
+- **Check:** answered for Stripe (Q-A): no 5xx guarantees it. Valid only against this fake (ADR-030), until slice 2's idempotency keys.
 
 **A7. A `429` means the provider did not charge, and `Retry-After` is in seconds.**
 - **Fake:** answers 429 before touching the ledger, with `Retry-After: 1`.
 - **Tally relies on it in:** `HttpPaymentGateway.retryAfter`, the queue's back-off, and the rate limiter (report R6).
 - **If a real provider differs:** `Retry-After` may be an HTTP date (Tally then falls back to 1 s), or missing. A provider may also rate-limit by returning a decline code instead of a 429.
-- **Check:** confirm that a 429 is always returned before processing, and confirm the `Retry-After` format.
+- **Check:** Stripe's rate limiters run before the request executes (Q-A). Still to confirm for the chosen provider: the `Retry-After` format.
 
 **A8. The provider does not deduplicate: the same reference sent twice is charged twice.** (critical)
 - **Fake:** every `POST /charges` that passes the outage and rate checks records a new charge, whatever the reference.
@@ -74,7 +94,7 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **Fake:** in `TIMEOUT_AFTER_CHARGE` mode, it records the charge, then sleeps 6 s, past Tally's 5 s read timeout.
 - **Tally relies on it in:** the `UNKNOWN` state and reconciliation (ADR-018, Spike B).
 - **If a real provider differs:** a real provider may still be processing when Tally times out, and may finish minutes later. Reconciliation's first check (5 minutes) could then find nothing and mark the attempt `FAILED(SOFT)` (D8), and the charge appears afterwards. The customer is charged, and the invoice says payment failed.
-- **Check:** ask for the longest time between a charge request and the charge becoming visible, then set reconciliation's first check above it.
+- **Check:** open (Q-B). Ask for the longest time between a charge request and the charge becoming visible, then set reconciliation's first check above it.
 
 ## 3. Finding the truth (reconciliation)
 
@@ -82,7 +102,7 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **Fake:** `GET /charges?reference=` reads the in-memory ledger, so a charge is visible the moment it is recorded.
 - **Tally relies on it in:** `HttpPaymentGateway.chargesFor` and `Reconciliation`. Spike B's "resolved in 5 minutes" depends on it.
 - **If a real provider differs:** search by metadata is often backed by an index that lags by seconds to minutes, or is not offered at all, which leaves webhooks or settlement files as the only source.
-- **Check:** confirm that a lookup by reference exists, and its consistency delay. If there is none, reconciliation must use webhooks or reports (and ADR-018 needs revisiting).
+- **Check:** open (Q-B). Confirm that a lookup by reference exists, and its consistency delay. If there is none, reconciliation must use webhooks or reports (and ADR-018 needs revisiting).
 
 **A12. The lookup's answer is the truth; a charge response can be wrong.**
 - **Fake:** in `LIE` mode, the response shows the opposite of the recorded outcome, while the lookup shows the recorded one.
@@ -118,7 +138,7 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **Fake:** tokens are reusable forever; there are no mandates, SCA exemptions or card updates.
 - **Tally relies on it in:** renewals, which charge the stored token every month.
 - **If a real provider differs:** recurring charges need a stored-credential or mandate agreement, an initial customer-present charge, and SCA exemptions for merchant-initiated transactions (in the EEA and UK). Cards expire; providers offer account updaters.
-- **Check:** confirm how a token is marked for merchant-initiated recurring use in each market Tally sells in, including the UAE.
+- **Check:** partly answered (Q-C). Save the card for later use at checkout, with the customer's agreement, and expect a third failure reason, "authentication required" (D15). Still to confirm: the rules in each market Tally sells in, including the UAE.
 
 **A18. An unknown token is a hard decline, answered `200`.**
 - **Fake:** `DECLINED_HARD`, with a charge recorded.
@@ -158,6 +178,11 @@ None of the following exist in the fake, so no test covers them. Each needs a de
 - **Provider-side retries** (for example "smart retries"), which would conflict with Tally's dunning.
 - **Persistence**: the fake loses everything on restart, so a test cannot restart the provider mid-run.
 - **Clock**: the fake stamps charges with its own wall clock (`Instant.now()`), not Tally's test clock. Tally never reads that timestamp, and must not start to without a provider-side clock contract.
+
+## Sources
+- Stripe, Advanced error handling: https://docs.stripe.com/error-low-level
+- Stripe, Errors: https://docs.stripe.com/api/errors
+- Stripe, The Setup Intents API: https://docs.stripe.com/payments/setup-intents.md
 
 ## Test-only endpoints
 

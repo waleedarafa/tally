@@ -25,3 +25,5 @@ A module needs queue behaviour the shared mechanism cannot express.
 
 ## Notes
 Created while writing the slice 1 brief (Phase 0).
+
+Cross-reference added after slice 1: clarified by ADR-029 (the platform provides the event-listener executor).

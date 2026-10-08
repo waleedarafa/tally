@@ -36,6 +36,7 @@ class JdbcDurableQueues implements DurableQueues {
 
     @Override
     public DurableQueue register(QueueDefinition definition, QueueHandler handler, ClaimGate gate) {
+        DuplicateGuardCheck.verify(jdbc, definition);
         return register(definition, JdbcDurableQueue.processorFor(handler), gate);
     }
 
