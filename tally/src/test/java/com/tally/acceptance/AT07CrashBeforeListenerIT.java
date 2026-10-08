@@ -67,7 +67,7 @@ class AT07CrashBeforeListenerIT {
         String providerUrl = FakeProvider.baseUrl();
 
         ConfigurableApplicationContext a = instances.start("at07-instance-a", SpikeConfiguration.class,
-                "spring.task.execution.pool.core-size=1", "spring.task.execution.pool.max-size=1",
+                "tally.events.listener-threads=1",
                 "tally.payment.provider.base-url=" + providerUrl);
         JdbcTemplate jdbc = a.getBean(JdbcTemplate.class);
         jdbc.update("DELETE FROM event_publication WHERE completion_date IS NULL");

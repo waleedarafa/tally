@@ -21,10 +21,13 @@ public class SpikeListener {
     public static final Map<UUID, AtomicInteger> RUNNING = new ConcurrentHashMap<>();
     public static final AtomicInteger MAX_CONCURRENT = new AtomicInteger();
     public static final Semaphore RELEASE = new Semaphore(0);
+    /** The thread each event's listener last ran on. */
+    public static final Map<UUID, String> THREAD = new ConcurrentHashMap<>();
 
     @ApplicationModuleListener
     void on(SpikeEvent event) {
         INVOCATIONS.computeIfAbsent(event.id(), k -> new AtomicInteger()).incrementAndGet();
+        THREAD.put(event.id(), Thread.currentThread().getName());
         int running = RUNNING.computeIfAbsent(event.id(), k -> new AtomicInteger()).incrementAndGet();
         MAX_CONCURRENT.accumulateAndGet(running, Math::max);
         try {

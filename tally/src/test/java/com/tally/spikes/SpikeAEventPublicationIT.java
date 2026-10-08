@@ -100,7 +100,7 @@ class SpikeAEventPublicationIT {
         SpikeListener.BEHAVIOUR.put(during, Behaviour.BLOCK);
         // One async thread: the second listener cannot start while the first blocks.
         ConfigurableApplicationContext a = start("a1-instance-a",
-                "spring.task.execution.pool.core-size=1", "spring.task.execution.pool.max-size=1");
+                "tally.events.listener-threads=1");
         publish(a, during);
         await().atMost(Duration.ofSeconds(10)).until(() -> SpikeListener.invocations(during) == 1);
         publish(a, before);
