@@ -33,6 +33,6 @@ class InvoicingService implements InvoicingApi {
 
     static InvoiceView view(Invoice i) {
         return new InvoiceView(i.id(), i.accountId(), i.subscriptionId(), i.status(), i.amount(), i.periodStart(),
-                i.periodEnd(), i.paymentReference(), i.issuedAt());
+                i.periodEnd(), i.paymentReference(), i.issuedAt(), i.billedFor());
     }
 }
