@@ -100,6 +100,11 @@ class AT08ListenerFailsIT extends AbstractProviderIntegrationTest {
             clock.advance(Duration.ofMinutes(1));
             Instant now = clock.instant();
             await().atMost(Duration.ofSeconds(10)).until(() -> !jobLastSuccess().isBefore(now));
+            // The job marks a publication RESUBMITTED, then its listener runs on the listener pool. Wait for
+            // the listener to settle it (COMPLETED, or FAILED again) before reading its effects: otherwise
+            // "no attempt yet" passes before the listener has run, and the clock moves on a minute early.
+            await().atMost(Duration.ofSeconds(10))
+                    .until(() -> List.of("FAILED", "COMPLETED").contains(publicationStatus(reference)));
             // Let any collection the resubmission started finish before time moves on.
             Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(15));
             await().atMost(Duration.ofSeconds(5)).until(() -> attempts(reference) == 0
