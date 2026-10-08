@@ -12,8 +12,6 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface PaymentAttemptRepository extends JpaRepository<PaymentAttempt, UUID> {
 
-    boolean existsByReference(String reference);
-
     /** UNKNOWN and recently FAILED attempts due a check against the provider (ADR-018). */
     List<PaymentAttempt> findTop100ByReconcileAtLessThanEqualOrderByReconcileAt(Instant now);
 

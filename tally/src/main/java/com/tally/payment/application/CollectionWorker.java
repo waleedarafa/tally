@@ -31,14 +31,16 @@ class CollectionWorker implements QueueHandler {
     private static final Logger log = LoggerFactory.getLogger(CollectionWorker.class);
 
     private final PaymentAttemptRepository attempts;
+    private final CollectionRequests requests;
     private final ProviderIsolation provider;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate transactions;
     private final Clock clock;
 
-    CollectionWorker(PaymentAttemptRepository attempts, ProviderIsolation provider, ApplicationEventPublisher events,
-            TransactionTemplate transactions, Clock clock) {
+    CollectionWorker(PaymentAttemptRepository attempts, CollectionRequests requests, ProviderIsolation provider,
+            ApplicationEventPublisher events, TransactionTemplate transactions, Clock clock) {
         this.attempts = attempts;
+        this.requests = requests;
         this.provider = provider;
         this.events = events;
         this.transactions = transactions;
@@ -92,6 +94,7 @@ class CollectionWorker implements QueueHandler {
                         attempt.reference(), attempt.amount(), declined.reason()));
             }
         }
+        requests.settle(attempt);
     }
 
     /**
