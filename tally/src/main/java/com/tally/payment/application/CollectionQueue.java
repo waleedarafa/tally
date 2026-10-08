@@ -11,7 +11,10 @@ import org.springframework.stereotype.Component;
 @Component
 class CollectionQueue {
 
-    static final QueueDefinition DEFINITION = QueueDefinition.of("payment-collection", "payment.collection_queue");
+    // The permanent guard (ADR-037): at most one open attempt per reference. Each item names one attempt,
+    // and an attempt is sent only by its PENDING to IN_FLIGHT transition, which happens once.
+    static final QueueDefinition DEFINITION = QueueDefinition.of("payment-collection", "payment.collection_queue",
+            "payment.payment_attempt_one_open_per_reference");
 
     private final DurableQueue queue;
     private final Clock clock;

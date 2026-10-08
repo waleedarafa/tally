@@ -22,12 +22,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /** ADR-023 and brief section 4: every queue and job reports its health as metrics. */
 class HealthMetricsIT extends AbstractIntegrationTest {
 
+    /** A unique constraint on a test business table: the permanent duplicate guard (ADR-037). */
+    static final String GUARD = "platform_test.work_done_one_per_key";
+
     @TestConfiguration(proxyBeanMethods = false)
     static class QueueAndJob {
 
         @Bean
         DurableQueue healthQueue(DurableQueues queues) {
-            return queues.register(QueueDefinition.of("test-health", "platform_test.health_queue"), item -> {
+            return queues.register(QueueDefinition.of("test-health", "platform_test.health_queue", GUARD), item -> {
                 if (item.key().startsWith("bad")) {
                     throw new IllegalStateException("bad item");
                 }

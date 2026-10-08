@@ -27,7 +27,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** ADR-017: per-module queue tables, claimed with FOR UPDATE SKIP LOCKED, with a reaper. */
 class DurableQueueIT extends AbstractIntegrationTest {
 
-    static final QueueDefinition WORK = QueueDefinition.of("test-work", "platform_test.work_queue");
+    /** A unique constraint on a test business table: the permanent duplicate guard (ADR-037). */
+    static final String GUARD = "platform_test.work_done_one_per_key";
+
+    static final QueueDefinition WORK = QueueDefinition.of("test-work", "platform_test.work_queue", GUARD);
 
     @Autowired
     JdbcDurableQueues queues;
@@ -204,11 +207,30 @@ class DurableQueueIT extends AbstractIntegrationTest {
     @Test
     void registrationRejectsATableWithoutTheQueueShape() {
         assertThatThrownBy(() -> queues.register(
-                QueueDefinition.of("not-a-queue", "platform_test.not_a_queue"), recording(Outcome.done())))
+                QueueDefinition.of("not-a-queue", "platform_test.not_a_queue", GUARD), recording(Outcome.done())))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("lacks columns");
         assertThatThrownBy(() -> queues.register(
-                QueueDefinition.of("missing", "platform_test.missing"), recording(Outcome.done())))
+                QueueDefinition.of("missing", "platform_test.missing", GUARD), recording(Outcome.done())))
                 .hasMessageContaining("does not exist");
+    }
+
+    @Test
+    void registrationRequiresAPermanentDuplicateGuardInABusinessTable() {
+        assertThatThrownBy(() -> queues.register(
+                new QueueDefinition("no-guard", "platform_test.work_queue", 1, 10, null), recording(Outcome.done())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("names no duplicate guard");
+        assertThatThrownBy(() -> queues.register(
+                QueueDefinition.of("unknown-guard", "platform_test.work_queue", "platform_test.no_such_constraint"),
+                recording(Outcome.done())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("is not a unique constraint or unique index");
+        // The queue's own key is exactly the guard retention removes.
+        assertThatThrownBy(() -> queues.register(
+                QueueDefinition.of("own-key", "platform_test.work_queue", "platform_test.work_queue_queue_key_key"),
+                recording(Outcome.done())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("is on the queue table itself");
     }
 }
