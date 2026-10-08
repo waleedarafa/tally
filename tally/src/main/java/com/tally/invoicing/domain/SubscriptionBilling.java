@@ -54,6 +54,10 @@ public class SubscriptionBilling {
         return planId;
     }
 
+    public LocalDate startedOn() {
+        return startedOn;
+    }
+
     public BillingCalendar calendar() {
         return new BillingCalendar(anchorDay);
     }

@@ -32,18 +32,19 @@ class InvoiceIssuer {
 
     /**
      * Issues the invoice for {@code [periodStart, periodEnd)}, priced at today's list price. Empty if
-     * the account already has an invoice for that billing date. The unique constraint on
-     * (account, period start) guards against a concurrent issue.
+     * the account already has an invoice for that billing date. The insert is atomic on the unique
+     * constraint (account, period start), so a concurrent duplicate waits, then issues nothing and
+     * does not fail (ADR-028).
      */
     @Transactional(propagation = Propagation.MANDATORY)
     Optional<Invoice> issue(UUID accountId, UUID subscriptionId, String planId, LocalDate periodStart,
             LocalDate periodEnd) {
-        if (invoices.existsByAccountIdAndPeriodStart(accountId, periodStart)) {
+        var price = catalog.quote(accountId, planId, BillingPeriod.MONTHLY).price();
+        Invoice invoice = Invoice.issue(accountId, subscriptionId, planId, price, periodStart, periodEnd,
+                clock.instant());
+        if (!invoices.insertIfAbsent(invoice)) {
             return Optional.empty();
         }
-        var price = catalog.quote(accountId, planId, BillingPeriod.MONTHLY).price();
-        Invoice invoice = invoices.saveAndFlush(
-                Invoice.issue(accountId, subscriptionId, planId, price, periodStart, periodEnd, clock.instant()));
         events.publishEvent(new InvoiceIssued(UUID.randomUUID(), clock.instant(), invoice.accountId(), invoice.id(),
                 invoice.paymentReference(), invoice.amount()));
         return Optional.of(invoice);
