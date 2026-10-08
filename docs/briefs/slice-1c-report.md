@@ -20,7 +20,13 @@ Every new behaviour test was shown failing first:
 - `UnknownEnumValuesIT` fails with the Jackson setting off.
 - FF-12 fails when `FailureReason` loses its default (`slice-1-fitness-proof.md`, v13).
 
-All twelve acceptance tests still pass on each branch.
+All twelve acceptance tests passed locally on each branch.
+
+**A CI failure, fixed.** AT-8 failed on CI for #6 (7 minutes against a 6-minute limit). The cause was a race in the test, not in #6:
+- the resubmission job marks a publication `RESUBMITTED`, and its listener then runs on the pool;
+- the test's per-minute wait accepted "no attempt yet", so the clock could move on before the listener ran.
+
+The fix is in [#10](https://github.com/waleedarafa/tally/pull/10), and is ported into #6. With a 500 ms delay added to the listener, the old test reproduces the failure, and the fixed test passes.
 
 **Merge order.** Three pairs of PRs interact:
 - **#4 and #6:** #4 adds migration V14 and #6 adds V15. Merge #4 first. Otherwise, a database that already ran V15 refuses V14 as out of order. This only matters once a shared database exists.
