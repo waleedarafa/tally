@@ -29,3 +29,8 @@ Operations or legal need a different period.
 
 ## Notes
 Recorded after implementation in slice 1b (commit d795cb2). Answers Q5.
+
+Compliance status after slice 1b:
+- Every queue names its guard at registration; registration fails without a real unique constraint on a business table.
+- The payment guard is a partial index covering only open attempts, so it is not a permanent guard. ADR-041 replaces it with a full unique constraint.
+- The failed-row alert and the idea of a money queue do not exist yet. Queues are flagged as money queues, and alert rules are built as code, with staging (slice 2, step 0).
