@@ -26,3 +26,5 @@ Checkout gains business rules of its own (for example, fraud checks). Then it ma
 
 ## Notes
 Recorded after implementation in slice 1b (commit 605fbed). Added `InvoicingApi.invoicesForSubscription`.
+
+Compliance status after slice 1b: no dedicated rule exists. Modulith verification and FF-11 (ADR-040) enforce it: making any module depend on `checkout` requires editing the approved dependency list, which is reviewed. That is sufficient; no extra rule is planned.
