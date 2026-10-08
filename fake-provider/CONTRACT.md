@@ -1,0 +1,168 @@
+# Fake provider: the contract it assumes
+
+The fake provider (`com.fakeprovider`) stands in for a real card payment provider in every test (brief section 6, ADR-020). Tally is only as correct as the assumptions the fake makes. This file lists every one of them, so that each can be checked against the real provider before it is chosen or integrated.
+
+Each assumption below says:
+- **Fake:** what the fake does.
+- **Tally relies on it in:** the code that depends on it.
+- **If a real provider differs:** what goes wrong.
+- **Check:** how to confirm it against the real provider's sandbox or documentation.
+
+Assumptions marked **critical** decide whether a customer is charged twice, charged without Tally knowing, or not charged while access is granted.
+
+## 1. Request and response shape
+
+**A1. One synchronous call charges a stored token, and the answer is final.**
+- **Fake:** `POST /charges {token, amount, currency, reference}` answers `200 {chargeId, reference, outcome}`. The outcome is `SUCCEEDED`, `DECLINED_SOFT` or `DECLINED_HARD`, and it never changes afterwards.
+- **Tally relies on it in:** `HttpPaymentGateway.charge`, `CollectionWorker`, and the attempt states (`PENDING → IN_FLIGHT → SUCCEEDED / FAILED / UNKNOWN`).
+- **If a real provider differs:** real providers have more states: pending or processing, requires action (3-D Secure or SCA), separate authorise and capture steps, and asynchronous confirmation by webhook. Tally has no state for "accepted, outcome later", so it would treat these as `UNKNOWN` or fail on parsing (`Unknown provider outcome`).
+- **Check:** list every status the charge API can return for a merchant-initiated recurring charge, and whether any of them is final only after a webhook.
+
+**A2. Three outcomes, already classified as soft or hard.** (critical)
+- **Fake:** the provider itself says whether a decline is soft (worth retrying later) or hard.
+- **Tally relies on it in:** `HttpPaymentGateway.result`, `FailureReason`, the invoice's `PAYMENT_FAILED` state, and slice 2's dunning.
+- **If a real provider differs:** real providers return decline codes (insufficient funds, do not honour, lost card, fraud, and so on), and Tally must classify them. A hard decline classified as soft means Tally retries a lost or stolen card, which card networks penalise.
+- **Check:** get the provider's full list of decline codes, and agree the soft/hard mapping with finance.
+
+**A3. Amounts are integers in minor units, with an ISO 4217 currency code.**
+- **Fake:** stores `amount` as given and never validates the currency.
+- **Tally relies on it in:** `shared.Money` (CLAUDE.md rule 10) and `ChargeRequest`.
+- **If a real provider differs:** some providers take decimal major units. Currencies with 0 or 3 decimal places (JPY, KWD) need the right exponent. AED and USD both have 2, so slice 1 never exercises this.
+- **Check:** confirm the amount format and the minor-unit exponent for every currency Tally sells in. Confirm that AED is supported for recurring card charges.
+
+**A4. The request carries Tally's reference, and the provider stores it with the charge.**
+- **Fake:** `reference` is a top-level field, kept on every charge, including declined ones.
+- **Tally relies on it in:** reconciliation (A9), and Payment's rule that it reports by reference only (ADR-014).
+- **If a real provider differs:** most providers put merchant references in free-form metadata, sometimes with length or character limits.
+- **Check:** confirm where the reference goes, its limits, and that it is stored on declined charges too.
+
+**A5. No authentication, plain HTTP, no request signing.**
+- **Fake:** anyone who can reach it can charge.
+- **Tally relies on it in:** `HttpPaymentGateway`, which sends no credentials.
+- **If a real provider differs:** every real provider needs an API key or OAuth, over TLS. The key is a secret that must not be in configuration files.
+- **Check:** decide where the key comes from (secrets manager), and how it is rotated.
+
+## 2. Failures: charged or not?
+
+These decide rule 9 ("unknown outcomes are never retried") and decision D7 of the slice 1 report.
+
+**A6. A `503` means the provider did not charge.** (critical)
+- **Fake:** in `OUTAGE` mode, it answers 503 before touching the ledger.
+- **Tally relies on it in:** `HttpPaymentGateway` (`NotChargedException.Why.UNAVAILABLE`); the attempt goes back to `PENDING` and is retried (D7, R4).
+- **If a real provider differs:** a 503 or 502 from a load balancer or gateway in front of the provider can arrive after the charge was made. A retry is then a second charge, because slice 1 sends no idempotency key (A8).
+- **Check:** ask the provider which 5xx responses guarantee that no charge was made. If none do, treat 503 as `UNKNOWN`, or send an idempotency key first.
+
+**A7. A `429` means the provider did not charge, and `Retry-After` is in seconds.**
+- **Fake:** answers 429 before touching the ledger, with `Retry-After: 1`.
+- **Tally relies on it in:** `HttpPaymentGateway.retryAfter`, the queue's back-off, and the rate limiter (report R6).
+- **If a real provider differs:** `Retry-After` may be an HTTP date (Tally then falls back to 1 s), or missing. A provider may also rate-limit by returning a decline code instead of a 429.
+- **Check:** confirm that a 429 is always returned before processing, and confirm the `Retry-After` format.
+
+**A8. The provider does not deduplicate: the same reference sent twice is charged twice.** (critical)
+- **Fake:** every `POST /charges` that passes the outage and rate checks records a new charge, whatever the reference.
+- **Tally relies on it in:** nothing; Tally protects itself instead. One attempt per reference (`PaymentService.requestCollection`), an `UNKNOWN` outcome is never retried (rule 9), and `/admin/charges/count` proves no double charge in AT-4, AT-5 and AT-9.
+- **If a real provider differs:** a provider with idempotency keys is better, not worse. Slice 2 plans to use them, which would make A6 and A7 safe to retry.
+- **Check:** does the provider support idempotency keys? For how long does it remember them, and what does a replay return?
+
+**A9. A refused connection or a connect timeout means the request never arrived.**
+- **Fake:** this is a property of TCP, not of the fake. AT-4 stops the fake.
+- **Tally relies on it in:** `HttpPaymentGateway.neverSent`; the attempt goes back to `PENDING`.
+- **If a real provider differs:** this holds for any provider. It does not hold for a TLS-terminating proxy that Tally reaches before the provider: the proxy accepts the connection, then fails.
+- **Check:** list every proxy between Tally and the provider.
+
+**A10. A read timeout may mean a charge was made, and the charge is visible to lookup once it has been made.** (critical)
+- **Fake:** in `TIMEOUT_AFTER_CHARGE` mode, it records the charge, then sleeps 6 s, past Tally's 5 s read timeout.
+- **Tally relies on it in:** the `UNKNOWN` state and reconciliation (ADR-018, Spike B).
+- **If a real provider differs:** a real provider may still be processing when Tally times out, and may finish minutes later. Reconciliation's first check (5 minutes) could then find nothing and mark the attempt `FAILED(SOFT)` (D8), and the charge appears afterwards. The customer is charged, and the invoice says payment failed.
+- **Check:** ask for the longest time between a charge request and the charge becoming visible, then set reconciliation's first check above it.
+
+## 3. Finding the truth (reconciliation)
+
+**A11. Charges can be looked up by Tally's reference, immediately and consistently.** (critical)
+- **Fake:** `GET /charges?reference=` reads the in-memory ledger, so a charge is visible the moment it is recorded.
+- **Tally relies on it in:** `HttpPaymentGateway.chargesFor` and `Reconciliation`. Spike B's "resolved in 5 minutes" depends on it.
+- **If a real provider differs:** search by metadata is often backed by an index that lags by seconds to minutes, or is not offered at all, which leaves webhooks or settlement files as the only source.
+- **Check:** confirm that a lookup by reference exists, and its consistency delay. If there is none, reconciliation must use webhooks or reports (and ADR-018 needs revisiting).
+
+**A12. The lookup's answer is the truth; a charge response can be wrong.**
+- **Fake:** in `LIE` mode, the response shows the opposite of the recorded outcome, while the lookup shows the recorded one.
+- **Tally relies on it in:** reconciliation of `FAILED` attempts (Spike B, B3).
+- **If a real provider differs:** this models a provider bug. A real provider's two APIs may share the same bug. Spike B's B4 (a decline reported as a success) shows that Tally does not re-check successes at all (report R2).
+- **Check:** confirm which source the provider calls authoritative: API, webhook, or settlement report.
+
+**A13. Declined charges are recorded and returned by the lookup.**
+- **Fake:** every charge, whatever its outcome, is in the ledger.
+- **Tally relies on it in:** reconciliation, which resolves an `UNKNOWN` attempt to `FAILED` with the provider's soft or hard reason (Spike B, B2). With no record at all, the attempt becomes `FAILED(SOFT)` (D8).
+- **If a real provider differs:** some providers keep declines only in logs. Every unknown decline then becomes `FAILED(SOFT)`, so dunning will retry hard declines.
+- **Check:** look up a declined sandbox charge by reference.
+
+**A14. The lookup keeps working during an outage of the charge API.**
+- **Fake:** `OUTAGE` returns 503 for `POST /charges` only; `GET /charges` still answers.
+- **Tally relies on it in:** nothing that a test requires: reconciliation backs off when the lookup fails. But AT-4 never exercises a lookup outage.
+- **If a real provider differs:** a real outage likely takes the lookup down too. Resolution of `UNKNOWN` attempts then waits one hour, then a day (Spike B), past D3's target.
+- **Check:** see the provider's status history for partial outages.
+
+**A15. There is no settlement report.**
+- **Fake:** none. Only per-reference lookups.
+- **Tally relies on it in:** nothing yet. The daily totals check (D3) and report R2 need one.
+- **Check:** confirm the report's format, delivery time and time zone (cut-off).
+
+## 4. Tokens and cards
+
+**A16. A token is created by the provider's hosted form, and the card never reaches Tally** (ADR-015).
+- **Fake:** `POST /tokens` returns `tok_<uuid>`, with no card details, standing in for the hosted form.
+- **Tally relies on it in:** `AccountApi.recordPaymentToken` and checkout.
+- **Check:** confirm that the integration keeps Tally out of PCI DSS scope (SAQ A).
+
+**A17. A token can be charged again and again, with no customer present, and never expires.** (critical for renewals)
+- **Fake:** tokens are reusable forever; there are no mandates, SCA exemptions or card updates.
+- **Tally relies on it in:** renewals, which charge the stored token every month.
+- **If a real provider differs:** recurring charges need a stored-credential or mandate agreement, an initial customer-present charge, and SCA exemptions for merchant-initiated transactions (in the EEA and UK). Cards expire; providers offer account updaters.
+- **Check:** confirm how a token is marked for merchant-initiated recurring use in each market Tally sells in, including the UAE.
+
+**A18. An unknown token is a hard decline, answered `200`.**
+- **Fake:** `DECLINED_HARD`, with a charge recorded.
+- **Tally relies on it in:** nothing specific.
+- **If a real provider differs:** real providers usually answer 4xx, which Tally currently treats as `UNKNOWN` (any other error).
+- **Check:** see what the sandbox returns for an invalid or deleted token. Map 4xx validation errors to "not charged".
+
+## 5. Limits and timing
+
+**A19. The rate limit is a fixed one-second window, counting charge requests only, shared by all callers.**
+- **Fake:** `RATE_LIMIT(n)` allows n `POST /charges` per wall-clock second; lookups are not counted.
+- **Tally relies on it in:** `ProviderIsolation`'s limiter, sized at 95% of the limit, split evenly across instances (report R6), and AT-10.
+- **If a real provider differs:** real limits may be sliding windows or token buckets, may count lookups (reconciliation then competes with charges), and may be per key or per account.
+- **Check:** get the limit, the algorithm and what counts towards it, in writing.
+
+**A20. Normal latency is near zero; slowness comes after the charge.**
+- **Fake:** `SLOW(ms)` sleeps after recording the charge, so a slow answer is still a charge.
+- **Tally relies on it in:** the 5 s read timeout and the 15 payment workers per instance (bulkhead), sized for throughput (Q2).
+- **If a real provider differs:** a 99th-percentile latency of 1–2 s halves the throughput per worker.
+- **Check:** measure sandbox and production latency percentiles, and size workers from them.
+
+**A21. Random declines are independent per call.**
+- **Fake:** `DECLINE_SOFT(p)` and `DECLINE_HARD(p)` decline each call with probability p.
+- **Tally relies on it in:** tests only.
+- **If a real provider differs:** real declines cluster: by card, by issuer, by time of day. A renewal run concentrated on the 1st of the month may hit issuer limits.
+- **Check:** ask for decline rates by issuer, and time of day, for recurring charges.
+
+## 6. Things the fake does not model at all
+
+None of the following exist in the fake, so no test covers them. Each needs a decision before production.
+- **Webhooks**, or any asynchronous notification.
+- **Refunds**, partial or full.
+- **Disputes and chargebacks**: money taken back weeks later, which invoicing and entitlement must react to.
+- **Partial approvals**: an amount lower than requested.
+- **Currency conversion** by the provider.
+- **Duplicate-charge protection** on the provider's side (see A8).
+- **Provider-side retries** (for example "smart retries"), which would conflict with Tally's dunning.
+- **Persistence**: the fake loses everything on restart, so a test cannot restart the provider mid-run.
+- **Clock**: the fake stamps charges with its own wall clock (`Instant.now()`), not Tally's test clock. Tally never reads that timestamp, and must not start to without a provider-side clock contract.
+
+## Test-only endpoints
+
+These belong to the fake, not to any real provider. Tally's production code must never call them:
+- `POST` and `GET /admin/mode`
+- `GET /admin/charges/count`
+- `GET /admin/requests/count`
+- `GET /admin/stats`

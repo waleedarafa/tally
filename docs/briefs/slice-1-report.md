@@ -212,3 +212,30 @@ Each was shown to fail on a deliberate violation. The failing build output is in
 - `invoicing.ConcurrentDeliveryIT`: shown failing without the optimistic lock.
 - `platform.internal.DurableQueueIT`, including `twoInstancesClaimingConcurrentlyHandleEachItemExactlyOnce`: 1,000 items, two simulated instances.
 - `platform.internal.PeriodicJobIT.twoInstancesRunADueJobOnce`.
+
+## 6. After the slice 1 review
+
+The review answered several items above. Each change below was made on the same branch, with `./mvnw verify` green before every commit.
+
+| Review item | Change | Commit | Tests |
+|---|---|---|---|
+| D19: nightly runs only from `main` | The branch was fast-forwarded into `main` at `2fc103d`. | (merge) | none |
+| Pin the approved dependency graph | **FF-11**, `architecture.PinnedModuleDependenciesTest`, compares every module's `allowedDependencies` with `architecture/module-dependencies.txt`. `allowEmptyShould` is off on every ArchUnit rule. Failing runs v11 and v12 are recorded in `slice-1-fitness-proof.md`. | `abad0b2` | FF-11 |
+| R5 / D4: where checkout lives | New process module `checkout`, allowed to use `account`, `catalog`, `subscription`, `invoicing` and `payment`. Nothing depends on it. It reads invoices through the new `InvoicingApi.invoicesForSubscription`. FF-2 now lists nine modules. | `605fbed` | FF-1, FF-2, FF-11, AT-1, AT-4 |
+| R3 / D13: who owns listener threads | The platform's `eventListenerExecutor` (`tally.events.listener-threads`, default 8) runs every async listener through an `AsyncConfigurer`. It is the only `Executor` bean, so Spring Boot creates none. Metrics: `tally.events.listeners.{active, queued, threads, completed, failed, last_success_age_seconds}`. | `74c663f` | `EventListenerExecutionIT`; Spike A and AT-7 size the pool with the platform setting |
+| R6: rate limiting across instances | `tally.payment.provider.rate-limit-target-percent`, default 95. AT-10 at 2,000 renewals: 0.25% of calls refused with 429. | `dffcd89` | `PermitIntervalTest`, AT-10 |
+| Q5: retention | Job `retention` in `platform.jobs`, hourly. It deletes `DONE` queue items (by claim time) and completed publications older than `tally.retention.keep`, default 30 days. Health: `tally.job.*{job="retention"}`. | `d795cb2` | `RetentionIT`, AT-11 |
+| Q4 / D20: collected versus invoiced | Daily invariant `invoicing.invoiced-versus-collected`, through the new `PaymentApi.collected(references)`. | `92fac62` | `InvoicedVersusCollectedIT` |
+| Q6 / D18: build time | CI has two stages: the commit stage, then the acceptance stage. On success, the acceptance stage tags the image `accepted-<commit>`. | `06a1dad` | both stages, run locally (1.5 min and 5 min) |
+| Fake provider assumptions | `fake-provider/CONTRACT.md` lists 21 assumptions and what the fake leaves out. | (see `git log`) | none |
+
+**Deviations and decisions to confirm**
+- **CLAUDE.md rule 1 and ADR-013 list the bounded contexts without `checkout`.** I did not edit either file. FF-2 now lists `checkout`, as a process module that is not a bounded context. Updating rule 1, and recording the decision as R5, is yours to do.
+- **Default retention is 30 days.** The review asked for the job but gave no period. Deleting a `DONE` row frees its `queue_key`, so the key no longer stops a duplicate. In slice 1, keys are only re-enqueued within minutes (event redelivery), and invoices are also guarded by the unique (account, period start) constraint. Before you lower the default, check every new queue's keys.
+- **AT-11 changed its expectation.** At 5 minutes it now expects each job to be overdue only if its own threshold has passed. The hourly retention job is overdue after 2 hours, not 5 minutes. AT-3 sets a 10-year retention, because it reads 26 months of billing rows.
+- **Invoiced versus collected compares Tally's two records, not the provider's.** It catches drift between Invoicing and Payment, such as a lost `PaymentSucceeded` event or a wrong amount. It does not catch Spike B's B4; that still needs R2 and a settlement report (CONTRACT.md A15). The check covers invoices issued in the last 2 days, except the last hour.
+- **The acceptance stage reruns the build.** It does not test the image itself: AT-9 and AT-10 start the jar. Testing the image would need the acceptance tests to start containers.
+- **CONTRACT.md flags three assumptions to check with a real provider before choosing one:**
+  - A6: does a 503 guarantee that no charge was made? D7 retries 503s.
+  - A10 and A11: how long can a charge take to become visible to lookup? Reconciliation first checks at 5 minutes.
+  - A17: what does a token need for merchant-initiated recurring charges?
