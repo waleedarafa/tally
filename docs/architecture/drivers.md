@@ -27,6 +27,8 @@ D5, D8 and D9 stay as summaries until their slices.
 | | D8 Second payment provider without billing changes | M | M |
 | | D9 New country tax in one place | M | L |
 | Privacy | D11 Deletion versus retention | M | M |
+| Correctness | D14 Payment truth matches the provider | H | M |
+| Availability | D15 Renewals without the customer present | H | M |
 
 ## D1. Exactly once per billing date
 - **Source:** billing schedule (clock). **Stimulus:** an account's billing date arrives.
@@ -64,6 +66,7 @@ D5, D8 and D9 stay as summaries until their slices.
 - **Response:** all accounts invoiced; charges at the provider's maximum rate without a 429 storm.
 - **Measure:** 99.9% of invoices within 1 hour of billing time; all first attempts within 3 hours.
 - **Verified by:** nightly load test with an uneven, realistic calendar.
+- **Slice 1 evidence:** charging 87/s (target rate now 95% of the limit, ADR-036); invoicing about 100/s measured mostly on one instance, against about 139/s needed. Unproven until the staging run. Do not relax this target before measuring it.
 
 ## D7. Stuck work is visible
 - **Source:** silent processing failure. **Stimulus:** a queue's oldest due item keeps ageing.
@@ -101,6 +104,22 @@ D5, D8 and D9 stay as summaries until their slices.
 - **Measure:** alert within twice the job interval (minimum 5 minutes); every job has a signal.
 - **Verified by:** fitness function; chaos test disabling each job.
 
+## D14. Tally's payment records match the provider's
+- **Source:** the payment provider. **Stimulus:** the provider's record differs from Tally's: a decline reported as success, a later refund or chargeback, or a failed request the provider rolls forward after an incident.
+- **Environment:** normal operation. **Artifact:** payment attempts, invoices.
+- **Response:** the mismatch is detected, recorded, listed and alerted. The action on the invoice and on access follows ADR-032.
+- **Measure:** every mismatch detected within 24 hours *(assumed)*, in both directions.
+- **Verified by:** settlement reconciliation test with the fake provider's `LIE` and reversal modes. *(Slice 2.)*
+
+## D15. Renewals work without the customer present
+- **Source:** the customer's bank and the card network. **Stimulus:** a renewal charge on a saved card.
+- **Environment:** the customer is not online. Some regions require strong customer authentication.
+- **Artifact:** card setup at checkout, payment attempts, dunning.
+- **Response:** checkout saves the card for later use with the customer's agreement. Renewals are flagged as merchant-initiated. If the bank still demands authentication, the attempt fails with a distinct reason (neither soft nor hard), and the customer is asked to come back and complete it.
+- **Measure:** the share of renewals that need the customer *(assumed; provider data)*; each such case reaches the customer within 1 hour *(assumed)*.
+- **Verified by:** a fake provider mode that demands authentication on renewal. *(Slice 2 design, slice 5 follow-up.)*
+- **Note:** rules differ by region and provider. Confirm with the chosen provider and legal.
+
 ## Assumptions to confirm
 | Assumption | Owner |
 |---|---|
@@ -113,3 +132,6 @@ D5, D8 and D9 stay as summaries until their slices.
 | 30 minutes for key rotation | Security |
 | < 1 false alarm a week | On-call |
 | One-month test < 2 minutes | Engineering |
+| Mismatches with the provider detected within 24 hours | Finance |
+| Share of renewals needing the customer; 1 hour to reach them | Payments, product |
+| Retention period of 30 days for finished work | Operations, legal |

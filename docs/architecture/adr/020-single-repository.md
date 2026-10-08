@@ -24,3 +24,5 @@ A separate team owns a part with its own release cycle.
 
 ## Notes
 Recorded retroactively in the Step 7 review; decided in Steps 3 and 5.
+
+Cross-reference added after slice 1: AT-9 and AT-10 live in the `tally` integration tests, reusing its test containers. `load-tests/` is kept for staging-scale tests.

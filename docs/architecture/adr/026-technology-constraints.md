@@ -1,6 +1,6 @@
 # ADR-026. Technology constraints
 
-**Status:** Accepted
+**Status:** Superseded by ADR-039
 
 ## Context
 Every other record assumes a stack. Recording it makes the assumption visible.

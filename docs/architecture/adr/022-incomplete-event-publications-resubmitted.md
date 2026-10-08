@@ -27,3 +27,5 @@ The spike shows different library behaviour than documented.
 
 ## Notes
 Created from the Step 8 evaluation.
+
+Cross-reference added after slice 1: extended by ADR-028 (event resubmission rules, from Spike A).

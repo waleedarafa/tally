@@ -1,6 +1,6 @@
 # Tally: standing instructions for the coding agent
 
-Tally is a subscription billing system built as a learning project, modelled loosely on [Kill Bill](https://github.com/killbill/killbill) ([subscription billing overview](https://killbill.io/subscription-billing)).
+Tally is a subscription billing system built as a learning project, modelled loosely on Kill Bill.
 Architecture work happens outside this repository. Your job is to implement it faithfully, and to report back where reality differs from the design.
 
 ## Read first
@@ -8,23 +8,26 @@ Architecture work happens outside this repository. Your job is to implement it f
 - `docs/architecture/adr/README.md`: the decision log. Read every record a task touches.
 - `docs/briefs/slice-N.md`: the scope of the current slice.
 
-## Stack (ADR-026)
+## Stack (ADR-039)
 Java 25, Spring Boot 4, Spring Modulith 2, Maven wrapper, PostgreSQL, Flyway, Testcontainers, ArchUnit.
 Before adding any other dependency, or if unsure which version is compatible with Spring Boot 4, check the official documentation. Do not guess versions or APIs. If no compatible version exists, stop and report.
 
 ## Architecture rules (never break these)
-1. **Modules.** One top-level package per bounded context under `com.tally`: `shared`, `account`, `catalog`, `subscription`, `invoicing`, `payment`, `entitlement`, plus `platform` for queue and job infrastructure only (ADR-027). Public API classes sit in the module's base package. Everything else sits in subpackages. Each module declares allowed dependencies in `package-info.java` (ADR-003, ADR-014).
+1. **Modules.** One top-level package per bounded context under `com.tally`: `shared`, `account`, `catalog`, `subscription`, `invoicing`, `payment`, `entitlement`, plus `platform` for queue and job infrastructure only (ADR-027), and `checkout`, a process module with no domain model that nothing depends on (ADR-034). The approved dependency graph is in `architecture/module-dependencies.txt`; never widen it without approval (ADR-040). Public API classes sit in the module's base package. Everything else sits in subpackages. Each module declares allowed dependencies in `package-info.java` (ADR-003, ADR-014).
 2. **Data.** Each module owns one PostgreSQL schema. No module reads or writes another module's tables. No JPA relations between modules: refer by ID only.
 3. **Payment knows nothing about invoices.** Nothing in `payment` imports from `invoicing` (ADR-014).
 4. **Time.** Inject `java.time.Clock`. Never call a no-argument `now()` or `System.currentTimeMillis()` outside the clock configuration (D4).
 5. **Scheduled work.** Use the shared queue infrastructure: per-module queue tables claimed with `FOR UPDATE SKIP LOCKED`, a reaper, and a business unique constraint. Never use `@Scheduled` directly (ADR-017).
 6. **No transaction open during an HTTP call to the provider.** Claim and commit, call, then record the result (ADR-005).
-7. **Events.** Additive changes only. Never rename or move an event class. Every event carries an event ID, occurrence time and account ID. Listeners must be idempotent (ADR-009, ADR-022).
+7. **Events.** Additive changes only. Never rename or move an event class. Every event carries an event ID, occurrence time and account ID. Consumers must handle enum values they do not know. Listeners must be safe when duplicates arrive **at the same time**: use a unique constraint, an atomic insert or an optimistic lock, never "check, then act" (ADR-009, ADR-028).
 8. **Every background job reports health:** last success time and waiting work (ADR-023).
-9. **Unknown payment outcomes are never retried** in slice 1. They are reconciled (ADR-018).
+9. **Unknown payment outcomes are never retried.** They are reconciled. Retry only when no charge is certain (ADR-018, ADR-030).
 10. **Money** is `shared.Money`: amount in minor units (`long`) plus ISO currency. No `double` anywhere near money.
+11. **Duplicate protection lives in business tables.** A queue key is never the only guard: queue rows are deleted after the retention period (ADR-037).
+12. **The fake provider is a model of a real one.** Any new behaviour that depends on how a provider acts must be listed in `fake-provider/CONTRACT.md`.
 
 ## How to work
+- `main` is the trunk. Work on a short-lived branch and merge through a pull request (ADR-038).
 - Write the acceptance test for a scenario before its implementation, where practical.
 - Run `./mvnw verify` before every commit. It runs unit, integration and fitness-function tests.
 - Small commits, each leaving the build green.
@@ -32,7 +35,7 @@ Before adding any other dependency, or if unsure which version is compatible wit
 
 ## Stop and ask, instead of deciding, when
 - A task would change a module's allowed dependencies.
-- A task conflicts with an Accepted decision record. Never edit an accepted record. Describe the conflict.
+- A task conflicts with an Accepted decision record. Never edit an accepted record's decision text. Describe the conflict.
 - A library behaves differently from what a decision record assumes (this is what the spikes look for).
 - A scenario's response measure cannot be met.
 
