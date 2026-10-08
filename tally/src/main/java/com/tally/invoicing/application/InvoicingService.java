@@ -24,6 +24,13 @@ class InvoicingService implements InvoicingApi {
         return invoices.findByAccountIdOrderByPeriodStart(accountId).stream().map(InvoicingService::view).toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<InvoiceView> invoicesForSubscription(UUID subscriptionId) {
+        return invoices.findBySubscriptionIdOrderByPeriodStart(subscriptionId).stream().map(InvoicingService::view)
+                .toList();
+    }
+
     static InvoiceView view(Invoice i) {
         return new InvoiceView(i.id(), i.accountId(), i.subscriptionId(), i.status(), i.amount(), i.periodStart(),
                 i.periodEnd(), i.paymentReference(), i.issuedAt());

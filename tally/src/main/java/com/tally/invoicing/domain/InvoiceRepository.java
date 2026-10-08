@@ -14,5 +14,5 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
 
     List<Invoice> findByAccountIdOrderByPeriodStart(UUID accountId);
 
-    List<Invoice> findBySubscriptionId(UUID subscriptionId);
+    List<Invoice> findBySubscriptionIdOrderByPeriodStart(UUID subscriptionId);
 }

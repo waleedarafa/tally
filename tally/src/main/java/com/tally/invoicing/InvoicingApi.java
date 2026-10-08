@@ -8,4 +8,7 @@ public interface InvoicingApi {
 
     /** The account's invoices, oldest first. */
     List<InvoiceView> invoicesFor(UUID accountId);
+
+    /** The subscription's invoices, oldest first. */
+    List<InvoiceView> invoicesForSubscription(UUID subscriptionId);
 }

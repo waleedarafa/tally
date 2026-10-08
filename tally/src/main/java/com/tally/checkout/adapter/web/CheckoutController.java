@@ -1,8 +1,8 @@
-package com.tally.invoicing.adapter.web;
+package com.tally.checkout.adapter.web;
 
 import com.tally.account.UnknownAccountException;
 import com.tally.catalog.UnknownPlanException;
-import com.tally.invoicing.application.Checkout;
+import com.tally.checkout.application.Checkout;
 import com.tally.subscription.AlreadySubscribedException;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;

@@ -21,12 +21,12 @@ class ModuleStructureTest {
         MODULES.verify();
     }
 
-    /** CLAUDE.md rule 1: exactly one top-level package per bounded context, plus shared and platform. */
+    /** CLAUDE.md rule 1: one top-level package per bounded context, plus shared, platform and checkout (R5). */
     @Test
     void topLevelPackagesAreExactlyTheAgreedModules() {
         assertThat(MODULES.stream().map(ApplicationModule::getIdentifier).map(Object::toString))
                 .containsExactlyInAnyOrder(
                         "shared", "platform", "account", "catalog",
-                        "subscription", "invoicing", "payment", "entitlement");
+                        "subscription", "invoicing", "payment", "entitlement", "checkout");
     }
 }

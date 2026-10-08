@@ -1,4 +1,4 @@
-package com.tally.invoicing.application;
+package com.tally.checkout.application;
 
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
