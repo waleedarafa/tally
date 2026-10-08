@@ -34,6 +34,7 @@ class Reconciliation implements PeriodicJob {
     private static final Logger log = LoggerFactory.getLogger(Reconciliation.class);
 
     private final PaymentAttemptRepository attempts;
+    private final CollectionRequests requests;
     private final PaymentGateway gateway;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate transactions;
@@ -41,9 +42,11 @@ class Reconciliation implements PeriodicJob {
     private final PaymentProperties properties;
     private final Clock clock;
 
-    Reconciliation(PaymentAttemptRepository attempts, PaymentGateway gateway, ApplicationEventPublisher events,
-            TransactionTemplate transactions, MeterRegistry meters, PaymentProperties properties, Clock clock) {
+    Reconciliation(PaymentAttemptRepository attempts, CollectionRequests requests, PaymentGateway gateway,
+            ApplicationEventPublisher events, TransactionTemplate transactions, MeterRegistry meters,
+            PaymentProperties properties, Clock clock) {
         this.attempts = attempts;
+        this.requests = requests;
         this.gateway = gateway;
         this.events = events;
         this.transactions = transactions;
@@ -114,6 +117,7 @@ class Reconciliation implements PeriodicJob {
         } else {
             attempt.checkedWithoutChange(clock.instant());
         }
+        requests.settle(attempt);
     }
 
     private void corrected(AttemptState from, AttemptState to, PaymentAttempt attempt) {
