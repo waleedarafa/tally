@@ -1,13 +1,17 @@
 package com.tally.payment.application;
 
+import com.tally.payment.AttemptState;
 import com.tally.payment.PaymentApi;
 import com.tally.payment.PaymentStatus;
 import com.tally.payment.domain.PaymentAttempt;
 import com.tally.payment.domain.PaymentAttemptRepository;
 import com.tally.shared.Money;
 import java.time.Clock;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,5 +46,12 @@ class PaymentService implements PaymentApi {
     public Optional<PaymentStatus> status(String reference) {
         return attempts.findFirstByReferenceOrderByCreatedAtDesc(reference)
                 .map(a -> new PaymentStatus(a.reference(), a.state(), a.failureReason()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Money> collected(Collection<String> references) {
+        return attempts.findByReferenceInAndState(references, AttemptState.SUCCEEDED).stream()
+                .collect(Collectors.toMap(PaymentAttempt::reference, PaymentAttempt::amount));
     }
 }

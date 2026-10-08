@@ -1,6 +1,8 @@
 package com.tally.payment;
 
 import com.tally.shared.Money;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,4 +20,10 @@ public interface PaymentApi {
 
     /** The latest attempt for a reference, read from Payment (read-your-writes, ADR-019). */
     Optional<PaymentStatus> status(String reference);
+
+    /**
+     * The amount collected for each of these references: references with a SUCCEEDED attempt only.
+     * Used to check what was collected against what was invoiced (ADR-024).
+     */
+    Map<String, Money> collected(Collection<String> references);
 }

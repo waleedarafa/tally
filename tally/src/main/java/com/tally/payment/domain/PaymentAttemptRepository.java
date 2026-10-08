@@ -2,6 +2,7 @@ package com.tally.payment.domain;
 
 import com.tally.payment.AttemptState;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,6 +20,8 @@ public interface PaymentAttemptRepository extends JpaRepository<PaymentAttempt, 
     long countByState(AttemptState state);
 
     Optional<PaymentAttempt> findFirstByReferenceOrderByCreatedAtDesc(String reference);
+
+    List<PaymentAttempt> findByReferenceInAndState(Collection<String> references, AttemptState state);
 
     /** PENDING to IN_FLIGHT, only if still PENDING. Returns 1 if this caller won the transition. */
     @Modifying

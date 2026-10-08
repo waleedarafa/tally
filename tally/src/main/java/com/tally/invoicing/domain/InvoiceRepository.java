@@ -1,5 +1,6 @@
 package com.tally.invoicing.domain;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -15,4 +16,6 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     List<Invoice> findByAccountIdOrderByPeriodStart(UUID accountId);
 
     List<Invoice> findBySubscriptionIdOrderByPeriodStart(UUID subscriptionId);
+
+    List<Invoice> findByIssuedAtGreaterThanEqualAndIssuedAtLessThan(Instant from, Instant to);
 }
