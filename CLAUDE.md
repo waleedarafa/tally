@@ -46,3 +46,4 @@ Write `docs/briefs/slice-N-report.md` with:
 3. Every deviation from the brief or the decision records, and why.
 4. Open questions and suggested new decision records.
 5. Fitness functions added.
+6. An audit of every decision record the slice touched: does its Compliance section describe a check that exists in the code? List each gap. Never claim a check that is only planned.

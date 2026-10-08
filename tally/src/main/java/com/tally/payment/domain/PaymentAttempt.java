@@ -21,6 +21,10 @@ public class PaymentAttempt {
     @Id
     private UUID id;
 
+    /** The collection request this attempt belongs to (ADR-041). Empty only for rows of an older release. */
+    @Column(name = "request_id")
+    private UUID requestId;
+
     @Column(nullable = false)
     private String reference;
 
@@ -62,10 +66,11 @@ public class PaymentAttempt {
     protected PaymentAttempt() {
     }
 
-    public static PaymentAttempt pending(String reference, UUID accountId, Money amount, String paymentToken,
-            Instant now) {
+    public static PaymentAttempt pending(UUID requestId, String reference, UUID accountId, Money amount,
+            String paymentToken, Instant now) {
         PaymentAttempt a = new PaymentAttempt();
         a.id = UUID.randomUUID();
+        a.requestId = requestId;
         a.reference = reference;
         a.accountId = accountId;
         a.amountMinor = amount.minorUnits();
@@ -158,6 +163,10 @@ public class PaymentAttempt {
 
     public UUID id() {
         return id;
+    }
+
+    public Optional<UUID> requestId() {
+        return Optional.ofNullable(requestId);
     }
 
     public String reference() {

@@ -25,3 +25,5 @@ Listener latency grows under load, or the pool saturates in the nightly test.
 
 ## Notes
 Recorded after implementation in slice 1b (commit 74c663f).
+
+Compliance status after slice 1b: FF-10b does not cover the listener pool, because it is not a registered job. `EventListenerExecutionIT` checks its health metrics instead.

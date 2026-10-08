@@ -122,6 +122,10 @@ public class Invoice {
         return subscriptionId;
     }
 
+    public String planId() {
+        return planId;
+    }
+
     public InvoiceStatus status() {
         return status;
     }

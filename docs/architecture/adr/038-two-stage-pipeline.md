@@ -28,3 +28,7 @@ The commit stage exceeds 5 minutes, or the acceptance stage exceeds 20.
 
 ## Notes
 Recorded after implementation in slice 1b (commit 06a1dad). Answers Q6.
+
+Compliance status after slice 1b:
+- CI did not run on `pull_request` events, so the merged result of a pull request was untested. To be fixed now.
+- No deployment job exists yet, so "accepted images only" is not enforced. Built with staging (slice 2, step 0).

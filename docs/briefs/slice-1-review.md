@@ -71,3 +71,34 @@ This file holds the lightweight evaluation of slice 1 and the answers to the sli
 - Stripe, Advanced error handling: https://docs.stripe.com/error-low-level
 - Stripe, Errors: https://docs.stripe.com/api/errors
 - Stripe, The Setup Intents API: https://docs.stripe.com/payments/setup-intents.md
+
+## Part 3. Corrections and the record audit (after slice 1b)
+
+**Corrections to this review, from the agent's audit**
+- Part 1, finding 3: three of the four defects were timing defects, not four. The fourth (pollers leaving workers idle) was a throughput logic defect, found by a load test. The lesson still holds: none of the four was found by a structural fitness function.
+- Part 2, point 2: "any retention period is safe" was true for the billing queue only. The payment guard was a partial index covering open attempts. ADR-041 replaces it.
+
+**The audit found a pattern.** Several records I wrote after slice 1b described checks in their Compliance sections that did not exist yet: alerts, a dedicated rule, a deployment gate. A record that claims a check which is not there is worse than no record: it makes a gap look closed. From now on:
+- A Compliance section describes the intended check. The Notes say whether it exists yet.
+- Every slice report audits the records it touched against the code (`CLAUDE.md`, report item 6).
+
+**Answers to the agent's three questions**
+1. **AT-3:** add `billed_for`, the scheduled billing time, with an additive migration. `issued_at` and `billed_for` differ when a renewal runs late, and D6's lateness measure needs both after queue rows are deleted.
+2. **Record mismatches:**
+
+| Gap | Action | When |
+|---|---|---|
+| ADR-028: check-then-insert in the collection listener | ADR-041: `CollectionRequest` with a full unique constraint | Now |
+| ADR-037: payment guard is a partial index | ADR-041 | Now |
+| ADR-028: subscription listener fails on duplicates | Absorb duplicates quietly (atomic insert) | Now |
+| ADR-038: CI does not run on pull requests | Add `pull_request` trigger | Now |
+| `CLAUDE.md` rule 7: unknown enum values | Audit cross-module enums; stored events must deserialize an unknown value to a safe default | Now |
+| ADR-028 and ADR-037: alerts; money queues | Flag money queues now; alert rules as code with staging | Flag now; alerts slice 2, step 0 |
+| ADR-038: no deployment gate | Built with staging | Slice 2, step 0 |
+| ADR-029, ADR-034: compliance described a different check | Record corrected in Notes; no code | Done |
+
+**Why rule 7 matters.** A Java enum cannot hold a value the code does not know, so the danger is in stored events. In slice 2, D15 adds a new payment failure reason (for example `AUTHENTICATION_REQUIRED`). During a rolling deployment, the old version can read an event stored by the new version. It fails to deserialise the unknown value, and the listener fails. Fix: every enum that crosses a module boundary or is stored in an event has an `UNKNOWN` default, and Jackson maps unknown values to it.
+
+**Why the subscription listener must absorb duplicates.** If it fails on a duplicate, every duplicate becomes a failed publication, a resubmission and, once alerts exist, a false alarm. D7 allows fewer than one false alarm a week.
+
+3. **Merging:** the architect merges. The cost is lead time: every pull request waits for a person. Pull requests that change `main` are reviewed by a person while there is no deployment gate. Revisit after slice 2, using lead-time data.

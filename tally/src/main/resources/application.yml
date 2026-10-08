@@ -9,6 +9,14 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  jackson:
+    datatype:
+      enum:
+        # CLAUDE.md rule 7: a stored event read by an older version may hold an enum value it does not
+        # know. Every enum that crosses a module boundary or is stored in an event has an UNKNOWN
+        # constant marked @JsonEnumDefaultValue; this maps unknown values to it instead of failing.
+        # Spring Modulith serializes event publications with this JsonMapper.
+        read-unknown-enum-values-using-default-value: true
   flyway:
     # One schema per data-owning module (CLAUDE.md, rule 2). Flyway's history table lives in "public".
     default-schema: public
