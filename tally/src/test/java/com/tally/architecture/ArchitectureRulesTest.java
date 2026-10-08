@@ -1,7 +1,7 @@
 package com.tally.architecture;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
-import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 import com.tally.platform.BackgroundJob;
@@ -38,7 +38,8 @@ import org.springframework.scheduling.annotation.Schedules;
 
 /**
  * ArchUnit fitness functions from slice 1, build step 2. Each rule names the record it guards.
- * Rules allow an empty "should" because most modules have no classes yet.
+ * Every rule fails if it matches no classes ({@code allowEmptyShould} is off), so a rule whose
+ * subject has been renamed or moved away cannot pass silently.
  */
 class ArchitectureRulesTest {
 
@@ -61,8 +62,7 @@ class ArchitectureRulesTest {
 
         ArchRule rule = classes()
                 .should(haveJpaRelationsOnlyWithinTheirModule(relations))
-                .because("modules refer to each other by ID only (ADR-003)")
-                .allowEmptyShould(true);
+                .because("modules refer to each other by ID only (ADR-003)");
 
         rule.check(CLASSES);
     }
@@ -75,8 +75,7 @@ class ArchitectureRulesTest {
                 .should().callMethodWhere(isNoArgumentNowOnJavaTime())
                 .orShould().callMethod(System.class, "currentTimeMillis")
                 .orShould().callMethodWhere(readsTheSystemClockThroughClock())
-                .because("time must come from the injected java.time.Clock (D4)")
-                .allowEmptyShould(true);
+                .because("time must come from the injected java.time.Clock (D4)");
 
         rule.check(CLASSES);
     }
@@ -84,18 +83,16 @@ class ArchitectureRulesTest {
     /** ADR-017, ADR-027: scheduling belongs to the platform's queue pollers. */
     @Test
     void noSchedulingOutsidePlatform() {
-        ArchRule scheduledMethods = methods()
-                .that().areAnnotatedWith(Scheduled.class)
-                .or().areAnnotatedWith(Schedules.class)
-                .should().beDeclaredInClassesThat().resideInAPackage(PLATFORM)
-                .because("scheduled work runs on the durable queues (ADR-017)")
-                .allowEmptyShould(true);
+        ArchRule scheduledMethods = noMethods()
+                .that().areDeclaredInClassesThat().resideOutsideOfPackage(PLATFORM)
+                .should().beAnnotatedWith(Scheduled.class)
+                .orShould().beAnnotatedWith(Schedules.class)
+                .because("scheduled work runs on the durable queues (ADR-017)");
 
         ArchRule enableScheduling = noClasses()
                 .that().resideOutsideOfPackage(PLATFORM)
                 .should().beAnnotatedWith(EnableScheduling.class)
-                .because("scheduled work runs on the durable queues (ADR-017)")
-                .allowEmptyShould(true);
+                .because("scheduled work runs on the durable queues (ADR-017)");
 
         scheduledMethods.check(CLASSES);
         enableScheduling.check(CLASSES);
@@ -109,8 +106,7 @@ class ArchitectureRulesTest {
                 .should().dependOnClassesThat().areAssignableTo(Executors.class)
                 .orShould().callConstructorWhere(createsAThreadOrExecutor())
                 .orShould().callMethodWhere(startsAThreadThroughThreadBuilders())
-                .because("only the platform creates threads for background work (ADR-027)")
-                .allowEmptyShould(true);
+                .because("only the platform creates threads for background work (ADR-027)");
 
         rule.check(CLASSES);
     }
@@ -121,8 +117,7 @@ class ArchitectureRulesTest {
         ArchRule rule = noClasses()
                 .that().resideInAPackage("com.tally.payment..")
                 .should().dependOnClassesThat().resideInAPackage("com.tally.invoicing..")
-                .because("payment knows nothing about invoices (ADR-014)")
-                .allowEmptyShould(true);
+                .because("payment knows nothing about invoices (ADR-014)");
 
         rule.check(CLASSES);
     }
@@ -137,8 +132,7 @@ class ArchitectureRulesTest {
                         "org.springframework.web..",
                         "org.springframework.http..",
                         "jakarta.servlet..")
-                .because("domain packages do not depend on web or adapter packages (ADR-003)")
-                .allowEmptyShould(true);
+                .because("domain packages do not depend on web or adapter packages (ADR-003)");
 
         rule.check(CLASSES);
     }
@@ -150,8 +144,7 @@ class ArchitectureRulesTest {
                 .that().implement(BackgroundJob.class)
                 .and().areNotInterfaces()
                 .should().implement(HealthSignal.class)
-                .because("every background job reports health (ADR-023)")
-                .allowEmptyShould(true);
+                .because("every background job reports health (ADR-023)");
 
         rule.check(CLASSES);
     }

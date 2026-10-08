@@ -1,0 +1,12 @@
+# The approved module dependency graph (ADR-003, ADR-014, ADR-027; slice 1 report D3).
+# One line per module: "module: allowed, dependencies". A module with none ends at the colon.
+# Each line must match the module's @ApplicationModule(allowedDependencies) exactly, and every
+# module must be listed. Changing a line is an architecture decision: CLAUDE.md says stop and ask.
+shared:
+platform: shared
+account: shared, platform
+catalog: shared, platform, account
+subscription: shared, platform, account, catalog
+invoicing: shared, platform, account, catalog, subscription, payment
+payment: shared, platform
+entitlement: shared, platform, subscription, payment

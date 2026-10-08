@@ -845,3 +845,34 @@ Expecting empty but was: ["job account-cleanup: tally.job.last_success_age_secon
 After the violation was removed, `./mvnw -B verify` was green again (see the step 4 commit that adds this section).
 
 Until step 5 adds the first production queue, FF-10b passes on the main application with no production jobs to check. Its mechanism is covered by `HealthMetricsIT` and `QueuePollingIT`, which register test queues and jobs.
+
+## Added after slice 1: FF-11, the pinned dependency graph, and no empty rules
+
+**FF-11.** `architecture.PinnedModuleDependenciesTest` compares every module's `@ApplicationModule(allowedDependencies)` with the approved graph in `tally/src/test/resources/architecture/module-dependencies.txt`. FF-1 only checks that code keeps to the declarations; a declaration widened without approval would pass FF-1. FF-11 catches it.
+
+**`allowEmptyShould` is off on every ArchUnit rule.** A rule whose `that()` clause matches nothing now fails, so a rule cannot pass silently after its subject is renamed or moved. FF-5's method rule was rewritten as "no method outside `platform` is annotated `@Scheduled`" because there are no `@Scheduled` methods anywhere, and the old form ("methods annotated `@Scheduled` reside in `platform`") would have had an empty subject.
+
+### v11: a module declares a dependency that is not approved (FF-11)
+
+**Violation.** `payment/package-info.java` declares `allowedDependencies = { "shared", "platform", "account" }`. No code uses `account`, so FF-1 still passes.
+
+**Build output** (`./mvnw -B -pl tally test -Dtest='PinnedModuleDependenciesTest,ModuleStructureTest'`):
+```
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.795 s -- in com.tally.architecture.ModuleStructureTest
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.099 s <<< FAILURE! -- in com.tally.architecture.PinnedModuleDependenciesTest
+expected: {"account"=["platform", "shared"], "catalog"=["account", "platform", "shared"], "entitlement"=["payment", "platform", "shared", "subscription"], "invoicing"=["account", "catalog", "payment", "platform", "shared", "subscription"], "payment"=["platform", "shared"], "platform"=["shared"], "shared"=[], "subscription"=["account", "catalog", "platform", "shared"]}
+ but was: {"account"=["platform", "shared"], "catalog"=["account", "platform", "shared"], "entitlement"=["payment", "platform", "shared", "subscription"], "invoicing"=["account", "catalog", "payment", "platform", "shared", "subscription"], "payment"=["account", "platform", "shared"], "platform"=["shared"], "shared"=[], "subscription"=["account", "catalog", "platform", "shared"]}
+```
+FF-1 (`ModuleStructureTest`) passed; FF-11 failed on `"payment"=["account", "platform", "shared"]`.
+
+### v12: a rule whose subject matches no classes (`allowEmptyShould` off)
+
+**Violation.** FF-7's subject was changed to the misspelt package `com.tally.payments..`, which has no classes. With `allowEmptyShould(true)` this rule passed.
+
+**Build output** (`./mvnw -B -pl tally test -Dtest='ArchitectureRulesTest'`):
+```
+[ERROR] Tests run: 7, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 1.301 s <<< FAILURE! -- in com.tally.architecture.ArchitectureRulesTest
+java.lang.AssertionError: Rule 'no classes that reside in a package 'com.tally.payments..' should depend on classes that reside in a package 'com.tally.invoicing..', because payment knows nothing about invoices (ADR-014)' failed to check any classes. This means either that no classes have been passed to the rule at all, or that no classes passed to the rule matched the `that()` clause. To allow rules being evaluated without checking any classes you can either use `ArchRule.allowEmptyShould(true)` on a single rule or set the configuration property `archRule.failOnEmptyShould = false` to change the behavior globally.
+```
+
+After both violations were removed, `./mvnw -B verify` was green (the commit that adds this section).
