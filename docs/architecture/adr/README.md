@@ -1,6 +1,6 @@
 # Tally architecture decision log
 
-One decision per record. An accepted record's decision text is never edited: it is superseded, with links both ways. Two edits are allowed: changing the status to Superseded, and adding a cross-reference to the Notes.
+One decision per record. An accepted record's decision text is never edited: it is superseded, with links both ways. Two edits are allowed: changing the status to Superseded, and adding to the Notes (a cross-reference, or the compliance status found by an audit). A Compliance section describes the intended check; the Notes say whether it exists yet.
 This log was restructured once, in Phase 0, before any code existed. From now on the rules apply strictly.
 
 ## Records
@@ -33,6 +33,7 @@ This log was restructured once, in Phase 0, before any code existed. From now on
 | [027](027-platform-module-for-queues-and-jobs.md) | A platform module holds queue and job infrastructure | Accepted | D1, D2, D7, D13 | Modulith, ArchUnit |
 | [028](028-event-resubmission-rules.md) | Event resubmission rules | Accepted | D1, D2, D3, D7 | Spike A test, `ConcurrentDeliveryIT` |
 | [029](029-platform-owns-listener-executor.md) | The platform provides the event-listener executor | Accepted | D2, D7, D13 | FF-6, FF-10b |
+| [041](041-one-collection-request-per-reference.md) | One collection request per reference | Accepted | D3, D14 | Duplicate-delivery tests |
 | [030](030-retry-only-when-no-charge-is-certain.md) | Retry only when no charge is certain | Accepted; superseded in slice 2 | D3, D6 | Fake provider modes |
 | [036](036-provider-rate-target.md) | Payment calls aim at 95% of the provider's limit | Accepted | D6 | AT-10 |
 | [037](037-retention-of-finished-work.md) | Retention of finished work | Accepted (assumed period) | D6, D7, D11 | Job health, queue review |

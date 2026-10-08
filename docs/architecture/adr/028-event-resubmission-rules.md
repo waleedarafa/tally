@@ -34,3 +34,8 @@ Spring Modulith changes its resubmission or locking behaviour.
 
 ## Notes
 Recorded after slice 1, from Spike A. Implemented in `platform.internal.EventResubmission`.
+
+Compliance status after slice 1b (audit of record against code):
+- The 15-minute alert does not exist yet; only the metric does. Alert rules are built as code with staging (slice 2, step 0).
+- The listener that requests collection for an issued invoice checks, then inserts. Closed by ADR-041.
+- The subscription listener fails on a duplicate and is retried, instead of absorbing it. To be fixed: it must absorb duplicates quietly, or every duplicate becomes a false alarm.

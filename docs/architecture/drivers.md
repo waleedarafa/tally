@@ -65,7 +65,7 @@ D5, D8 and D9 stay as summaries until their slices.
 - **Artifact:** billing schedule, Invoicing, payment workers.
 - **Response:** all accounts invoiced; charges at the provider's maximum rate without a 429 storm.
 - **Measure:** 99.9% of invoices within 1 hour of billing time; all first attempts within 3 hours.
-- **Verified by:** nightly load test with an uneven, realistic calendar.
+- **Verified by:** nightly load test with an uneven, realistic calendar. Lateness is `issued_at` minus `billed_for` on each invoice, so it stays measurable after queue rows are deleted.
 - **Slice 1 evidence:** charging 87/s (target rate now 95% of the limit, ADR-036); invoicing about 100/s measured mostly on one instance, against about 139/s needed. Unproven until the staging run. Do not relax this target before measuring it.
 
 ## D7. Stuck work is visible
