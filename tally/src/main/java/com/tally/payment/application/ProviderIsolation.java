@@ -45,13 +45,13 @@ class ProviderIsolation implements ClaimGate {
                 // A 429 is the provider asking us to slow down, not failing: the rate limiter's business.
                 .ignoreException(e -> e instanceof NotChargedException n && n.why() == NotChargedException.Why.RATE_LIMITED)
                 .build());
-        int perInstance = Math.max(1, properties.provider().rateLimitPerSecond() / Math.max(1, properties.instances()));
         // One permit every (1 s / share), not the whole share once a second: the provider counts its own
         // seconds, and a burst at the end of one of our windows plus one at the start of the next landed in
         // a single provider second (AT-10: 2.5% of calls refused with 429 before this change).
         this.limiter = RateLimiter.of("payment-provider", RateLimiterConfig.custom()
                 .limitForPeriod(1)
-                .limitRefreshPeriod(Duration.ofNanos(1_000_000_000L / perInstance))
+                .limitRefreshPeriod(permitInterval(properties.provider().rateLimitPerSecond(),
+                        properties.instances(), properties.provider().rateLimitTargetPercent()))
                 .timeoutDuration(properties.provider().rateLimitWait())
                 .build());
         Gauge.builder("tally.payment.breaker.state", breaker, ProviderIsolation::stateValue)
@@ -96,5 +96,15 @@ class ProviderIsolation implements ClaimGate {
             case HALF_OPEN -> 2;
             default -> 0;
         };
+    }
+
+    /**
+     * Time between two calls on one instance: each instance takes an equal share of
+     * {@code targetPercent} of the provider's limit. At 100 calls a second, two instances and 95%,
+     * one call every 21.05 ms (47.5 a second each, 95 together).
+     */
+    static Duration permitInterval(int limitPerSecond, int instances, int targetPercent) {
+        long callsPerHundredSeconds = Math.max(1, (long) limitPerSecond * targetPercent / Math.max(1, instances));
+        return Duration.ofNanos(100_000_000_000L / callsPerHundredSeconds);
     }
 }

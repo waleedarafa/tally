@@ -26,13 +26,16 @@ public record PaymentProperties(
      *                           its share ({@code rateLimitPerSecond / instances})
      * @param rateLimitWait      how long a worker may wait for a call permission before giving the
      *                           attempt back to the queue
+     * @param rateLimitTargetPercent the share of the provider's limit Tally aims for, leaving headroom
+     *                           for two instances' calls landing in one provider second (report R6)
      */
     public record Provider(
             @DefaultValue("http://localhost:8081") String baseUrl,
             @DefaultValue("1s") Duration connectTimeout,
             @DefaultValue("5s") Duration readTimeout,
             @DefaultValue("100") int rateLimitPerSecond,
-            @DefaultValue("2s") Duration rateLimitWait) {
+            @DefaultValue("2s") Duration rateLimitWait,
+            @DefaultValue("95") int rateLimitTargetPercent) {
     }
 
     /**

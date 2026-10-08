@@ -21,7 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * no 429 storm and every first attempt is made. 2,000 renewals in CI ({@code -Dtally.at10.renewals};
  * 10,000 nightly).
  *
- * <p>Two real Tally processes on production settings (100 calls a second shared by 2 instances, 15
+ * <p>Two real Tally processes on production settings (100 calls a second; Tally aims at 95, shared by 2 instances; 15
  * payment workers each, 1 s poll interval), real clock, fresh database, every renewal due at once.
  * A "storm" is taken to mean more than 1% of calls refused with 429.
  */
