@@ -76,7 +76,8 @@ class BillingSchedule implements QueueHandler {
         SubscriptionBilling subscription = subscriptions.findById(subscriptionId).orElseThrow();
         ZoneId zone = accounts.get(subscription.accountId()).orElseThrow().timeZone();
         LocalDate periodEnd = subscription.calendar().nextBillingDate(billingDate);
-        issuer.issue(subscription.accountId(), subscriptionId, subscription.planId(), billingDate, periodEnd);
+        issuer.issue(subscription.accountId(), subscriptionId, subscription.planId(), billingDate, periodEnd,
+                BillingCalendar.billingTime(billingDate, zone));
         schedule(subscription.accountId(), subscriptionId, periodEnd, zone);
     }
 }

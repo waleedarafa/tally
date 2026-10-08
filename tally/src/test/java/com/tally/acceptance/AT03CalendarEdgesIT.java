@@ -69,13 +69,16 @@ class AT03CalendarEdgesIT extends AbstractProviderIntegrationTest {
     }
 
     /**
-     * When each renewal was billed: the invoice's issue time, by billing date. The first invoice is
-     * issued at subscribe, not on the calendar, so it is left out. Read from invoices, not from the
-     * billing queue, whose finished rows the retention job deletes after 30 days (ADR-037).
+     * When each renewal was due to be billed ({@code billed_for}), by billing date, after checking it
+     * was issued at or after that time. The first invoice is billed at subscribe, not on the
+     * calendar, so it is left out. Read from invoices, not from the billing queue, whose finished
+     * rows the retention job deletes after 30 days (ADR-037).
      */
     Map<LocalDate, Instant> renewalsBilledAt(UUID account) {
-        return invoicing.invoicesFor(account).stream().skip(1)
-                .collect(Collectors.toMap(InvoiceView::periodStart, InvoiceView::issuedAt));
+        List<InvoiceView> renewals = invoicing.invoicesFor(account).stream().skip(1).toList();
+        assertThat(renewals).allSatisfy(i -> assertThat(i.issuedAt()).as("issued at, for %s", i.periodStart())
+                .isAfterOrEqualTo(i.billedFor()));
+        return renewals.stream().collect(Collectors.toMap(InvoiceView::periodStart, InvoiceView::billedFor));
     }
 
     Instant nextDue(List<UUID> accounts) {

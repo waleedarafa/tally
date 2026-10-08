@@ -6,6 +6,7 @@ import com.tally.invoicing.InvoiceIssued;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.InvoiceRepository;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,19 +32,20 @@ class InvoiceIssuer {
     }
 
     /**
-     * Issues the invoice for {@code [periodStart, periodEnd)}, priced at today's list price. Empty if
-     * the account already has an invoice for that billing date. The unique constraint on
-     * (account, period start) guards against a concurrent issue.
+     * Issues the invoice for {@code [periodStart, periodEnd)}, due at {@code billedFor}, priced at
+     * today's list price. Empty if the account already has an invoice for that billing date. The
+     * unique constraint on (account, period start) guards against a concurrent issue.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     Optional<Invoice> issue(UUID accountId, UUID subscriptionId, String planId, LocalDate periodStart,
-            LocalDate periodEnd) {
+            LocalDate periodEnd, Instant billedFor) {
         if (invoices.existsByAccountIdAndPeriodStart(accountId, periodStart)) {
             return Optional.empty();
         }
         var price = catalog.quote(accountId, planId, BillingPeriod.MONTHLY).price();
         Invoice invoice = invoices.saveAndFlush(
-                Invoice.issue(accountId, subscriptionId, planId, price, periodStart, periodEnd, clock.instant()));
+                Invoice.issue(accountId, subscriptionId, planId, price, periodStart, periodEnd, billedFor,
+                        clock.instant()));
         events.publishEvent(new InvoiceIssued(UUID.randomUUID(), clock.instant(), invoice.accountId(), invoice.id(),
                 invoice.paymentReference(), invoice.amount()));
         return Optional.of(invoice);

@@ -52,6 +52,10 @@ public class Invoice {
     @Column(name = "issued_at", nullable = false)
     private Instant issuedAt;
 
+    /** When the invoice was due to be billed: local midnight of its billing date, or the subscribe time (D6). */
+    @Column(name = "billed_for")
+    private Instant billedFor;
+
     @Column(name = "paid_at")
     private Instant paidAt;
 
@@ -66,7 +70,7 @@ public class Invoice {
     }
 
     public static Invoice issue(UUID accountId, UUID subscriptionId, String planId, Money amount,
-            LocalDate periodStart, LocalDate periodEnd, Instant now) {
+            LocalDate periodStart, LocalDate periodEnd, Instant billedFor, Instant now) {
         Invoice i = new Invoice();
         i.id = UUID.randomUUID();
         i.accountId = accountId;
@@ -80,6 +84,7 @@ public class Invoice {
         // The opaque reference Payment reports results by (ADR-014).
         i.paymentReference = "INV-" + i.id;
         i.issuedAt = now;
+        i.billedFor = billedFor;
         return i;
     }
 
@@ -139,5 +144,9 @@ public class Invoice {
 
     public Instant issuedAt() {
         return issuedAt;
+    }
+
+    public Instant billedFor() {
+        return billedFor;
     }
 }
