@@ -2,6 +2,7 @@ package com.tally.platform.internal;
 
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import java.time.Clock;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
  *   <li>{@code tally.job.overdue{job}}: 1 when the last success is older than twice the job's interval,
  *       and at least 5 minutes (ADR-023); otherwise 0</li>
  *   <li>{@code tally.queue.overdue{queue}}: 1 when the oldest due item is 5 minutes late (D7); otherwise 0</li>
+ *   <li>every queue gauge also carries {@code money}: {@code true} for a money queue (ADR-037)</li>
  * </ul>
  */
 @Component
@@ -38,14 +40,16 @@ class HealthMetrics {
     }
 
     private void bindQueue(JdbcDurableQueue queue) {
+        // money="true" marks a money queue (ADR-037): a failed item there must alert (slice 2 alert rules).
+        Tags tags = Tags.of("queue", queue.name(), "money", String.valueOf(queue.definition().money()));
         Gauge.builder("tally.queue.oldest_due_age_seconds", queue, JdbcDurableQueue::oldestDueAgeSeconds)
-                .tag("queue", queue.name()).baseUnit("seconds").strongReference(true).register(meters);
+                .tags(tags).baseUnit("seconds").strongReference(true).register(meters);
         Gauge.builder("tally.queue.waiting", queue, JdbcDurableQueue::waiting)
-                .tag("queue", queue.name()).strongReference(true).register(meters);
+                .tags(tags).strongReference(true).register(meters);
         Gauge.builder("tally.queue.failed", queue, JdbcDurableQueue::failed)
-                .tag("queue", queue.name()).strongReference(true).register(meters);
+                .tags(tags).strongReference(true).register(meters);
         Gauge.builder("tally.queue.overdue", queue, q -> q.oldestDueAgeSeconds() >= QUEUE_OVERDUE_SECONDS ? 1 : 0)
-                .tag("queue", queue.name()).strongReference(true).register(meters);
+                .tags(tags).strongReference(true).register(meters);
     }
 
     private void bindJob(RegisteredJob job) {

@@ -51,7 +51,7 @@ class PeriodicJobs implements SmartInitializingSingleton {
             Map<String, PeriodicJob> byName = jobs.stream()
                     .collect(Collectors.toMap(PeriodicJob::name, Function.identity()));
             JdbcDurableQueue queue = queues.register(
-                    new QueueDefinition(queueName(table), table, 1, 10, null), processor(byName), ClaimGate.ALWAYS_OPEN);
+                    new QueueDefinition(queueName(table), table, 1, 10, null, false), processor(byName), ClaimGate.ALWAYS_OPEN);
             jobs.forEach(job -> schedule(queue, job));
         });
     }

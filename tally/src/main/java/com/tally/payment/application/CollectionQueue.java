@@ -14,7 +14,7 @@ class CollectionQueue {
     // The permanent guard (ADR-037, ADR-041): one collection request per reference, never deleted. Each
     // item names one attempt of that request, sent only by its PENDING to IN_FLIGHT transition.
     static final QueueDefinition DEFINITION = QueueDefinition.of("payment-collection", "payment.collection_queue",
-            "payment.collection_request_one_per_reference");
+            "payment.collection_request_one_per_reference").asMoneyQueue();
 
     private final DurableQueue queue;
     private final Clock clock;

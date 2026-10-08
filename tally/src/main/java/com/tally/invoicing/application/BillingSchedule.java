@@ -34,7 +34,7 @@ class BillingSchedule implements QueueHandler {
     // The permanent guard (ADR-037): one invoice per account and billing date. Re-running a billing item
     // whose row retention deleted finds the invoice and issues nothing (D1).
     static final QueueDefinition DEFINITION = QueueDefinition.of("billing-schedule", "invoicing.billing_schedule",
-            "invoicing.invoice_one_per_account_and_period");
+            "invoicing.invoice_one_per_account_and_period").asMoneyQueue();
 
     private final DurableQueue queue;
     private final SubscriptionBillingRepository subscriptions;

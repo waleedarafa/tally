@@ -218,7 +218,7 @@ class DurableQueueIT extends AbstractIntegrationTest {
     @Test
     void registrationRequiresAPermanentDuplicateGuardInABusinessTable() {
         assertThatThrownBy(() -> queues.register(
-                new QueueDefinition("no-guard", "platform_test.work_queue", 1, 10, null), recording(Outcome.done())))
+                new QueueDefinition("no-guard", "platform_test.work_queue", 1, 10, null, false), recording(Outcome.done())))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("names no duplicate guard");
         assertThatThrownBy(() -> queues.register(
