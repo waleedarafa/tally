@@ -103,7 +103,7 @@ Payment allows a new attempt only while no attempt is REQUESTED, SENT or UNKNOWN
 
 ## 6. Money
 
-- `Money(long minor, Currency currency)`: minor units from `Currency.getDefaultFractionDigits()` (AED, SAR, EGP: 2; KWD: 3).
+- `Money(long minorUnits, Currency currency)`: minor units from `Currency.getDefaultFractionDigits()` (AED, SAR, EGP: 2; KWD: 3). `Money.of(BigDecimal, code)` converts a decimal amount exactly and never rounds.
 - `Ratio(long numerator, long denominator)`: exact.
 - Rounding happens only in `Money.times(Ratio)`: half up, to the minor unit *(finance confirms per country)*.
 - Totals are sums of rounded lines, never rounded again. `allocate(int...)` uses largest remainder.
