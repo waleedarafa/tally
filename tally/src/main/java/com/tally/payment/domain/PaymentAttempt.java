@@ -87,6 +87,14 @@ public class PaymentAttempt {
     @Column(nullable = false)
     private int number;
 
+    /**
+     * The provider key this attempt's charge is sent with: the reference plus the attempt number, so a
+     * retry never reuses an earlier attempt's key, whose decline the provider would replay (CONTRACT.md
+     * A22). Stored with the charge's parameters below, which a repeat by key must match exactly (A23).
+     */
+    @Column(name = "idempotency_key", nullable = false)
+    private String idempotencyKey;
+
     @Column(name = "account_id", nullable = false)
     private UUID accountId;
 
@@ -140,6 +148,7 @@ public class PaymentAttempt {
         a.currency = amount.currency().getCurrencyCode();
         a.paymentToken = paymentToken;
         a.number = 1;
+        a.idempotencyKey = keyOf(reference, a.number);
         a.state = AttemptState.REQUESTED;
         a.createdAt = now;
         a.updatedAt = now;
@@ -153,7 +162,12 @@ public class PaymentAttempt {
         }
         PaymentAttempt next = requested(requestId, reference, accountId, amount(), paymentToken, now);
         next.number = number + 1;
+        next.idempotencyKey = keyOf(reference, next.number);
         return next;
+    }
+
+    static String keyOf(String reference, int number) {
+        return reference + ":" + number;
     }
 
     /**
@@ -266,6 +280,10 @@ public class PaymentAttempt {
 
     public int number() {
         return number;
+    }
+
+    public String idempotencyKey() {
+        return idempotencyKey;
     }
 
     public UUID accountId() {

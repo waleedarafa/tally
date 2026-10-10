@@ -94,10 +94,10 @@ class ProviderIsolation implements ClaimGate {
      * Calls the provider under a permission from {@link #permit}, and records the outcome in the breaker.
      * A 429 is ignored by the breaker (the rate limiter's business).
      */
-    ChargeResult charge(String paymentToken, Money amount, String reference) {
+    ChargeResult charge(String paymentToken, Money amount, String reference, String idempotencyKey) {
         Instant start = clock.instant();
         try {
-            ChargeResult result = gateway.charge(paymentToken, amount, reference);
+            ChargeResult result = gateway.charge(paymentToken, amount, reference, idempotencyKey);
             breaker.onSuccess(Duration.between(start, clock.instant()).toNanos(), TimeUnit.NANOSECONDS);
             return result;
         } catch (RuntimeException e) {

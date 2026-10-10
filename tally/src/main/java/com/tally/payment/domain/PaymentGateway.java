@@ -9,14 +9,16 @@ import java.util.List;
 public interface PaymentGateway {
 
     /**
-     * Charges the token.
+     * Charges the token, sending {@code idempotencyKey} (CONTRACT.md A22): within the provider's
+     * retention, a repeat with the same key and the same parameters returns the first outcome and charges
+     * nothing more (A23).
      *
      * @throws NotChargedException when the provider certainly did not charge: it refused the request
      *         (429, 503) or the request never reached it. Safe to try again later.
      * @throws RuntimeException for anything else, such as a read timeout or an unexpected answer: the
      *         charge may have been made, so the outcome is unknown (FR-018).
      */
-    ChargeResult charge(String paymentToken, Money amount, String reference);
+    ChargeResult charge(String paymentToken, Money amount, String reference, String idempotencyKey);
 
     /** The provider's record of charges for a reference: the truth reconciliation reads (FR-018). */
     List<RecordedCharge> chargesFor(String reference);

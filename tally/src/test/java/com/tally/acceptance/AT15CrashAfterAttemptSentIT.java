@@ -36,9 +36,9 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
                 + " payment_token, outcome, created_at, updated_at) VALUES (?, ?, ?, 999, 'USD', ?, 'OPEN', ?, ?)",
                 request, reference, account, token, now, now);
         jdbc.update("INSERT INTO payment.payment_attempt (id, request_id, reference, account_id, amount_minor,"
-                + " currency, payment_token, state, created_at, updated_at, sent_at)"
-                + " VALUES (?, ?, ?, ?, 999, 'USD', ?, 'SENT', ?, ?, ?)",
-                attempt, request, reference, account, token, now, now, now);
+                + " currency, payment_token, state, created_at, updated_at, sent_at, idempotency_key)"
+                + " VALUES (?, ?, ?, ?, 999, 'USD', ?, 'SENT', ?, ?, ?, ?)",
+                attempt, request, reference, account, token, now, now, now, reference + ":1");
         // The reaper hands the item back: another worker picks it up.
         jdbc.update("INSERT INTO payment.collection_queue (queue_key, due_at, payload, status, attempts, created_at)"
                 + " VALUES (?, ?, '', 'READY', 1, ?)", attempt.toString(), now, now);
@@ -65,7 +65,7 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
         String token = FakeProvider.token();
         UUID attempt = crashedWhileSending(reference, token);
         // The call reached the provider and charged; its answer died with the instance.
-        FakeProvider.charge(token, 999, "USD", reference);
+        FakeProvider.charge(token, 999, "USD", reference, reference + ":1");
 
         awaitItemDone(attempt);
         assertThat(FakeProvider.requestCount(reference)).as("not sent again").isEqualTo(1);

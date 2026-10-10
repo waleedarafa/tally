@@ -9,6 +9,7 @@ import com.tally.support.FakeProvider;
 import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.BeforeEach;
@@ -90,6 +91,29 @@ class PaymentCollectionIT extends AbstractProviderIntegrationTest {
         });
     }
 
+    /**
+     * Each attempt sends its own provider key, the reference plus the attempt number, stored with the
+     * attempt (CONTRACT.md A22). Proven by repeating the charge with that key: the provider replays the
+     * first response and charges nothing more.
+     */
+    @Test
+    void anAttemptSendsItsOwnKeyAndARepeatWithItIsReplayed() {
+        String reference = reference();
+        String token = FakeProvider.token();
+        payments.requestCollection(reference, UUID.randomUUID(), Money.of(999, "USD"), token);
+        assertThat(awaitFinal(reference)).isEqualTo(AttemptState.SUCCEEDED);
+        String key = jdbc.queryForObject("SELECT idempotency_key FROM payment.payment_attempt WHERE reference = ?",
+                String.class, reference);
+        assertThat(key).isEqualTo(reference + ":1");
+        long replayedBefore = FakeProvider.stats().get("replayed");
+
+        Map<String, Object> repeat = FakeProvider.charge(token, 999, "USD", reference, key);
+
+        assertThat(repeat.get("chargeId")).isEqualTo(((PaymentSucceeded) captured.events.getFirst()).chargeId());
+        assertThat(FakeProvider.stats().get("replayed")).isEqualTo(replayedBefore + 1);
+        assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
+    }
+
     @Test
     void aSecondRequestForTheSameReferenceChangesNothing() {
         String reference = reference();
@@ -123,9 +147,9 @@ class PaymentCollectionIT extends AbstractProviderIntegrationTest {
         UUID attempt = UUID.randomUUID();
         var now = clock.instant().atOffset(ZoneOffset.UTC);
         jdbc.update("INSERT INTO payment.payment_attempt (id, reference, account_id, amount_minor, currency,"
-                + " payment_token, state, created_at, updated_at, sent_at)"
-                + " VALUES (?, ?, ?, 999, 'USD', ?, 'SENT', ?, ?, ?)",
-                attempt, reference, UUID.randomUUID(), FakeProvider.token(), now, now, now);
+                + " payment_token, state, created_at, updated_at, sent_at, idempotency_key)"
+                + " VALUES (?, ?, ?, 999, 'USD', ?, 'SENT', ?, ?, ?, ?)",
+                attempt, reference, UUID.randomUUID(), FakeProvider.token(), now, now, now, reference + ":1");
         // The reaper returned its queue item, so another worker picks it up.
         jdbc.update("INSERT INTO payment.collection_queue (queue_key, due_at, payload, status, attempts, created_at)"
                 + " VALUES (?, ?, '', 'READY', 1, ?)", attempt.toString(), now, now);

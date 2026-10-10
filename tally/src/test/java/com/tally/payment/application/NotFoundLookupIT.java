@@ -37,9 +37,10 @@ class NotFoundLookupIT {
             UUID id = UUID.randomUUID();
             var now = clock.instant().atOffset(ZoneOffset.UTC);
             jdbc.update("INSERT INTO payment.payment_attempt (id, reference, account_id, amount_minor, currency,"
-                    + " payment_token, state, created_at, updated_at, sent_at)"
-                    + " VALUES (?, ?, ?, 999, 'USD', ?, 'UNKNOWN', ?, ?, ?)",
-                    id, reference, UUID.randomUUID(), FakeProvider.token(), now, now, sentAt.atOffset(ZoneOffset.UTC));
+                    + " payment_token, state, created_at, updated_at, sent_at, idempotency_key)"
+                    + " VALUES (?, ?, ?, 999, 'USD', ?, 'UNKNOWN', ?, ?, ?, ?)",
+                    id, reference, UUID.randomUUID(), FakeProvider.token(), now, now, sentAt.atOffset(ZoneOffset.UTC),
+                    reference + ":1");
             return id;
         }
 

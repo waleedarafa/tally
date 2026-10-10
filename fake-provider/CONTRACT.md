@@ -180,8 +180,7 @@ Modelled on Stripe's API v1 (sources at the end). Tests: `IdempotencyKeysTest`.
   - The outage (`503`) and the rate limit (`429`) stand in front of the idempotency layer: their refusals are not saved, so the same key may charge later.
   - After 24 hours a key is forgotten, and reusing it charges again. Tests simulate this with `POST /admin/idempotency-keys/prune`.
 - **Tally relies on it in:**
-  - nothing yet: Tally sends no key today.
-  - Slice 1R PR-8: each attempt sends its own key, the reference plus the attempt number. It never reuses an earlier attempt's key, because the provider would replay that attempt's decline (`aDeclineIsReplayedForTheSameKeyAndANewKeyChargesAgain`; AT-16).
+  - every charge, since Slice 1R PR-8: each attempt sends its own key, the reference plus the attempt number (`reference:number`), stored with the attempt with the token, amount, currency and reference it was sent with (`PaymentCollectionIT.anAttemptSendsItsOwnKeyAndARepeatWithItIsReplayed`). It never reuses an earlier attempt's key, because the provider would replay that attempt's decline (`aDeclineIsReplayedForTheSameKeyAndANewKeyChargesAgain`; AT-16).
   - the resolver of unknown attempts (A23).
 - **If a real provider differs:**
   - Stripe's API v1 matches, with one difference: Stripe also saves and replays a `500`. The fake's `503` is not saved, because it models a gateway in front of the provider (A6).
