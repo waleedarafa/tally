@@ -13,7 +13,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
 
     /**
      * Inserts {@code invoice} unless the account already has one for its billing date (D1), atomically:
-     * a concurrent caller waits for the first insert to commit, then inserts nothing (ADR-028).
+     * a concurrent caller waits for the first insert to commit, then inserts nothing (FR-028).
      * Returns whether this call inserted it.
      */
     default boolean insertIfAbsent(Invoice invoice) {

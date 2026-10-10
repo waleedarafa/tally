@@ -7,7 +7,7 @@ import java.time.Clock;
 import org.springframework.stereotype.Component;
 
 /**
- * Health of every queue and background job, as Micrometer gauges (ADR-023, D7, D13).
+ * Health of every queue and background job, as Micrometer gauges (FR-023, D7, D13).
  * Values are read when scraped, from the database where they are shared across instances,
  * so a stopped poller or job keeps ageing in its metric instead of freezing.
  * <ul>
@@ -18,9 +18,9 @@ import org.springframework.stereotype.Component;
  *       registration if the job has never succeeded</li>
  *   <li>{@code tally.job.waiting{job}}: work waiting for the job</li>
  *   <li>{@code tally.job.overdue{job}}: 1 when the last success is older than twice the job's interval,
- *       and at least 5 minutes (ADR-023); otherwise 0</li>
+ *       and at least 5 minutes (FR-023); otherwise 0</li>
  *   <li>{@code tally.queue.overdue{queue}}: 1 when the oldest due item is 5 minutes late (D7); otherwise 0</li>
- *   <li>every queue gauge also carries {@code money}: {@code true} for a money queue (ADR-037)</li>
+ *   <li>every queue gauge also carries {@code money}: {@code true} for a money queue (FR-037)</li>
  * </ul>
  */
 @Component
@@ -40,7 +40,7 @@ class HealthMetrics {
     }
 
     private void bindQueue(JdbcDurableQueue queue) {
-        // money="true" marks a money queue (ADR-037): a failed item there must alert (slice 2 alert rules).
+        // money="true" marks a money queue (FR-037): a failed item there must alert (slice 2 alert rules).
         Tags tags = Tags.of("queue", queue.name(), "money", String.valueOf(queue.definition().money()));
         Gauge.builder("tally.queue.oldest_due_age_seconds", queue, JdbcDurableQueue::oldestDueAgeSeconds)
                 .tags(tags).baseUnit("seconds").strongReference(true).register(meters);

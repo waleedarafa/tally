@@ -3,7 +3,7 @@ package com.tally.subscription;
 import java.util.List;
 import java.util.UUID;
 
-/** Subscriptions record business changes only; Invoicing owns the billing calendar (ADR-002). */
+/** Subscriptions record business changes only; Invoicing owns the billing calendar (FR-002). */
 public interface SubscriptionApi {
 
     /**

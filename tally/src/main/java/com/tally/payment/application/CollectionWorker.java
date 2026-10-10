@@ -20,10 +20,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Makes one collection attempt (ADR-005): claim and commit, call the provider with no transaction
+ * Makes one collection attempt (FR-005): claim and commit, call the provider with no transaction
  * open, then record the result and publish its event in a new transaction. A call the provider
  * certainly did not charge goes back to the queue; any other failure leaves the outcome UNKNOWN,
- * never retried (ADR-018).
+ * never retried (FR-018).
  */
 @Component
 class CollectionWorker implements QueueHandler {
@@ -68,7 +68,7 @@ class CollectionWorker implements QueueHandler {
                     .returnToPending(clock.instant()));
             return Outcome.retryAt(clock.instant().plus(e.retryAfter()));
         } catch (RuntimeException e) {
-            // The charge may have happened. Never retried in slice 1; reconciled (ADR-018).
+            // The charge may have happened. Never retried in slice 1; reconciled (FR-018).
             log.warn("Attempt {} for {}: outcome unknown", attemptId, attempt.reference(), e);
             transactions.executeWithoutResult(tx -> {
                 PaymentAttempt a = attempts.findById(attemptId).orElseThrow();

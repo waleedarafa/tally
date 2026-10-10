@@ -11,31 +11,31 @@ The design comes first and lives in [`docs/architecture`](docs/architecture). Th
 | `tally/` | The application: one Spring Boot modular monolith |
 | `fake-provider/` | A stand-in for the card payment provider, used by every test. [`CONTRACT.md`](fake-provider/CONTRACT.md) lists what it assumes about a real provider |
 | `infra/` | `docker-compose.yml` with a local PostgreSQL |
-| `docs/architecture/` | [Drivers](docs/architecture/drivers.md) (quality scenarios) and [decision records](docs/architecture/adr/README.md) |
+| `docs/architecture/` | The second design: [decision log](docs/architecture/v2/README.md), [drivers](docs/architecture/v2/drivers.md) and [design summary](docs/architecture/v2/design.md). The first run's records are archived under [`archive/first-run`](docs/architecture/archive/first-run/README.md) |
 | `docs/briefs/` | Each slice's brief, report, spike findings, fitness-function proof and review |
 | `.github/workflows/` | CI (two stages) and the nightly load run |
 
 ## Modules
 
-One top-level package per module under `com.tally`, with dependencies declared in each `package-info.java` and pinned in [`module-dependencies.txt`](tally/src/test/resources/architecture/module-dependencies.txt) (ADR-040).
+One top-level package per module under `com.tally`, with dependencies declared in each `package-info.java` and pinned in [`module-dependencies.txt`](tally/src/test/resources/architecture/module-dependencies.txt) (FR-040).
 
 | Module | Owns |
 |---|---|
 | `shared` | `Money` (minor units plus ISO currency) and `DomainEvent` |
-| `platform` | Durable queues, periodic jobs, retention, the event-listener executor and health metrics. No business logic (ADR-027) |
+| `platform` | Durable queues, periodic jobs, retention, the event-listener executor and health metrics. No business logic (FR-027) |
 | `account` | Accounts, their currency, time zone and payment token |
 | `catalog` | Plans and prices |
 | `subscription` | Subscriptions and their changes |
 | `invoicing` | The billing calendar, invoices, and the invoiced-versus-collected check |
-| `payment` | Collection requests, payment attempts, provider calls and reconciliation. Knows nothing about invoices (ADR-014) |
+| `payment` | Collection requests, payment attempts, provider calls and reconciliation. Knows nothing about invoices (FR-014) |
 | `entitlement` | Access granted to accounts |
-| `checkout` | A process module: record the card token, subscribe, wait briefly for the first payment (ADR-034) |
+| `checkout` | A process module: record the card token, subscribe, wait briefly for the first payment (FR-034) |
 
 Each module owns one PostgreSQL schema; modules talk through public APIs and events (Spring Modulith), never each other's tables.
 
 ## Stack
 
-Java 25, Spring Boot 4.1, Spring Modulith 2.1, PostgreSQL 17, Flyway, Testcontainers, ArchUnit, Resilience4j core, Maven wrapper (ADR-039).
+Java 25, Spring Boot 4.1, Spring Modulith 2.1, PostgreSQL 17, Flyway, Testcontainers, ArchUnit, Resilience4j core, Maven wrapper (FR-039).
 
 ## Build and test
 
@@ -87,7 +87,7 @@ Health of every queue, job and listener pool is published as Micrometer metrics 
 
 ## Pipeline
 
-[`ci.yml`](.github/workflows/ci.yml) runs on every push and pull request (ADR-038):
+[`ci.yml`](.github/workflows/ci.yml) runs on every push and pull request (FR-038):
 
 1. **Commit stage:** unit, fitness and module tests; on pushes, it builds the image `ghcr.io/<owner>/tally:<commit>`.
 2. **Acceptance stage:** AT-1 to AT-12 and the spikes; on pushes, it tags the image `accepted-<commit>`. Only accepted images may be deployed.

@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * ADR-041's migration (V14) on data left by the previous release: one collection request per
+ * FR-041's migration (V14) on data left by the previous release: one collection request per
  * reference, built from its earliest attempt, with the outcome of its latest; every attempt linked.
  */
 class CollectionRequestBackfillIT {

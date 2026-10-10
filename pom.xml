@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- ADR-026: versions are pinned through Spring Boot's dependency management. -->
+    <!-- FR-026: versions are pinned through Spring Boot's dependency management. -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
@@ -29,7 +29,7 @@
         <!-- Spring Modulith 2.1.x is the line built against Spring Boot 4.1.x. -->
         <spring-modulith.version>2.1.1</spring-modulith.version>
         <!-- Not managed by Spring Boot. Core modules only: resilience4j-spring-boot4 2.4.0 is built
-             against Spring Boot 4.0.0, not the 4.1 line we use (brief section 5, ADR-026). -->
+             against Spring Boot 4.0.0, not the 4.1 line we use (brief section 5, FR-026). -->
         <resilience4j.version>2.4.0</resilience4j.version>
     </properties>
 
@@ -54,7 +54,7 @@
 
     <build>
         <plugins>
-            <!-- ADR-026: fail fast, with a clear message, on any JDK other than 25. -->
+            <!-- FR-026: fail fast, with a clear message, on any JDK other than 25. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

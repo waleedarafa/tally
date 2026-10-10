@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * When reconciliation checks an attempt again (ADR-018): 5 minutes after it became UNKNOWN or FAILED,
+ * When reconciliation checks an attempt again (FR-018): 5 minutes after it became UNKNOWN or FAILED,
  * then 1 hour after the first check, then daily. A FAILED attempt is only re-checked for 48 hours.
  */
 public final class ReconciliationSchedule {

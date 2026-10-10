@@ -1,4 +1,4 @@
--- The platform module's own periodic jobs, such as event resubmission (ADR-022, ADR-027).
+-- The platform module's own periodic jobs, such as event resubmission (FR-022, FR-027).
 -- Infrastructure only: job schedules, no business data. Shape documented on QueueDefinition.
 CREATE SCHEMA platform;
 

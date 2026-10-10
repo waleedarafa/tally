@@ -3,10 +3,10 @@ package com.tally.platform;
 import java.util.regex.Pattern;
 
 /**
- * A durable queue (ADR-017): one table in the owning module's schema, polled by every instance.
+ * A durable queue (FR-017): one table in the owning module's schema, polled by every instance.
  *
  * <p>Every queue table has this shape. The unique constraint on {@code queue_key} stops a duplicate
- * only while the row exists, and the retention job deletes finished rows (ADR-037). So every queue
+ * only while the row exists, and the retention job deletes finished rows (FR-037). So every queue
  * names its {@code duplicateGuard}: a unique constraint or unique index in a business table, which
  * is never deleted, that permanently stops the same work from being done twice.
  * <pre>{@code
@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
  *                  {@code invoicing.invoice_one_per_account_and_period}. Required for every queue a
  *                  module registers; only the platform's periodic job tables, whose rows are never
  *                  finished and so never deleted, have none.
- * @param money     whether the queue's work moves money or decides what a customer owes (ADR-037).
+ * @param money     whether the queue's work moves money or decides what a customer owes (FR-037).
  *                  A failed item in a money queue waits for a person and must alert; its health
  *                  metrics carry the tag {@code money="true"}, which the alert rules (slice 2, step
  *                  0) select on.
@@ -67,12 +67,12 @@ public record QueueDefinition(String name, String table, int workers, int batchS
 
     public static QueueDefinition of(String name, String table, String duplicateGuard) {
         if (duplicateGuard == null) {
-            throw new IllegalArgumentException("Queue " + name + " must name its duplicate guard (ADR-037)");
+            throw new IllegalArgumentException("Queue " + name + " must name its duplicate guard (FR-037)");
         }
         return new QueueDefinition(name, table, 1, 10, duplicateGuard, false);
     }
 
-    /** Flags the queue as a money queue (ADR-037). */
+    /** Flags the queue as a money queue (FR-037). */
     public QueueDefinition asMoneyQueue() {
         return new QueueDefinition(name, table, workers, batchSize, duplicateGuard, true);
     }

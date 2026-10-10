@@ -1,6 +1,6 @@
--- D6, ADR-025: when each invoice was due to be billed, next to issued_at (when it was issued).
+-- D6, FR-025: when each invoice was due to be billed, next to issued_at (when it was issued).
 -- Lateness is issued_at minus billed_for, measurable after the billing queue's rows are deleted.
--- Nullable while instances of the previous release, which do not set it, may still run (ADR-007);
+-- Nullable while instances of the previous release, which do not set it, may still run (FR-007);
 -- a later release backfills again and makes it NOT NULL.
 ALTER TABLE invoicing.invoice ADD COLUMN billed_for TIMESTAMPTZ;
 

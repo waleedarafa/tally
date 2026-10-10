@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** Payment's business invariants (ADR-024), checked daily on its own data. */
+/** Payment's business invariants (FR-024), checked daily on its own data. */
 @Configuration(proxyBeanMethods = false)
 class PaymentInvariants {
 

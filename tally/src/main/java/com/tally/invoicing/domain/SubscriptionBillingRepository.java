@@ -10,7 +10,7 @@ public interface SubscriptionBillingRepository extends JpaRepository<Subscriptio
 
     /**
      * Records the subscription unless it is already recorded, atomically: a concurrent duplicate
-     * delivery waits for the first insert to commit, then inserts nothing (ADR-028).
+     * delivery waits for the first insert to commit, then inserts nothing (FR-028).
      */
     default void insertIfAbsent(SubscriptionBilling billing) {
         insertRow(billing.subscriptionId(), billing.accountId(), billing.planId(), billing.calendar().anchorDay(),

@@ -14,7 +14,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.stereotype.Component;
 
 /**
- * Runs every {@link InvariantCheck} as a periodic job (daily by default, ADR-024) and reports what the
+ * Runs every {@link InvariantCheck} as a periodic job (daily by default, FR-024) and reports what the
  * latest run found as {@code tally.invariant.violations{check}}.
  */
 @Component

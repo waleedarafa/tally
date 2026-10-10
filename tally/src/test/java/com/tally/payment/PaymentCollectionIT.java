@@ -20,7 +20,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
-/** ADR-005: workers claim attempts, call the provider with no transaction open, record the result. */
+/** FR-005: workers claim attempts, call the provider with no transaction open, record the result. */
 @TestPropertySource(properties = {
         "tally.platform.polling-enabled=true",
         "tally.platform.poll-interval=100ms"

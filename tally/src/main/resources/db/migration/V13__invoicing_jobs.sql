@@ -1,4 +1,4 @@
--- Invoicing's periodic jobs, such as its invariant checks (ADR-017, ADR-024). Shape documented on QueueDefinition.
+-- Invoicing's periodic jobs, such as its invariant checks (FR-017, FR-024). Shape documented on QueueDefinition.
 CREATE TABLE invoicing.jobs (
     id              BIGSERIAL    PRIMARY KEY,
     queue_key       TEXT         NOT NULL UNIQUE,

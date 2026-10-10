@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
- * ADR-019 is Proposed, so its choice is a setting (brief section 3).
+ * FR-019 is Proposed, so its choice is a setting (brief section 3).
  *
  * @param paymentWait how long checkout waits for a payment result before answering PROCESSING
  */

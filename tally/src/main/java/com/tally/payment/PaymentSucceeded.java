@@ -5,7 +5,7 @@ import com.tally.shared.Money;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Pinned by name (ADR-009): never rename or move this class; change it additively only. */
+/** Pinned by name (FR-009): never rename or move this class; change it additively only. */
 public record PaymentSucceeded(
         UUID eventId,
         Instant occurredAt,

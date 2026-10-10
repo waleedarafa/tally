@@ -81,7 +81,7 @@ public class Invoice {
         i.currency = amount.currency().getCurrencyCode();
         i.periodStart = periodStart;
         i.periodEnd = periodEnd;
-        // The opaque reference Payment reports results by (ADR-014).
+        // The opaque reference Payment reports results by (FR-014).
         i.paymentReference = "INV-" + i.id;
         i.issuedAt = now;
         i.billedFor = billedFor;
@@ -90,7 +90,7 @@ public class Invoice {
 
     /**
      * Returns whether the invoice changed. A failed invoice can still be paid: reconciliation may
-     * find that a charge reported as failed went through (ADR-018).
+     * find that a charge reported as failed went through (FR-018).
      */
     public boolean paid(Instant now) {
         if (status == InvoiceStatus.PAID) {

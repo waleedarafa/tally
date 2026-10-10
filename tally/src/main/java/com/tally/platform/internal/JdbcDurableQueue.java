@@ -21,8 +21,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * A durable queue on one table (ADR-017). Every statement runs on its own and commits at once:
- * the claim is committed before a handler runs, so no transaction is open while it works (ADR-005).
+ * A durable queue on one table (FR-017). Every statement runs on its own and commits at once:
+ * the claim is committed before a handler runs, so no transaction is open while it works (FR-005).
  * All times come from the injected clock, never from the database (D4).
  */
 final class JdbcDurableQueue implements DurableQueue {
@@ -95,7 +95,7 @@ final class JdbcDurableQueue implements DurableQueue {
     List<Claim> claim(int max) {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException(
-                    "Queue " + name() + " claimed inside a transaction; claims must commit before work starts (ADR-005)");
+                    "Queue " + name() + " claimed inside a transaction; claims must commit before work starts (FR-005)");
         }
         if (!gate.open()) {
             return List.of();

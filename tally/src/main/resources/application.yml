@@ -24,5 +24,5 @@ management:
   endpoints:
     web:
       exposure:
-        # Queue and job health (ADR-023) is read from /actuator/metrics.
+        # Queue and job health (FR-023) is read from /actuator/metrics.
         include: health,metrics

@@ -9,7 +9,7 @@ import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 /**
- * A background job known to the platform, with its health signal (ADR-023): when it last
+ * A background job known to the platform, with its health signal (FR-023): when it last
  * succeeded and how much work waits for it.
  *
  * @param interval     how often the job is meant to succeed
@@ -18,7 +18,7 @@ import java.util.function.Supplier;
 record RegisteredJob(String name, Duration interval, Instant registeredAt,
         Supplier<Optional<Instant>> lastSuccessSource, LongSupplier waitingSource) implements BackgroundJob, HealthSignal {
 
-    /** ADR-023: a job is overdue by twice its interval, and never sooner than 5 minutes. */
+    /** FR-023: a job is overdue by twice its interval, and never sooner than 5 minutes. */
     static final Duration MINIMUM_OVERDUE = Duration.ofMinutes(5);
 
     Duration overdueAfter() {

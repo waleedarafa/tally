@@ -1,6 +1,6 @@
 # Fake provider: the contract it assumes
 
-The fake provider (`com.fakeprovider`) stands in for a real card payment provider in every test (brief section 6, ADR-020). Tally is only as correct as the assumptions the fake makes. This file lists every one of them, so that each can be checked against the real provider before it is chosen or integrated.
+The fake provider (`com.fakeprovider`) stands in for a real card payment provider in every test (brief section 6, FR-020). Tally is only as correct as the assumptions the fake makes. This file lists every one of them, so that each can be checked against the real provider before it is chosen or integrated.
 
 Each assumption below says:
 - **Fake:** what the fake does.
@@ -12,11 +12,11 @@ Assumptions marked **critical** decide whether a customer is charged twice, char
 
 ## Questions for a real provider, with the evidence so far
 
-Reference provider: Stripe's public documentation (ADR-030; `docs/briefs/slice-1-review.md`, part 2, point 5). Sources are listed at the end.
+Reference provider: Stripe's public documentation (FR-030; `docs/briefs/slice-1-review.md`, part 2, point 5). Sources are listed at the end.
 
 **Q-A. Does a 503 mean the provider did not charge?** (A6)
 - **Answer for Stripe: no.** Stripe says to treat a `500` as indeterminate, and groups 500, 502, 503 and 504 together as server errors. After an incident, it may roll a failed request forward and notify later.
-- **Consequence:** our 503 rule (retry it) holds only for this fake provider (ADR-030). Slice 2's idempotency keys remove it.
+- **Consequence:** our 503 rule (retry it) holds only for this fake provider (FR-030). Slice 2's idempotency keys remove it.
 - **Contrast, a 429 is safe:** Stripe's rate limiters run before its idempotency layer, so a 429 request was not executed (A7). Network errors leave the client not knowing whether the request arrived (A10).
 
 **Q-B. How long until a charge appears in a lookup?** (A10, A11)
@@ -52,7 +52,7 @@ Reference provider: Stripe's public documentation (ADR-030; `docs/briefs/slice-1
 
 **A4. The request carries Tally's reference, and the provider stores it with the charge.**
 - **Fake:** `reference` is a top-level field, kept on every charge, including declined ones.
-- **Tally relies on it in:** reconciliation (A9), and Payment's rule that it reports by reference only (ADR-014).
+- **Tally relies on it in:** reconciliation (A9), and Payment's rule that it reports by reference only (FR-014).
 - **If a real provider differs:** most providers put merchant references in free-form metadata, sometimes with length or character limits.
 - **Check:** confirm where the reference goes, its limits, and that it is stored on declined charges too.
 
@@ -70,7 +70,7 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **Fake:** in `OUTAGE` mode, it answers 503 before touching the ledger.
 - **Tally relies on it in:** `HttpPaymentGateway` (`NotChargedException.Why.UNAVAILABLE`); the attempt goes back to `PENDING` and is retried (D7, R4).
 - **If a real provider differs:** a 503 or 502 from a load balancer or gateway in front of the provider can arrive after the charge was made. A retry is then a second charge, because slice 1 sends no idempotency key (A8).
-- **Check:** answered for Stripe (Q-A): no 5xx guarantees it. Valid only against this fake (ADR-030), until slice 2's idempotency keys.
+- **Check:** answered for Stripe (Q-A): no 5xx guarantees it. Valid only against this fake (FR-030), until slice 2's idempotency keys.
 
 **A7. A `429` means the provider did not charge, and `Retry-After` is in seconds.**
 - **Fake:** answers 429 before touching the ledger, with `Retry-After: 1`.
@@ -92,7 +92,7 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 
 **A10. A read timeout may mean a charge was made, and the charge is visible to lookup once it has been made.** (critical)
 - **Fake:** in `TIMEOUT_AFTER_CHARGE` mode, it records the charge, then sleeps 6 s, past Tally's 5 s read timeout.
-- **Tally relies on it in:** the `UNKNOWN` state and reconciliation (ADR-018, Spike B).
+- **Tally relies on it in:** the `UNKNOWN` state and reconciliation (FR-018, Spike B).
 - **If a real provider differs:** a real provider may still be processing when Tally times out, and may finish minutes later. Reconciliation's first check (5 minutes) could then find nothing and mark the attempt `FAILED(SOFT)` (D8), and the charge appears afterwards. The customer is charged, and the invoice says payment failed.
 - **Check:** open (Q-B). Ask for the longest time between a charge request and the charge becoming visible, then set reconciliation's first check above it.
 
@@ -102,7 +102,7 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **Fake:** `GET /charges?reference=` reads the in-memory ledger, so a charge is visible the moment it is recorded.
 - **Tally relies on it in:** `HttpPaymentGateway.chargesFor` and `Reconciliation`. Spike B's "resolved in 5 minutes" depends on it.
 - **If a real provider differs:** search by metadata is often backed by an index that lags by seconds to minutes, or is not offered at all, which leaves webhooks or settlement files as the only source.
-- **Check:** open (Q-B). Confirm that a lookup by reference exists, and its consistency delay. If there is none, reconciliation must use webhooks or reports (and ADR-018 needs revisiting).
+- **Check:** open (Q-B). Confirm that a lookup by reference exists, and its consistency delay. If there is none, reconciliation must use webhooks or reports (and FR-018 needs revisiting).
 
 **A12. The lookup's answer is the truth; a charge response can be wrong.**
 - **Fake:** in `LIE` mode, the response shows the opposite of the recorded outcome, while the lookup shows the recorded one.
@@ -129,7 +129,7 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 
 ## 4. Tokens and cards
 
-**A16. A token is created by the provider's hosted form, and the card never reaches Tally** (ADR-015).
+**A16. A token is created by the provider's hosted form, and the card never reaches Tally** (FR-015).
 - **Fake:** `POST /tokens` returns `tok_<uuid>`, with no card details, standing in for the hosted form.
 - **Tally relies on it in:** `AccountApi.recordPaymentToken` and checkout.
 - **Check:** confirm that the integration keeps Tally out of PCI DSS scope (SAQ A).

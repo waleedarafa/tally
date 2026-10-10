@@ -17,7 +17,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Brief section 3: access before the first payment is a setting, while ADR-019 is Proposed. */
+/** Brief section 3: access before the first payment is a setting, while FR-019 is Proposed. */
 class AccessIT {
 
     abstract static class Base extends AbstractIntegrationTest {

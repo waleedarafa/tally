@@ -37,7 +37,7 @@ class PaymentService implements PaymentApi {
     }
 
     /**
-     * ADR-041: an atomic insert-or-return. The first call creates the collection request, its one
+     * FR-041: an atomic insert-or-return. The first call creates the collection request, its one
      * attempt and the queue item, in one transaction. Any later or concurrent call for the same
      * reference finds the request and creates nothing: it neither fails nor charges twice.
      */

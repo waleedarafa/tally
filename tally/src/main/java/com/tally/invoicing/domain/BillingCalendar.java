@@ -6,7 +6,7 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 
 /**
- * The billing calendar (ADR-002; brief section 1). Invoicing is its only owner.
+ * The billing calendar (FR-002; brief section 1). Invoicing is its only owner.
  *
  * <p>The anchor day is the local calendar day the subscription started. In a shorter month the
  * account is billed on the month's last day, but the anchor is kept: a subscription from 31 January

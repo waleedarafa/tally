@@ -25,7 +25,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Invoicing's reactions to other modules' events. Each runs after the publisher commits, in its own
- * transaction, and is idempotent (ADR-009, ADR-022): a resubmitted event changes nothing twice.
+ * transaction, and is idempotent (FR-009, FR-022): a resubmitted event changes nothing twice.
  */
 @Component
 class InvoicingListeners {
@@ -66,7 +66,7 @@ class InvoicingListeners {
         }
         AccountView account = accounts.get(changed.accountId()).orElseThrow();
         LocalDate startedOn = LocalDate.ofInstant(changed.occurredAt(), account.timeZone());
-        // Atomic: a duplicate delivery, even a concurrent one, finds the record and changes nothing (ADR-028).
+        // Atomic: a duplicate delivery, even a concurrent one, finds the record and changes nothing (FR-028).
         subscriptions.insertIfAbsent(
                 new SubscriptionBilling(changed.subscriptionId(), changed.accountId(), changed.planId(), startedOn));
         SubscriptionBilling billing = subscriptions.findById(changed.subscriptionId()).orElseThrow();
@@ -97,7 +97,7 @@ class InvoicingListeners {
 
     @ApplicationModuleListener
     void on(PaymentFailed failed) {
-        // Invoicing acts only on resolved outcomes (ADR-018).
+        // Invoicing acts only on resolved outcomes (FR-018).
         if (failed.reason() == FailureReason.UNKNOWN) {
             return;
         }
@@ -105,7 +105,7 @@ class InvoicingListeners {
                 .ifPresentOrElse(Invoice::paymentFailed, () -> unknownReference(failed.reference()));
     }
 
-    /** Payment is shared by design: a reference may not be an invoice of ours (ADR-014). */
+    /** Payment is shared by design: a reference may not be an invoice of ours (FR-014). */
     private static void unknownReference(String reference) {
         log.warn("Payment result for unknown reference {} ignored", reference);
     }

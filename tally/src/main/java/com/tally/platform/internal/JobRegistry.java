@@ -8,7 +8,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import org.springframework.stereotype.Component;
 
-/** Every background job on this instance. Health metrics are registered from it (ADR-023). */
+/** Every background job on this instance. Health metrics are registered from it (FR-023). */
 @Component
 class JobRegistry {
 

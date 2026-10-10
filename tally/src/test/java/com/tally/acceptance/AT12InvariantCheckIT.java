@@ -18,7 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * AT-12. Invariant check (D1, ADR-024). Pass when: an injected duplicate invoice raises
+ * AT-12. Invariant check (D1, FR-024). Pass when: an injected duplicate invoice raises
  * {@code tally.invariant.violations}. The checks run daily, as jobs in each module's own job table.
  */
 @TestPropertySource(properties = {

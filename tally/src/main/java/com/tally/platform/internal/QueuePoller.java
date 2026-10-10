@@ -14,7 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Owns the threads for one queue on this instance (ADR-027): a poller that claims due items,
+ * Owns the threads for one queue on this instance (FR-027): a poller that claims due items,
  * a fixed worker pool that runs them (a bulkhead per queue), and the queue's reaper.
  * The poller claims no more items than it has free workers, so a claimed item never waits
  * locally long enough to be reaped from under it, and it keeps every worker busy while work is due.

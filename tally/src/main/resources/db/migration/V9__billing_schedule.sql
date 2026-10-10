@@ -1,4 +1,4 @@
--- Invoicing's record of each subscription and its billing calendar anchor (ADR-002, ADR-014).
+-- Invoicing's record of each subscription and its billing calendar anchor (FR-002, FR-014).
 CREATE TABLE invoicing.subscription_billing (
     subscription_id UUID  PRIMARY KEY,
     account_id      UUID  NOT NULL,
@@ -7,7 +7,7 @@ CREATE TABLE invoicing.subscription_billing (
     started_on      DATE  NOT NULL
 );
 
--- The billing schedule (ADR-017): one item per account and billing date (queue_key
+-- The billing schedule (FR-017): one item per account and billing date (queue_key
 -- '<account>:<date>', the D1 business key), due at local midnight. Shape documented on QueueDefinition.
 CREATE TABLE invoicing.billing_schedule (
     id              BIGSERIAL    PRIMARY KEY,

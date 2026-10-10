@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * ADR-041: an invoice is collected through one collection request, one per reference, never
+ * FR-041: an invoice is collected through one collection request, one per reference, never
  * deleted. It is the aggregate root; its {@link PaymentAttempt}s are the tries. Created only by
  * {@link CollectionRequestRepository#insertIfAbsent}, an atomic insert-or-nothing.
  */

@@ -27,7 +27,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * ADR-041: no duplicate delivery of {@code InvoiceIssued}, at any time, leads to a second charge.
+ * FR-041: no duplicate delivery of {@code InvoiceIssued}, at any time, leads to a second charge.
  * Each case must leave exactly one collection request, one attempt and one provider charge, and
  * no delivery may fail: a failed duplicate would be resubmitted, and alarm someone, for nothing.
  */

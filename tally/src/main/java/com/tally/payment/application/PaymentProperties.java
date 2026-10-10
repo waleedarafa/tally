@@ -55,7 +55,7 @@ public record PaymentProperties(
             @DefaultValue("3") int trialCalls) {
     }
 
-    /** @param interval how often the reconciliation job runs (ADR-018) */
+    /** @param interval how often the reconciliation job runs (FR-018) */
     public record Reconciliation(@DefaultValue("1m") Duration interval) {
     }
 }

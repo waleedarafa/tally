@@ -6,7 +6,7 @@
 #      only accepted images are candidates for deployment.
 # The split is two Maven profiles in tally/pom.xml; without a profile, ./mvnw verify runs both.
 # Both stages also run on pull requests, against GitHub's merge of the branch into its base, so the
-# merged result is tested before it is merged (ADR-038). Images are built and tagged for pushes
+# merged result is tested before it is merged (FR-038). Images are built and tagged for pushes
 # only: a pull request's merge commit never reaches main under that ID, so its image could never
 # be deployed.
 name: CI

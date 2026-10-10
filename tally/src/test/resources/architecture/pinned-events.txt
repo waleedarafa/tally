@@ -1,4 +1,4 @@
-# Every Tally event class, by fully qualified name (ADR-009, CLAUDE.md rule 7).
+# Every Tally event class, by fully qualified name (FR-009, CLAUDE.md rule 7).
 # Spring Modulith stores this name with each pending publication, so an event class
 # is never renamed or moved. To add an event: add its name here in the same commit.
 # Removing a line is only allowed once no stored publication of that type remains.

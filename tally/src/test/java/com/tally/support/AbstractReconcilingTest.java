@@ -21,7 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 
-/** End-to-end tests that need reconciliation (ADR-018) running on this context's clock. */
+/** End-to-end tests that need reconciliation (FR-018) running on this context's clock. */
 @TestPropertySource(properties = {
         "tally.platform.polling-enabled=true",
         "tally.platform.poll-interval=100ms",

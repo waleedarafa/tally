@@ -12,7 +12,7 @@
 
     <artifactId>fake-provider</artifactId>
     <name>Fake payment provider</name>
-    <description>Stand-in payment provider reached over HTTP (ADR-020).</description>
+    <description>Stand-in payment provider reached over HTTP (FR-020).</description>
 
     <dependencies>
         <dependency>

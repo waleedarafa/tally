@@ -12,7 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface PaymentAttemptRepository extends JpaRepository<PaymentAttempt, UUID> {
 
-    /** UNKNOWN and recently FAILED attempts due a check against the provider (ADR-018). */
+    /** UNKNOWN and recently FAILED attempts due a check against the provider (FR-018). */
     List<PaymentAttempt> findTop100ByReconcileAtLessThanEqualOrderByReconcileAt(Instant now);
 
     long countByState(AttemptState state);

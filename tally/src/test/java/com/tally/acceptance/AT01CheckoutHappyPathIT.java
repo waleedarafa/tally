@@ -21,7 +21,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.client.RestClient;
 
 /**
- * AT-1. Checkout, happy path (D3, ADR-019). Pass when: invoice PAID, access granted, and the
+ * AT-1. Checkout, happy path (D3, FR-019). Pass when: invoice PAID, access granted, and the
  * response shows SUCCEEDED within 3 s.
  *
  * <p>Everything goes through the HTTP API, against the fake provider in its own container, with
@@ -54,7 +54,7 @@ class AT01CheckoutHappyPathIT extends AbstractProviderIntegrationTest {
 
     @Test
     void checkoutSucceedsWithinThreeSecondsThenTheInvoiceIsPaidAndAccessGranted() {
-        // The customer's browser gets a token from the provider's hosted card form (ADR-015).
+        // The customer's browser gets a token from the provider's hosted card form (FR-015).
         String token = FakeProvider.token();
         UUID account = UUID.fromString((String) post("/v1/accounts",
                 Map.of("currency", "AED", "timeZone", "Asia/Dubai")).get("id"));

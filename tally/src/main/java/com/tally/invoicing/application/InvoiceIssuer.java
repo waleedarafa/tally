@@ -35,7 +35,7 @@ class InvoiceIssuer {
      * Issues the invoice for {@code [periodStart, periodEnd)}, due at {@code billedFor}, priced at
      * today's list price. Empty if the account already has an invoice for that billing date. The
      * insert is atomic on the unique constraint (account, period start), so a concurrent duplicate
-     * waits, then issues nothing and does not fail (ADR-028).
+     * waits, then issues nothing and does not fail (FR-028).
      */
     @Transactional(propagation = Propagation.MANDATORY)
     Optional<Invoice> issue(UUID accountId, UUID subscriptionId, String planId, LocalDate periodStart,

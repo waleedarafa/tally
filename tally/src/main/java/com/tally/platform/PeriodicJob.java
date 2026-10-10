@@ -3,11 +3,11 @@ package com.tally.platform;
 import java.time.Duration;
 
 /**
- * Work that repeats on an interval, such as reconciliation or an invariant check (ADR-017, ADR-027).
+ * Work that repeats on an interval, such as reconciliation or an invariant check (FR-017, FR-027).
  * Declare it as a bean. Its row lives in the owning module's job table, keyed by {@link #name()},
  * and reschedules itself after every run; claiming with SKIP LOCKED means each run happens on
  * exactly one instance. A failed run is rescheduled too, but does not count as a success, so the
- * job's health shows it overdue (ADR-023).
+ * job's health shows it overdue (FR-023).
  */
 public interface PeriodicJob {
 
@@ -24,7 +24,7 @@ public interface PeriodicJob {
 
     void run() throws Exception;
 
-    /** Work waiting for this job, reported in its health (ADR-023). */
+    /** Work waiting for this job, reported in its health (FR-023). */
     default long waitingWork() {
         return 0;
     }

@@ -22,11 +22,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Reconciliation (ADR-018): asks the provider for the recorded truth of UNKNOWN attempts, and of
+ * Reconciliation (FR-018): asks the provider for the recorded truth of UNKNOWN attempts, and of
  * FAILED attempts from the last 48 hours, on a backoff of 5 minutes, 1 hour, then daily. It reads
- * with no transaction open (ADR-005), then records any correction and publishes the matching event.
+ * with no transaction open (FR-005), then records any correction and publishes the matching event.
  * Every correction increments {@code tally.payment.outcome_corrected{from,to}}. A periodic job: runs
- * on one instance at a time and reports its health (ADR-023).
+ * on one instance at a time and reports its health (FR-023).
  */
 @Component
 class Reconciliation implements PeriodicJob {

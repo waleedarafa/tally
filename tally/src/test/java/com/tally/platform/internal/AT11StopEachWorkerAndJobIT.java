@@ -20,7 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * AT-11. Stop each worker and job (D7, D13, ADR-023). Pass when: each one's metric shows it overdue
+ * AT-11. Stop each worker and job (D7, D13, FR-023). Pass when: each one's metric shows it overdue
  * within its threshold: twice its interval, and at least 5 minutes.
  *
  * <p>Covers every job the running application has: each queue's poller (the workers) and reaper, and

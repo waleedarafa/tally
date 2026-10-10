@@ -18,8 +18,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * ADR-024: collected versus invoiced (slice 1 report D20, Q4). Invoicing owns the mapping from
- * payment references to invoices (ADR-014), so it asks Payment, through its API, what was
+ * FR-024: collected versus invoiced (slice 1 report D20, Q4). Invoicing owns the mapping from
+ * payment references to invoices (FR-014), so it asks Payment, through its API, what was
  * collected for its invoices' references, and compares. An invoice is a violation when:
  * <ul>
  *   <li>it is PAID, but nothing was collected for its reference, or a different amount was;</li>

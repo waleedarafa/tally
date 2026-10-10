@@ -7,11 +7,11 @@ import java.time.Clock;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
-/** Payment's durable queue of attempts to make (ADR-017), with its own worker pool: the bulkhead (ADR-005). */
+/** Payment's durable queue of attempts to make (FR-017), with its own worker pool: the bulkhead (FR-005). */
 @Component
 class CollectionQueue {
 
-    // The permanent guard (ADR-037, ADR-041): one collection request per reference, never deleted. Each
+    // The permanent guard (FR-037, FR-041): one collection request per reference, never deleted. Each
     // item names one attempt of that request, sent only by its PENDING to IN_FLIGHT transition.
     static final QueueDefinition DEFINITION = QueueDefinition.of("payment-collection", "payment.collection_queue",
             "payment.collection_request_one_per_reference").asMoneyQueue();

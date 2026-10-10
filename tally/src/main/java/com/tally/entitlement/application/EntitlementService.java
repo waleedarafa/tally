@@ -14,8 +14,8 @@ import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Service;
 
 /**
- * Plain layered code (ADR-003). Access is granted once per account; granting again changes nothing,
- * so redelivered events are harmless (ADR-009). Slice 1 never revokes access (no dunning).
+ * Plain layered code (FR-003). Access is granted once per account; granting again changes nothing,
+ * so redelivered events are harmless (FR-009). Slice 1 never revokes access (no dunning).
  */
 @Service
 @EnableConfigurationProperties(AccessProperties.class)
