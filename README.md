@@ -24,7 +24,7 @@ One top-level package per module under `com.tally`, with dependencies declared i
 | `shared` | `Money` (minor units plus ISO currency), `Ratio` and `DomainEvent`, nothing else (F4) |
 | `platform` | Durable queues, periodic jobs, retention, the event-listener executor and health metrics. No business logic (FR-027) |
 | `account` | Accounts, their currency, time zone and payment token |
-| `catalog` | Plans and prices |
+| `offers` | Plans and prices (the first run's `catalog`; offers, kinds and the pricing extension point arrive in Slice 1R PR-4) |
 | `subscription` | Subscriptions and their changes |
 | `invoicing` | The billing calendar, invoices, and the invoiced-versus-collected check |
 | `payment` | Collection requests, payment attempts, provider calls and reconciliation. Knows nothing about invoices (FR-014) |

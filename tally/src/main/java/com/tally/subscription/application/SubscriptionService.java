@@ -1,7 +1,7 @@
 package com.tally.subscription.application;
 
-import com.tally.catalog.BillingPeriod;
-import com.tally.catalog.CatalogApi;
+import com.tally.offers.BillingPeriod;
+import com.tally.offers.CatalogApi;
 import com.tally.subscription.AlreadySubscribedException;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionChangeType;

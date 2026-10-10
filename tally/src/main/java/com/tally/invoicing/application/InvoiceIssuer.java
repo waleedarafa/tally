@@ -1,7 +1,7 @@
 package com.tally.invoicing.application;
 
-import com.tally.catalog.BillingPeriod;
-import com.tally.catalog.CatalogApi;
+import com.tally.offers.BillingPeriod;
+import com.tally.offers.CatalogApi;
 import com.tally.invoicing.InvoiceIssued;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.InvoiceRepository;

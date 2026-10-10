@@ -26,7 +26,7 @@ class ModuleStructureTest {
     void topLevelPackagesAreExactlyTheAgreedModules() {
         assertThat(MODULES.stream().map(ApplicationModule::getIdentifier).map(Object::toString))
                 .containsExactlyInAnyOrder(
-                        "shared", "platform", "account", "catalog",
+                        "shared", "platform", "account", "offers",
                         "subscription", "invoicing", "payment", "entitlement", "checkout");
     }
 }

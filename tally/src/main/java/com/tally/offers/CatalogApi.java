@@ -1,8 +1,8 @@
-package com.tally.catalog;
+package com.tally.offers;
 
 import java.util.UUID;
 
-/** Catalog and Pricing: an open-host service with a published language, {@link PriceQuote} (FR-014). */
+/** Offers and Pricing: an open-host service with a published language, {@link PriceQuote} (FR-014). */
 public interface CatalogApi {
 
     /**

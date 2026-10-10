@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.account.UnknownAccountException;
-import com.tally.catalog.UnknownPlanException;
+import com.tally.offers.UnknownPlanException;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.UUID;
