@@ -1,17 +1,17 @@
-package com.tally.invoicing.domain;
+package com.tally.invoicing.adapter.persistence;
 
+import com.tally.invoicing.domain.SubscriptionBilling;
+import com.tally.invoicing.domain.SubscriptionBillings;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
-public interface SubscriptionBillingRepository extends JpaRepository<SubscriptionBilling, UUID> {
+/** Spring Data implements {@link SubscriptionBillings}. */
+interface JpaSubscriptionBillings extends JpaRepository<SubscriptionBilling, UUID>, SubscriptionBillings {
 
-    /**
-     * Records the subscription unless it is already recorded, atomically: a concurrent duplicate
-     * delivery waits for the first insert to commit, then inserts nothing (FR-028).
-     */
+    @Override
     default void insertIfAbsent(SubscriptionBilling billing) {
         insertRow(billing.subscriptionId(), billing.accountId(), billing.planId(), billing.calendar().anchorDay(),
                 billing.startedOn());

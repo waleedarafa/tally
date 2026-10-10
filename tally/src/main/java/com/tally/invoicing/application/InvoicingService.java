@@ -3,7 +3,7 @@ package com.tally.invoicing.application;
 import com.tally.invoicing.InvoiceView;
 import com.tally.invoicing.InvoicingApi;
 import com.tally.invoicing.domain.Invoice;
-import com.tally.invoicing.domain.InvoiceRepository;
+import com.tally.invoicing.domain.Invoices;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -12,9 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 class InvoicingService implements InvoicingApi {
 
-    private final InvoiceRepository invoices;
+    private final Invoices invoices;
 
-    InvoicingService(InvoiceRepository invoices) {
+    InvoicingService(Invoices invoices) {
         this.invoices = invoices;
     }
 

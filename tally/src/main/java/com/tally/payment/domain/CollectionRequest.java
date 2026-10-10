@@ -14,7 +14,7 @@ import java.util.UUID;
 /**
  * FR-041: an invoice is collected through one collection request, one per reference, never
  * deleted. It is the aggregate root; its {@link PaymentAttempt}s are the tries. Created only by
- * {@link CollectionRequestRepository#insertIfAbsent}, an atomic insert-or-nothing.
+ * {@link CollectionRequests#insertIfAbsent}, an atomic insert-or-nothing.
  */
 @Entity
 @Table(schema = "payment", name = "collection_request")

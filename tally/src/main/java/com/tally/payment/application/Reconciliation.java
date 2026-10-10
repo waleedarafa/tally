@@ -5,7 +5,7 @@ import com.tally.payment.FailureReason;
 import com.tally.payment.PaymentFailed;
 import com.tally.payment.PaymentSucceeded;
 import com.tally.payment.domain.PaymentAttempt;
-import com.tally.payment.domain.PaymentAttemptRepository;
+import com.tally.payment.domain.PaymentAttempts;
 import com.tally.payment.domain.PaymentGateway;
 import com.tally.payment.domain.PaymentGateway.RecordedCharge;
 import com.tally.platform.PeriodicJob;
@@ -33,8 +33,8 @@ class Reconciliation implements PeriodicJob {
 
     private static final Logger log = LoggerFactory.getLogger(Reconciliation.class);
 
-    private final PaymentAttemptRepository attempts;
-    private final CollectionRequests requests;
+    private final PaymentAttempts attempts;
+    private final CollectionRequestSettlement requests;
     private final PaymentGateway gateway;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate transactions;
@@ -42,7 +42,7 @@ class Reconciliation implements PeriodicJob {
     private final PaymentProperties properties;
     private final Clock clock;
 
-    Reconciliation(PaymentAttemptRepository attempts, CollectionRequests requests, PaymentGateway gateway,
+    Reconciliation(PaymentAttempts attempts, CollectionRequestSettlement requests, PaymentGateway gateway,
             ApplicationEventPublisher events, TransactionTemplate transactions, MeterRegistry meters,
             PaymentProperties properties, Clock clock) {
         this.attempts = attempts;

@@ -4,7 +4,7 @@ import com.tally.offers.BillingPeriod;
 import com.tally.offers.CatalogApi;
 import com.tally.invoicing.InvoiceIssued;
 import com.tally.invoicing.domain.Invoice;
-import com.tally.invoicing.domain.InvoiceRepository;
+import com.tally.invoicing.domain.Invoices;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -19,12 +19,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 class InvoiceIssuer {
 
-    private final InvoiceRepository invoices;
+    private final Invoices invoices;
     private final CatalogApi catalog;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    InvoiceIssuer(InvoiceRepository invoices, CatalogApi catalog, ApplicationEventPublisher events, Clock clock) {
+    InvoiceIssuer(Invoices invoices, CatalogApi catalog, ApplicationEventPublisher events, Clock clock) {
         this.invoices = invoices;
         this.catalog = catalog;
         this.events = events;
