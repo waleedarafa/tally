@@ -1,13 +1,17 @@
-# The approved module dependency graph (ADR-003, ADR-014, ADR-027; slice 1 report D3).
-# One line per module: "module: allowed, dependencies". A module with none ends at the colon.
-# Each line must match the module's @ApplicationModule(allowedDependencies) exactly, and every
-# module must be listed. Changing a line is an architecture decision: CLAUDE.md says stop and ask.
+# The approved module dependency graph: docs/architecture/v2/design.md §3 (FR-040).
+# One line per module: "module: allowed, dependencies". Code dependencies point from downstream to upstream.
+# Named interfaces: account exposes a read API to every module that lists it, and AccountStanding.set to
+# collections only (F3).
+#
+# TARGET until the end of Slice 1R. PinnedModuleDependenciesTest checks module-dependencies-current.txt
+# until PR-10, which makes the code match this file and switches the test to it.
 shared:
 platform: shared
 account: shared, platform
-catalog: shared, platform, account
-subscription: shared, platform, account, catalog
-invoicing: shared, platform, account, catalog, subscription, payment
-checkout: account, catalog, subscription, invoicing, payment
 payment: shared, platform
-entitlement: shared, platform, subscription, payment
+offers: shared, platform, account
+subscription: shared, platform, account, offers
+invoicing: shared, platform, account, offers, subscription, payment
+collections: shared, platform, account, subscription, invoicing
+# TEMPORARY until Slice 2: access may use only the events of subscription and account, never their APIs.
+access: shared, platform, subscription, account

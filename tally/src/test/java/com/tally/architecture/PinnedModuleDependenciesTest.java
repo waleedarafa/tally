@@ -15,12 +15,18 @@ import org.junit.jupiter.api.Test;
 import org.springframework.modulith.ApplicationModule;
 
 /**
- * The approved dependency graph is pinned in {@code architecture/module-dependencies.txt}.
+ * The approved dependency graph is pinned in {@code architecture/module-dependencies.txt} (FR-040).
+ * During Slice 1R that file holds the target graph of the second design (design.md §3), and this test
+ * checks {@code module-dependencies-current.txt}, which each PR moves towards it. PR-10 points this
+ * test back at the target file and deletes the current one.
  * FF-1 checks that the code keeps to each module's declared dependencies; this test checks that
  * the declarations themselves are the approved ones, so widening a module's
  * {@code allowedDependencies} fails the build until the pinned graph changes too.
  */
 class PinnedModuleDependenciesTest {
+
+    /** Until Slice 1R PR-10: the current graph. Then {@code /architecture/module-dependencies.txt}. */
+    static final String GRAPH = "/architecture/module-dependencies-current.txt";
 
     @Test
     void declaredDependenciesMatchTheApprovedGraph() throws IOException {
@@ -30,7 +36,7 @@ class PinnedModuleDependenciesTest {
 
         assertThat(declared)
                 .as("Declared module dependencies (package-info.java) differ from the approved graph in "
-                        + "architecture/module-dependencies.txt. Changing them needs approval (CLAUDE.md)")
+                        + GRAPH + ". Changing them needs approval (CLAUDE.md)")
                 .isEqualTo(approvedGraph());
     }
 
@@ -47,7 +53,7 @@ class PinnedModuleDependenciesTest {
 
     private static Map<String, Set<String>> approvedGraph() throws IOException {
         try (InputStream in = PinnedModuleDependenciesTest.class
-                .getResourceAsStream("/architecture/module-dependencies.txt")) {
+                .getResourceAsStream(GRAPH)) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8).lines()
                     .map(String::strip)
                     .filter(line -> !line.isEmpty() && !line.startsWith("#"))
