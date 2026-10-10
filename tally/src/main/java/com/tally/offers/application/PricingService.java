@@ -21,8 +21,9 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 /**
- * Quotes an offer's current version through the rule of its kind (ADR-015). The account gives the
- * currency; the version's terms give the price in it; the rule gives the lines.
+ * Quotes the offer version a subscription is on through the rule of its kind (ADR-015; decision A). The
+ * account gives the currency; the version's terms give the price in it; the rule gives the lines. New
+ * sign-ups get the offer's current version ({@link #currentVersion}).
  */
 @Service
 class PricingService implements Pricing, Offers {

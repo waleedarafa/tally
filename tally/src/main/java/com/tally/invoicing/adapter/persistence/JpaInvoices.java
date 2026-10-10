@@ -43,8 +43,16 @@ interface JpaInvoices extends JpaRepository<Invoice, UUID>, Invoices {
 
     List<Invoice> findByIssuedAtGreaterThanEqualAndIssuedAtLessThan(Instant from, Instant to);
 
+    /**
+     * Inserts unless the invoice ID exists. Only the ID, which encodes subscription and period (I2), counts
+     * as a duplicate: {@code ON CONFLICT (id)}. The payment reference and (subscription, period) are unique
+     * too and derive from the same fact, but PostgreSQL absorbs only the named conflict: two concurrent
+     * duplicates could meet on one of those first and fail. So a transaction-scoped advisory lock on the ID
+     * serialises them; the second then meets the committed row on the ID, and adds nothing (rule 7, rule 11).
+     */
     @Override
     default boolean addIfAbsent(Invoice invoice) {
+        lockInvoiceId(invoice.id().toString());
         boolean inserted = insertRow(invoice.id(), invoice.accountId(), invoice.subscriptionId(), invoice.planId(),
                 invoice.status().name(), invoice.amount().minorUnits(), invoice.amount().currency().getCurrencyCode(),
                 invoice.periodStart(), invoice.periodEnd(), invoice.paymentReference(), invoice.issuedAt(),
@@ -69,11 +77,15 @@ interface JpaInvoices extends JpaRepository<Invoice, UUID>, Invoices {
             VALUES (:id, :accountId, :subscriptionId, :planId, :status, :amountMinor, :currency,
                     :periodStart, :periodEnd, :paymentReference, :issuedAt, :billedFor,
                     :offerVersion, CAST(:quoteReason AS jsonb), :periodNumber, :paidAt)
-            ON CONFLICT DO NOTHING
+            ON CONFLICT (id) DO NOTHING
             """)
     int insertRow(UUID id, UUID accountId, UUID subscriptionId, String planId, String status, long amountMinor,
             String currency, LocalDate periodStart, LocalDate periodEnd, String paymentReference, Instant issuedAt,
             Instant billedFor, Integer offerVersion, String quoteReason, Integer periodNumber, Instant paidAt);
+
+    /** Held until the transaction ends; serialises concurrent inserts of the same invoice. */
+    @Query(nativeQuery = true, value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtextextended(:invoiceId, 0))) held")
+    int lockInvoiceId(String invoiceId);
 
     @Modifying
     @Query(nativeQuery = true, value = """
