@@ -49,6 +49,9 @@ The second design missed these. They are proposed here, to be confirmed in the D
 | 021 | Daily reconciliation against the provider's settlement report, both directions; every mismatch recorded and alerted (D14) | FR-031 |
 | 022 | What happens to an invoice and to access when a recorded success proves false; needs finance | FR-032 |
 | 023 | Renewals are merchant-initiated; an authentication demand is a distinct outcome and reaches the customer (D15) | first-run D15 |
+| 024 | Where UNKNOWN is a real state of a shared enum, a value the reader does not know maps to UNRECOGNISED, never to UNKNOWN; amends 016 | Slice 1R PR #13 review (`AttemptState`) |
+| 025 | A decline on the first invoice ends the subscription at once; for finance and product, not in Slice 1R | Slice 1R PR #13 review (access at sign-up) |
+| 026 | How an unknown payment is resolved: a charge found by reference decides; "not found" is no charge only from a consistent lookup, after the call timeout plus the provider's stated delay, else it stays UNKNOWN; once each attempt has its own key, a repeat by key only within the provider's retention minus a margin, else the alert and settlement reconciliation (021). Only a SENT attempt becomes UNKNOWN by age; a REQUESTED attempt was never sent. Before Collections retries a declined reference, Payment looks the reference up. If the provider shows any charge for it, no new attempt is made, and the declined attempt is corrected to SUCCEEDED. Amends 004, 018 and the payment state machine | Slice 1R PR #14, #15 and #20 reviews; spike S-2 |
 
 ## Mapping of first-run records
 

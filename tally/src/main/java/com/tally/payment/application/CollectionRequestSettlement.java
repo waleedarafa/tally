@@ -21,7 +21,7 @@ class CollectionRequestSettlement {
     }
 
     void settle(PaymentAttempt attempt) {
-        attempt.requestId().flatMap(requests::findById)
+        attempt.requestId().flatMap(requests::find)
                 .ifPresent(request -> request.settle(attempt.state(), clock.instant()));
     }
 }

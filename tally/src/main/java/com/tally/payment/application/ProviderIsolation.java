@@ -5,7 +5,6 @@ import com.tally.payment.domain.PaymentGateway.ChargeResult;
 import com.tally.payment.domain.PaymentGateway.NotChargedException;
 import com.tally.platform.ClaimGate;
 import com.tally.shared.Money;
-import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.ratelimiter.RateLimiter;
@@ -14,6 +13,8 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Component;
 
 /**
@@ -30,9 +31,11 @@ class ProviderIsolation implements ClaimGate {
     private final PaymentGateway gateway;
     private final CircuitBreaker breaker;
     private final RateLimiter limiter;
+    private final Clock clock;
 
     ProviderIsolation(PaymentGateway gateway, PaymentProperties properties, Clock clock, MeterRegistry meters) {
         this.gateway = gateway;
+        this.clock = clock;
         PaymentProperties.Breaker b = properties.breaker();
         this.breaker = CircuitBreaker.of("payment-provider", CircuitBreakerConfig.custom()
                 .clock(clock)
@@ -73,17 +76,38 @@ class ProviderIsolation implements ClaimGate {
         return false;
     }
 
+    /**
+     * Asks for one provider call: a rate-limit permit, then the breaker's permission. False means Tally
+     * holds the call back; the provider is not called, so the attempt stays REQUESTED and the item is
+     * retried after {@link #HELD_BACK_RETRY}. True must be followed by {@link #charge} or {@link #release}.
+     */
+    boolean permit() {
+        return limiter.acquirePermission() && breaker.tryAcquirePermission();
+    }
+
+    /** Hands back a permission that will not be used (the claim was lost). */
+    void release() {
+        breaker.releasePermission();
+    }
+
+    /**
+     * Calls the provider under a permission from {@link #permit}, and records the outcome in the breaker.
+     * A 429 is ignored by the breaker (the rate limiter's business).
+     */
     ChargeResult charge(String paymentToken, Money amount, String reference) {
-        if (!limiter.acquirePermission()) {
-            throw new NotChargedException(NotChargedException.Why.HELD_BACK, HELD_BACK_RETRY,
-                    "Local rate limit reached for " + reference, null);
-        }
+        Instant start = clock.instant();
         try {
-            return breaker.executeSupplier(() -> gateway.charge(paymentToken, amount, reference));
-        } catch (CallNotPermittedException e) {
-            throw new NotChargedException(NotChargedException.Why.HELD_BACK, HELD_BACK_RETRY,
-                    "Provider circuit breaker open for " + reference, e);
+            ChargeResult result = gateway.charge(paymentToken, amount, reference);
+            breaker.onSuccess(Duration.between(start, clock.instant()).toNanos(), TimeUnit.NANOSECONDS);
+            return result;
+        } catch (RuntimeException e) {
+            breaker.onError(Duration.between(start, clock.instant()).toNanos(), TimeUnit.NANOSECONDS, e);
+            throw e;
         }
+    }
+
+    static Duration heldBackRetry() {
+        return HELD_BACK_RETRY;
     }
 
     CircuitBreaker.State state() {

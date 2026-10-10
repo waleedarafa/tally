@@ -86,13 +86,13 @@ class SpikeBReconciliationIT extends AbstractReconcilingTest {
     void b2TimeoutAfterADeclinedCharge() {
         Result r = run("B2 TIMEOUT_AFTER_CHARGE + DECLINE_HARD(100)", "DECLINED_HARD", "(no answer: read timeout)",
                 AttemptState.UNKNOWN, "TIMEOUT_AFTER_CHARGE", "DECLINE_HARD(100)");
-        assertThat(r.state()).isEqualTo(AttemptState.FAILED);
+        assertThat(r.state()).isEqualTo(AttemptState.DECLINED);
         assertThat(r.taken()).isLessThanOrEqualTo(Duration.ofHours(1));
     }
 
     @Test
     void b3LieAboutASuccessfulCharge() {
-        Result r = run("B3 LIE", "SUCCEEDED", "DECLINED_HARD", AttemptState.FAILED, "LIE");
+        Result r = run("B3 LIE", "SUCCEEDED", "DECLINED_HARD", AttemptState.DECLINED, "LIE");
         assertThat(r.state()).isEqualTo(AttemptState.SUCCEEDED);
         assertThat(r.taken()).isLessThanOrEqualTo(Duration.ofHours(1));
     }

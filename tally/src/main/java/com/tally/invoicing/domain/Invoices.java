@@ -11,7 +11,8 @@ public interface Invoices {
     /**
      * Adds {@code invoice} unless its subscription already has an invoice for that period (I2, D1),
      * atomically: a concurrent caller waits for the first insert to commit, then adds nothing (FR-028).
-     * Returns whether this call added it.
+     * Only the invoice ID, which encodes subscription and period, counts as a duplicate; any other
+     * conflict fails (CLAUDE.md rule 11). Returns whether this call added it.
      */
     boolean addIfAbsent(Invoice invoice);
 

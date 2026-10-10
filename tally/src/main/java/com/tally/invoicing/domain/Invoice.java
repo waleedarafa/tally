@@ -100,7 +100,8 @@ public class Invoice {
      * Issues the invoice for one period of a subscription, from a quote's amounts (design.md §7: takes
      * amounts, never an offer). The amount is the sum of the lines, never rounded again (ADR-017). I2: the
      * ID is derived from the subscription and period number, so there is one invoice per period. An
-     * invoice whose total is zero is paid when issued: there is nothing to collect.
+     * invoice whose total is zero is paid when issued: there is nothing to collect. A negative total is
+     * refused; the daily invariant checks the same rule a second time.
      */
     public static Invoice issue(UUID accountId, UUID subscriptionId, String planId, int periodNumber,
             List<InvoiceLine> lines, PricingReason quoteReason, LocalDate periodStart, LocalDate periodEnd,
@@ -109,6 +110,11 @@ public class Invoice {
             throw new IllegalArgumentException("An invoice has at least one line");
         }
         Money amount = lines.stream().map(InvoiceLine::amount).reduce(Money::plus).orElseThrow();
+        if (amount.minorUnits() < 0) {
+            // Owing the customer money is a credit note's job (I1), never an invoice's (FR-024).
+            throw new IllegalArgumentException("An invoice cannot total less than zero: " + amount
+                    + " for period " + periodNumber + " of subscription " + subscriptionId);
+        }
         Invoice i = new Invoice();
         i.lines = new ArrayList<>(lines);
         i.offerVersion = quoteReason.offerVersion();

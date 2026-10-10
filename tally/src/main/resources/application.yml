@@ -13,8 +13,9 @@ spring:
     datatype:
       enum:
         # CLAUDE.md rule 7: a stored event read by an older version may hold an enum value it does not
-        # know. Every enum that crosses a module boundary or is stored in an event has an UNKNOWN
-        # constant marked @JsonEnumDefaultValue; this maps unknown values to it instead of failing.
+        # know. Every enum that crosses a module boundary or is stored in an event has a constant marked
+        # @JsonEnumDefaultValue (UNKNOWN, or UNRECOGNISED where UNKNOWN is a real state: proposed
+        # ADR-024); this maps unknown values to it instead of failing.
         # Spring Modulith serializes event publications with this JsonMapper.
         read-unknown-enum-values-using-default-value: true
   flyway:
@@ -26,3 +27,10 @@ management:
       exposure:
         # Queue and job health (FR-023) is read from /actuator/metrics.
         include: health,metrics
+tally:
+  payment:
+    provider:
+      # The fake provider's lookup by reference is consistent: a charge shows the moment it is made
+      # (fake-provider/CONTRACT.md A11). Only then may reconciliation read "not found" as no charge
+      # (proposed ADR-026). A real provider's search may lag: check Q-B before setting this to true.
+      lookup-consistent: true

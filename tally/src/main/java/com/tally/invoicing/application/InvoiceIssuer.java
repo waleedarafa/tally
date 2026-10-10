@@ -43,9 +43,9 @@ class InvoiceIssuer {
     /**
      * Issues the invoice for period {@code periodNumber}, {@code [periodStart, periodEnd)}, due at
      * {@code billedFor}, with the lines of the PriceQuote for the subscription's offer version (I3;
-     * Invoicing applies no offer rule, R2). Empty if the account already has an invoice for that billing date. The
-     * insert is atomic on the unique constraint (account, period start), so a concurrent duplicate
-     * waits, then issues nothing and does not fail (FR-028).
+     * Invoicing applies no offer rule, R2). Empty if the subscription already has its invoice for that
+     * period. The insert is atomic on the invoice ID, which encodes subscription and period (I2), so a
+     * concurrent duplicate waits, then issues nothing and does not fail (FR-028).
      */
     @Transactional(propagation = Propagation.MANDATORY)
     Optional<Invoice> issue(UUID accountId, UUID subscriptionId, String planId, int offerVersion, int periodNumber,

@@ -9,7 +9,6 @@ import com.tally.support.FakeProvider;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -60,41 +59,25 @@ class ReconciliationIT extends AbstractReconcilingTest {
 
     @Test
     void aChargeReportedAsDeclinedIsCorrectedToSucceeded() {
-        double before = corrected("FAILED", "SUCCEEDED");
+        double before = corrected("DECLINED", "SUCCEEDED");
         FakeProvider.mode("LIE");
         String reference = collect();
 
-        awaitState(reference, AttemptState.FAILED, Duration.ofSeconds(10));
+        awaitState(reference, AttemptState.DECLINED, Duration.ofSeconds(10));
         FakeProvider.mode("NORMAL");
 
         clock.advance(Duration.ofMinutes(5));
         awaitState(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
-        assertThat(corrected("FAILED", "SUCCEEDED")).isEqualTo(before + 1);
+        assertThat(corrected("DECLINED", "SUCCEEDED")).isEqualTo(before + 1);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
 
     @Test
-    void anUnknownAttemptTheProviderNeverChargedResolvesAsNotCharged() {
-        double before = corrected("UNKNOWN", "FAILED");
-        String reference = "REC-" + UUID.randomUUID();
-        var now = clock.instant().atOffset(ZoneOffset.UTC);
-        jdbc.update("INSERT INTO payment.payment_attempt (id, reference, account_id, amount_minor, currency,"
-                + " payment_token, state, created_at, updated_at, reconcile_at)"
-                + " VALUES (?, ?, ?, 999, 'USD', 'tok', 'UNKNOWN', ?, ?, ?)",
-                UUID.randomUUID(), reference, UUID.randomUUID(), now, now, now.plusMinutes(5));
-
-        clock.advance(Duration.ofMinutes(5));
-        awaitState(reference, AttemptState.FAILED, Duration.ofSeconds(10));
-        assertThat(payments.status(reference).orElseThrow().failureReason()).contains(FailureReason.SOFT);
-        assertThat(corrected("UNKNOWN", "FAILED")).isEqualTo(before + 1);
-    }
-
-    @Test
     void aGenuineDeclineIsRecheckedWithBackoffForFortyEightHoursOnly() {
-        double before = corrected("FAILED", "SUCCEEDED");
+        double before = corrected("DECLINED", "SUCCEEDED");
         FakeProvider.mode("DECLINE_HARD(100)");
         String reference = collect();
-        awaitState(reference, AttemptState.FAILED, Duration.ofSeconds(10));
+        awaitState(reference, AttemptState.DECLINED, Duration.ofSeconds(10));
         FakeProvider.mode("NORMAL");
         Instant failedAt = clock.instant();
         assertThat(reconcileAt(reference)).isEqualTo(failedAt.plus(Duration.ofMinutes(5)));
@@ -113,8 +96,8 @@ class ReconciliationIT extends AbstractReconcilingTest {
         await().atMost(Duration.ofSeconds(10)).until(() -> checks(reference) == 3);
         assertThat(reconcileAt(reference)).isNull();
 
-        assertThat(payments.status(reference).orElseThrow().state()).isEqualTo(AttemptState.FAILED);
-        assertThat(corrected("FAILED", "SUCCEEDED")).isEqualTo(before);
+        assertThat(payments.status(reference).orElseThrow().state()).isEqualTo(AttemptState.DECLINED);
+        assertThat(corrected("DECLINED", "SUCCEEDED")).isEqualTo(before);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
 }

@@ -68,10 +68,13 @@ class AT10ThroughputIT {
                         + " charges %d%n", RENEWALS, elapsed.toSeconds(), RENEWALS / (elapsed.toMillis() / 1000.0),
                 requests, rateLimited, share * 100, charged);
 
-        // Every first attempt made, each charged once.
+        // Every renewal charged once. A 429 is a technical failure, retried as a new attempt (ADR-013), so
+        // the attempts are the renewals plus one per 429; none declined or unknown.
         assertThat(charged).isEqualTo(RENEWALS);
-        assertThat(count(jdbc, "SELECT count(*) FROM payment.payment_attempt")).isEqualTo(RENEWALS);
-        assertThat(count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE state IN ('FAILED', 'UNKNOWN')")).isZero();
+        assertThat(count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE state = 'TECHNICAL_FAILURE'"))
+                .isEqualTo(rateLimited);
+        assertThat(count(jdbc, "SELECT count(*) FROM payment.payment_attempt")).isEqualTo(RENEWALS + rateLimited);
+        assertThat(count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE state IN ('DECLINED', 'UNKNOWN')")).isZero();
         // No 429 storm.
         assertThat(share).as("share of calls refused with 429").isLessThanOrEqualTo(STORM);
     }

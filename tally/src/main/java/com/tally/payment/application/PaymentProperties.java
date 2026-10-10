@@ -9,11 +9,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *
  * @param workers   worker threads for collection attempts on each instance (the bulkhead)
  * @param instances how many Tally instances share the provider's rate limit
+ * @param requestedAlertAfter how long an attempt may wait REQUESTED before
+ *                  {@code tally.payment.requested.stuck} alerts: the collection queue is stuck (D9)
  */
 @ConfigurationProperties("tally.payment")
 public record PaymentProperties(
         @DefaultValue("15") int workers,
         @DefaultValue("2") int instances,
+        @DefaultValue("15m") Duration requestedAlertAfter,
         @DefaultValue Provider provider,
         @DefaultValue Breaker breaker,
         @DefaultValue Reconciliation reconciliation) {
@@ -28,6 +31,10 @@ public record PaymentProperties(
      *                           attempt back to the queue
      * @param rateLimitTargetPercent the share of the provider's limit Tally aims for, leaving headroom
      *                           for two instances' calls landing in one provider second (report R6)
+     * @param lookupConsistent   whether the provider's lookup by reference shows a charge as soon as it is
+     *                           made (CONTRACT.md A11, Q-B). Only then may "not found" mean no charge.
+     *                           False unless the provider is known to be consistent.
+     * @param lookupDelay        the provider's stated delay before a charge appears in its lookup
      */
     public record Provider(
             @DefaultValue("http://localhost:8081") String baseUrl,
@@ -35,7 +42,14 @@ public record PaymentProperties(
             @DefaultValue("5s") Duration readTimeout,
             @DefaultValue("100") int rateLimitPerSecond,
             @DefaultValue("2s") Duration rateLimitWait,
-            @DefaultValue("95") int rateLimitTargetPercent) {
+            @DefaultValue("95") int rateLimitTargetPercent,
+            @DefaultValue("false") boolean lookupConsistent,
+            @DefaultValue("0s") Duration lookupDelay) {
+
+        /** The longest a provider call can take: past it, a SENT attempt with no result is stale (ADR-018). */
+        public Duration callTimeout() {
+            return connectTimeout.plus(readTimeout);
+        }
     }
 
     /**

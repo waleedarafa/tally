@@ -14,7 +14,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Waits until the given accounts have no work in progress: no billing item claimed or due, no
- * payment attempt PENDING or IN_FLIGHT. Time-travel tests call this before every clock jump: jumping
+ * payment attempt REQUESTED or SENT. Time-travel tests call this before every clock jump: jumping
  * while a claim is held would make the claim look stale to the reaper, which no real clock does.
  */
 public final class Quiesce {
@@ -34,7 +34,7 @@ public final class Quiesce {
                     + " WHERE split_part(queue_key, ':', 1) = ANY (?)"
                     + " AND (status = 'IN_PROCESSING' OR (status = 'READY' AND due_at <= ?))");
                  var attempts = c.prepareStatement("SELECT count(*) FROM payment.payment_attempt"
-                    + " WHERE account_id = ANY (?) AND state IN ('PENDING', 'IN_FLIGHT')")) {
+                    + " WHERE account_id = ANY (?) AND state IN ('REQUESTED', 'SENT')")) {
                 billing.setArray(1, keys);
                 billing.setObject(2, clock.instant().atOffset(ZoneOffset.UTC));
                 attempts.setArray(1, ids);

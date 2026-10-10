@@ -67,7 +67,7 @@ Named interfaces: `account` exposes a read API to every module that lists it, an
 | `offers` | `Pricing.quote(QuoteRequest) → PriceQuote`; `Offers.isOffered(offerId, accountId)`, `Offers.currentVersion(offerId, accountId)` | `OfferVersionPublished` |
 | `subscription` | `SubscriptionApi.subscribe(accountId, offerId)` (the design's `Subscriptions.start`), `changePlan`, `cancel(id, requestedAt)`, `cancelForWriteOff` | `SubscriptionChanged` with types: started, plan changed, period renewed, renewal reversed, cancelled. Since Slice 1R PR-5 it carries the offer version and the current period (number, start, end) |
 | `invoicing` | `Invoicing.requestPaymentAgain(invoiceId)`, `invoicesFor(accountId)` | `InvoiceIssued`, `InvoicePaymentDeclined`, `InvoicePaid`, `CreditNoteIssued` |
-| `payment` | `Payments.collect(reference, amount, methodToken)`, `status(reference)` | `PaymentSucceeded`, `PaymentFailed` with reason declined; technical failures publish nothing |
+| `payment` | `PaymentApi.requestCollection(reference, accountId, amount, paymentToken)` (the design's `Payments.collect`), `status(reference)` | `PaymentSucceeded`, `PaymentFailed` with reason declined; technical failures publish nothing |
 | `account` | `Accounts.get(id)`; `AccountStanding.set(id, standing, cause)` | `StandingChanged` |
 | `collections` | `Collections.caseFor(accountId)` | none |
 
@@ -100,8 +100,8 @@ Each lives as an enum and a transition table inside its aggregate. One table-dri
 | SENT | provider declined | DECLINED (final; Invoicing then Collections) |
 | SENT | provider error or refused before charging | TECHNICAL_FAILURE (retry after back-off; no event) |
 | SENT | timeout | UNKNOWN |
-| REQUESTED or SENT | older than the call timeout | UNKNOWN |
-| UNKNOWN | resolver: charged / declined / no such charge | SUCCEEDED / DECLINED / TECHNICAL_FAILURE |
+| SENT | older than the call timeout | UNKNOWN (a REQUESTED attempt was never sent; proposed ADR-026) |
+| UNKNOWN | resolver: charged / declined / no charge (from a consistent source only) | SUCCEEDED / DECLINED / TECHNICAL_FAILURE |
 
 Payment allows a new attempt only while no attempt is REQUESTED, SENT or UNKNOWN, and never after SUCCEEDED.
 

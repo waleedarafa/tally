@@ -69,7 +69,7 @@ class PaymentCollectionIT extends AbstractProviderIntegrationTest {
 
     AttemptState awaitFinal(String reference) {
         await().atMost(Duration.ofSeconds(10)).until(() -> payments.status(reference)
-                .map(s -> s.state() != AttemptState.PENDING && s.state() != AttemptState.IN_FLIGHT).orElse(false));
+                .map(s -> s.state() != AttemptState.REQUESTED && s.state() != AttemptState.SENT).orElse(false));
         return payments.status(reference).orElseThrow().state();
     }
 
@@ -110,27 +110,31 @@ class PaymentCollectionIT extends AbstractProviderIntegrationTest {
 
         payments.requestCollection(reference, UUID.randomUUID(), Money.of(3699, "AED"), "tok_not_issued");
 
-        assertThat(awaitFinal(reference)).isEqualTo(AttemptState.FAILED);
+        assertThat(awaitFinal(reference)).isEqualTo(AttemptState.DECLINED);
         assertThat(payments.status(reference).orElseThrow().failureReason()).contains(FailureReason.HARD);
         assertThat(captured.events).singleElement().isInstanceOfSatisfying(PaymentFailed.class,
                 e -> assertThat(e.reason()).isEqualTo(FailureReason.HARD));
     }
 
     @Test
-    void anAttemptAbandonedInFlightBecomesUnknownAndIsNeverSentAgain() {
-        // A worker claimed the attempt, then its instance died during the provider call.
+    void anAttemptAlreadySentIsNeverSentAgain() {
+        // A worker committed the attempt as SENT, then its instance died during the provider call.
         String reference = reference();
         UUID attempt = UUID.randomUUID();
         var now = clock.instant().atOffset(ZoneOffset.UTC);
         jdbc.update("INSERT INTO payment.payment_attempt (id, reference, account_id, amount_minor, currency,"
-                + " payment_token, state, created_at, updated_at) VALUES (?, ?, ?, 999, 'USD', ?, 'IN_FLIGHT', ?, ?)",
-                attempt, reference, UUID.randomUUID(), FakeProvider.token(), now, now);
+                + " payment_token, state, created_at, updated_at, sent_at)"
+                + " VALUES (?, ?, ?, 999, 'USD', ?, 'SENT', ?, ?, ?)",
+                attempt, reference, UUID.randomUUID(), FakeProvider.token(), now, now, now);
         // The reaper returned its queue item, so another worker picks it up.
         jdbc.update("INSERT INTO payment.collection_queue (queue_key, due_at, payload, status, attempts, created_at)"
                 + " VALUES (?, ?, '', 'READY', 1, ?)", attempt.toString(), now, now);
 
-        assertThat(awaitFinal(reference)).isEqualTo(AttemptState.UNKNOWN);
-        assertThat(FakeProvider.chargeCount(reference)).isZero();
+        await().atMost(Duration.ofSeconds(10)).until(() -> "DONE".equals(jdbc.queryForObject(
+                "SELECT status FROM payment.collection_queue WHERE queue_key = ?", String.class, attempt.toString())));
+        // Not sent again: the stale rule makes it UNKNOWN after the call timeout (ADR-018; AT-15).
+        assertThat(payments.status(reference).orElseThrow().state()).isEqualTo(AttemptState.SENT);
+        assertThat(FakeProvider.requestCount(reference)).isZero();
         assertThat(captured.events).isEmpty();
     }
 }

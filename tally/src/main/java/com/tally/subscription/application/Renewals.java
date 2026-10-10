@@ -74,10 +74,21 @@ class Renewals implements QueueHandler {
         try {
             transactions.executeWithoutResult(tx -> renew(subscriptionId, period));
         } catch (OptimisticLockingFailureException | DataIntegrityViolationException e) {
-            // Another delivery of this item renewed the subscription first (version or period guard won).
+            // A conflict is a duplicate only if the fact the guard protects holds: period n exists, so
+            // another delivery renewed first. Any other failure rolled the renewal back: rethrow, so the
+            // item is retried and shows in the queue's health instead of being lost (D1, CLAUDE.md rule 11).
+            if (!periodExists(subscriptionId, period)) {
+                throw e;
+            }
             log.info("Period {} of subscription {} was already renewed", period, subscriptionId);
         }
         return Outcome.done();
+    }
+
+    /** In a fresh transaction, after the failed one rolled back. */
+    private boolean periodExists(UUID subscriptionId, int period) {
+        return Boolean.TRUE.equals(transactions.execute(tx -> subscriptions.find(subscriptionId)
+                .map(s -> s.periods().stream().anyMatch(p -> p.number() == period)).orElse(false)));
     }
 
     private void renew(UUID subscriptionId, int period) {

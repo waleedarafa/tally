@@ -9,14 +9,69 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-/** One attempt to collect an amount for a reference. */
+/**
+ * One attempt to collect an amount for a reference. Its lifecycle is an enum and a transition table
+ * (ADR-018, design.md §5): every change goes through {@link #move}, which refuses any transition the
+ * table does not hold. Payment allows a new attempt only while no attempt for the reference is
+ * REQUESTED, SENT or UNKNOWN, and never after SUCCEEDED (P2; the partial unique index guards it).
+ */
 @Entity
 @Table(schema = "payment", name = "payment_attempt")
 public class PaymentAttempt {
+
+    /** What can happen to an attempt. */
+    public enum Event {
+        /** The worker commits the attempt as sent, before calling the provider (FR-005). */
+        SEND,
+        CHARGED,
+        DECLINED,
+        /** The provider failed or refused before charging (a 503, a 429, unreachable). */
+        PROVIDER_ERROR,
+        /** The call timed out, or failed in a way that leaves the charge in doubt. */
+        TIMED_OUT,
+        /** Sent longer ago than the call timeout, with no result: its worker died (AT-15). */
+        STALE,
+        /** The provider's record shows a charge. */
+        RESOLVED_CHARGED,
+        /** The provider's record shows a decline. */
+        RESOLVED_DECLINED,
+        /** A consistent lookup, old enough, shows no charge (proposed ADR-026). */
+        RESOLVED_NO_CHARGE
+    }
+
+    /** The transition table (design.md §5). Anything absent is refused. */
+    static final Map<AttemptState, Map<Event, AttemptState>> TRANSITIONS = new EnumMap<>(AttemptState.class);
+
+    static {
+        on(AttemptState.REQUESTED, Event.SEND, AttemptState.SENT);
+        on(AttemptState.SENT, Event.CHARGED, AttemptState.SUCCEEDED);
+        on(AttemptState.SENT, Event.DECLINED, AttemptState.DECLINED);
+        on(AttemptState.SENT, Event.PROVIDER_ERROR, AttemptState.TECHNICAL_FAILURE);
+        on(AttemptState.SENT, Event.TIMED_OUT, AttemptState.UNKNOWN);
+        on(AttemptState.SENT, Event.STALE, AttemptState.UNKNOWN);
+        on(AttemptState.UNKNOWN, Event.RESOLVED_CHARGED, AttemptState.SUCCEEDED);
+        on(AttemptState.UNKNOWN, Event.RESOLVED_DECLINED, AttemptState.DECLINED);
+        on(AttemptState.UNKNOWN, Event.RESOLVED_NO_CHARGE, AttemptState.TECHNICAL_FAILURE);
+        // Kept from the first run (FR-018, AT-6): a provider can report a decline for a charge that went
+        // through; the recorded truth corrects it. Not in design.md §5's table.
+        on(AttemptState.DECLINED, Event.RESOLVED_CHARGED, AttemptState.SUCCEEDED);
+    }
+
+    private static void on(AttemptState from, Event event, AttemptState to) {
+        TRANSITIONS.computeIfAbsent(from, f -> new EnumMap<>(Event.class)).put(event, to);
+    }
+
+    /** The state {@code event} moves {@code from} to, or empty if the table refuses it. */
+    public static Optional<AttemptState> next(AttemptState from, Event event) {
+        return Optional.ofNullable(TRANSITIONS.getOrDefault(from, Map.of()).get(event));
+    }
 
     @Id
     private UUID id;
@@ -27,6 +82,10 @@ public class PaymentAttempt {
 
     @Column(nullable = false)
     private String reference;
+
+    /** 1 for a request's first attempt; each retry adds one. Unique per reference. */
+    @Column(nullable = false)
+    private int number;
 
     @Column(name = "account_id", nullable = false)
     private UUID accountId;
@@ -57,6 +116,10 @@ public class PaymentAttempt {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** When the attempt was committed as sent: the start of its call (stale rule, ADR-018). */
+    @Column(name = "sent_at")
+    private Instant sentAt;
+
     @Column(name = "reconcile_at")
     private Instant reconcileAt;
 
@@ -66,7 +129,7 @@ public class PaymentAttempt {
     protected PaymentAttempt() {
     }
 
-    public static PaymentAttempt pending(UUID requestId, String reference, UUID accountId, Money amount,
+    public static PaymentAttempt requested(UUID requestId, String reference, UUID accountId, Money amount,
             String paymentToken, Instant now) {
         PaymentAttempt a = new PaymentAttempt();
         a.id = UUID.randomUUID();
@@ -76,89 +139,117 @@ public class PaymentAttempt {
         a.amountMinor = amount.minorUnits();
         a.currency = amount.currency().getCurrencyCode();
         a.paymentToken = paymentToken;
-        a.state = AttemptState.PENDING;
+        a.number = 1;
+        a.state = AttemptState.REQUESTED;
         a.createdAt = now;
         a.updatedAt = now;
         return a;
     }
 
-    public void succeeded(String chargeId, Instant now) {
-        requireInFlight();
-        this.state = AttemptState.SUCCEEDED;
-        this.chargeId = chargeId;
-        this.updatedAt = now;
+    /** The next try for the same request, after this one failed technically. */
+    public PaymentAttempt retry(Instant now) {
+        if (state != AttemptState.TECHNICAL_FAILURE) {
+            throw new IllegalStateException("Attempt " + id + " is " + state + ": only a technical failure is retried");
+        }
+        PaymentAttempt next = requested(requestId, reference, accountId, amount(), paymentToken, now);
+        next.number = number + 1;
+        return next;
     }
 
-    public void failed(FailureReason reason, Instant now) {
-        requireInFlight();
-        this.state = AttemptState.FAILED;
+    /**
+     * Commits the attempt as sent (REQUESTED to SENT). The worker claims through an atomic update with the
+     * same effect ({@link PaymentAttempts#markSent}); this is the aggregate's form of that transition.
+     */
+    public void sent(Instant now) {
+        move(Event.SEND, now);
+        this.sentAt = now;
+    }
+
+    /**
+     * Proposed ADR-026: whether a lookup that found nothing proves there was no charge. Only from a
+     * consistent lookup, and only once a charge would show: sent at least {@code visibleAfter} (the call
+     * timeout plus the provider's stated delay) before {@code now}. An attempt with no recorded send time
+     * is from before Slice 1R PR-6 and counts as long sent. A lagging search read as "no charge" would
+     * allow a second charge (CONTRACT.md A11, Q-B).
+     */
+    public boolean noChargeIsCertain(boolean lookupConsistent, Duration visibleAfter, Instant now) {
+        if (!lookupConsistent) {
+            return false;
+        }
+        return sentAt == null || !sentAt.plus(visibleAfter).isAfter(now);
+    }
+
+    public void succeeded(String chargeId, Instant now) {
+        move(Event.CHARGED, now);
+        this.chargeId = chargeId;
+    }
+
+    public void declined(FailureReason reason, Instant now) {
+        move(Event.DECLINED, now);
         this.failureReason = reason;
-        this.updatedAt = now;
-        // A provider can report a failure for a charge that went through: re-checked for 48 hours (FR-018).
+        // A provider can report a decline for a charge that went through: re-checked for 48 hours (FR-018).
+        this.reconcileAt = ReconciliationSchedule.first(now);
+    }
+
+    /** The provider failed or refused before charging. No event; the request is retried by a new attempt. */
+    public void technicalFailure(Instant now) {
+        move(Event.PROVIDER_ERROR, now);
+    }
+
+    /** The provider may or may not have charged. Never retried; resolved by asking the provider (FR-018). */
+    public void timedOut(Instant now) {
+        move(Event.TIMED_OUT, now);
         this.reconcileAt = ReconciliationSchedule.first(now);
     }
 
     /**
-     * The provider certainly did not charge (it refused the call, or the call never reached it): the
-     * attempt goes back to the queue. Not a retry of an unknown outcome.
+     * Sent longer ago than the call timeout, with no result recorded: its worker died (ADR-018). Only a
+     * SENT attempt: the provider is called only after SENT commits, so a REQUESTED attempt of any age was
+     * never sent (proposed ADR-026).
      */
-    public void returnToPending(Instant now) {
-        requireInFlight();
-        this.state = AttemptState.PENDING;
-        this.updatedAt = now;
+    public void stale(Instant now) {
+        move(Event.STALE, now);
+        this.reconcileAt = now;
     }
 
-    /** The provider may or may not have charged. Never retried; reconciled (FR-018). */
-    public void unknown(Instant now) {
-        requireInFlight();
-        this.state = AttemptState.UNKNOWN;
-        this.updatedAt = now;
-        this.reconcileAt = ReconciliationSchedule.first(now);
-    }
-
-    /** Reconciliation found the provider charged it (FR-018). Returns the state it corrected. */
-    public AttemptState reconciledAsCharged(String chargeId, Instant now) {
-        AttemptState was = requireReconcilable();
-        this.state = AttemptState.SUCCEEDED;
+    /** The provider's record shows a charge. Returns the state it corrected. */
+    public AttemptState resolvedCharged(String chargeId, Instant now) {
+        AttemptState was = state;
+        move(Event.RESOLVED_CHARGED, now);
         this.failureReason = null;
         this.chargeId = chargeId;
-        this.updatedAt = now;
         this.reconcileAt = null;
         return was;
     }
 
-    /** Reconciliation found the charge declined, or never made, while the outcome was UNKNOWN. */
-    public void reconciledAsFailed(FailureReason reason, Instant now) {
-        if (state != AttemptState.UNKNOWN) {
-            throw new IllegalStateException("Attempt " + id + " is " + state + ", not UNKNOWN");
-        }
-        this.state = AttemptState.FAILED;
+    public void resolvedDeclined(FailureReason reason, Instant now) {
+        move(Event.RESOLVED_DECLINED, now);
         this.failureReason = reason;
-        this.updatedAt = now;
         this.reconcileChecks = 0;
         this.reconcileAt = ReconciliationSchedule.first(now);
     }
 
-    /** A check that changed nothing: back off (5 minutes, 1 hour, then daily; FAILED for 48 hours only). */
+    /** A consistent lookup, old enough, shows no charge (proposed ADR-026): the request is retried. */
+    public void resolvedNoCharge(Instant now) {
+        move(Event.RESOLVED_NO_CHARGE, now);
+        this.reconcileAt = null;
+    }
+
+    /** A check that changed nothing: back off (5 minutes, 1 hour, then daily; DECLINED for 48 hours only). */
     public void checkedWithoutChange(Instant now) {
-        requireReconcilable();
+        if (state != AttemptState.UNKNOWN && state != AttemptState.DECLINED) {
+            throw new IllegalStateException("Attempt " + id + " is " + state + ": nothing to reconcile");
+        }
         reconcileChecks++;
-        reconcileAt = state == AttemptState.FAILED
+        reconcileAt = state == AttemptState.DECLINED
                 ? ReconciliationSchedule.afterFailed(reconcileChecks, updatedAt, now).orElse(null)
                 : ReconciliationSchedule.after(reconcileChecks, now);
     }
 
-    private AttemptState requireReconcilable() {
-        if (state != AttemptState.UNKNOWN && state != AttemptState.FAILED) {
-            throw new IllegalStateException("Attempt " + id + " is " + state + ": nothing to reconcile");
-        }
-        return state;
-    }
-
-    private void requireInFlight() {
-        if (state != AttemptState.IN_FLIGHT) {
-            throw new IllegalStateException("Attempt " + id + " is " + state + ", not IN_FLIGHT");
-        }
+    private void move(Event event, Instant now) {
+        state = next(state, event).orElseThrow(() -> new IllegalStateException(
+                "Attempt " + id + " is " + state + ": " + event + " is not allowed (ADR-018)"));
+        updatedAt = now;
     }
 
     public UUID id() {
@@ -171,6 +262,10 @@ public class PaymentAttempt {
 
     public String reference() {
         return reference;
+    }
+
+    public int number() {
+        return number;
     }
 
     public UUID accountId() {
@@ -191,6 +286,10 @@ public class PaymentAttempt {
 
     public Optional<FailureReason> failureReason() {
         return Optional.ofNullable(failureReason);
+    }
+
+    public Optional<Instant> sentAt() {
+        return Optional.ofNullable(sentAt);
     }
 
     public Optional<Instant> reconcileAt() {

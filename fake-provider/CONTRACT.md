@@ -22,6 +22,7 @@ Reference provider: Stripe's public documentation (FR-030; `docs/briefs/slice-1-
 **Q-B. How long until a charge appears in a lookup?** (A10, A11)
 - **Answer: open.** The documentation reviewed does not say.
 - Reconciliation's first check at 5 minutes assumes it is less than that. Confirm with the chosen provider before going live.
+- Since Slice 1R PR-6, the answer is a setting, not a hope: `lookup-consistent` (false by default) and `lookup-delay`. Until a real provider's answer is known, it stays false, and an unknown attempt is never resolved as "no charge" (A11).
 
 **Q-C. What does a token need for renewals without the customer present?** (A17; driver D15)
 - **Answer:** card networks distinguish customer-initiated from merchant-initiated charges. Where strong customer authentication applies:
@@ -103,6 +104,7 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **Tally relies on it in:** `HttpPaymentGateway.chargesFor` and `Reconciliation`. Spike B's "resolved in 5 minutes" depends on it.
 - **If a real provider differs:** search by metadata is often backed by an index that lags by seconds to minutes, or is not offered at all, which leaves webhooks or settlement files as the only source.
 - **Check:** open (Q-B). Confirm that a lookup by reference exists, and its consistency delay. If there is none, reconciliation must use webhooks or reports (and FR-018 needs revisiting).
+- **Assumed by Tally since Slice 1R PR-6 (proposed ADR-026):** reconciliation reads "not found" as "no charge" only when the lookup is consistent (`tally.payment.provider.lookup-consistent`, true for this fake only) and the attempt was sent longer ago than the call timeout plus the provider's stated delay (`tally.payment.provider.lookup-delay`). Otherwise the attempt stays UNKNOWN. A real provider's search may lag: treating a lagging "not found" as no charge would make a new attempt, and allow a second charge. `NoChargeRuleTest` pins the rule, including the safe default.
 
 **A12. The lookup's answer is the truth; a charge response can be wrong.**
 - **Fake:** in `LIE` mode, the response shows the opposite of the recorded outcome, while the lookup shows the recorded one.
