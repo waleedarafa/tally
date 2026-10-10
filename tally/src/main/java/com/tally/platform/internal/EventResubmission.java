@@ -54,7 +54,10 @@ class EventResubmission implements PeriodicJob {
         this.properties = properties;
         this.jdbc = jdbc;
         this.clock = clock;
-        Gauge.builder("tally.events.unreadable", unreadable, AtomicLong::get).strongReference(true).register(meters);
+        Gauge.builder("tally.events.unreadable", unreadable, AtomicLong::get)
+                .description("Publications the last resubmission run skipped because their event could not be"
+                        + " read. Runbook: " + EventHealth.RUNBOOK)
+                .strongReference(true).register(meters);
     }
 
     @Override

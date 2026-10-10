@@ -11,7 +11,9 @@ import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 
 /**
- * FF-13, CLAUDE.md rule 7 (add-only events; Slice 1R PR-7 finding): Jackson 3 refuses a stored event
+ * FF-13, CLAUDE.md rule 7: "An added event field is a reference type, may be null, and has no non-null
+ * check in the constructor: an event stored before the field existed must still be read." Slice 1R PR-7
+ * found why: Jackson 3 refuses a stored event
  * that lacks a primitive field ({@code FAIL_ON_NULL_FOR_PRIMITIVES} is on by default), so adding a
  * primitive field to an event breaks every publication stored before it. Every event field is therefore a
  * reference type, null when absent, except the primitives events have carried since they were first
