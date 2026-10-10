@@ -8,9 +8,10 @@ package com.tally.offers;
 public interface Pricing {
 
     /**
-     * Quotes the offer's current version in the account's currency.
+     * Quotes the requested offer version in the account's currency.
      *
-     * @throws UnknownPlanException if the offer does not exist or has no price in that currency
+     * @throws UnknownPlanException if the offer or that version does not exist, or it has no price in that currency
+     *
      * @throws com.tally.account.UnknownAccountException if there is no such account
      */
     PriceQuote quote(QuoteRequest request);

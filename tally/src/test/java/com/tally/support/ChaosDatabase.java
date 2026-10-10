@@ -39,9 +39,10 @@ public final class ChaosDatabase {
     }
 
     /**
-     * Seeds {@code accounts} BASIC subscriptions, each with a renewal due on {@code billingDate}
-     * (UTC midnight): accounts, subscriptions, Invoicing's billing records and the billing schedule,
-     * as the application itself would have left them a month earlier. Needs Tally's migrations applied.
+     * Seeds {@code accounts} BASIC subscriptions, each with a renewal into period 2 due on
+     * {@code billingDate} (UTC midnight): accounts, subscriptions with their first period, and
+     * Subscription's renewal queue, as the application itself would have left them a month earlier.
+     * Needs Tally's migrations applied.
      */
     public void seedDueRenewals(int accounts, LocalDate billingDate, String paymentToken) {
         jdbc.queryForObject("""
@@ -52,20 +53,22 @@ public final class ChaosDatabase {
                     INSERT INTO account.account (id, currency, time_zone, payment_token, created_at)
                     SELECT account_id, 'USD', 'UTC', ?, now() FROM seed RETURNING 1
                 ), s AS (
-                    INSERT INTO subscription.subscription (id, account_id, plan_id, started_at, version)
-                    SELECT subscription_id, account_id, 'BASIC', ?::date - interval '1 month', 1 FROM seed RETURNING 1
-                ), b AS (
-                    INSERT INTO invoicing.subscription_billing (subscription_id, account_id, plan_id, anchor_day, started_on)
-                    SELECT subscription_id, account_id, 'BASIC', ?, (?::date - interval '1 month')::date FROM seed RETURNING 1
+                    INSERT INTO subscription.subscription
+                        (id, account_id, plan_id, started_at, version, anchor_day, offer_version)
+                    SELECT subscription_id, account_id, 'BASIC', ?::date - interval '1 month', 1, ?, 1 FROM seed
+                    RETURNING id
+                ), p AS (
+                    INSERT INTO subscription.subscription_period (subscription_id, position, number, start_date, end_date)
+                    SELECT id, 0, 1, (?::date - interval '1 month')::date, ?::date FROM s RETURNING 1
                 ), q AS (
-                    INSERT INTO invoicing.billing_schedule (queue_key, due_at, payload, status, attempts, created_at)
-                    SELECT account_id || ':' || ?, ?::date, subscription_id || ',' || ?, 'READY', 0, now() FROM seed
+                    INSERT INTO subscription.renewal (queue_key, due_at, payload, status, attempts, created_at)
+                    SELECT account_id || ':' || ?, ?::date, subscription_id || ',2', 'READY', 0, now() FROM seed
                     RETURNING 1
                 )
-                SELECT (SELECT count(*) FROM a) + (SELECT count(*) FROM s) + (SELECT count(*) FROM b) + (SELECT count(*) FROM q)
+                SELECT (SELECT count(*) FROM a) + (SELECT count(*) FROM p) + (SELECT count(*) FROM q)
                 """, Long.class,
-                accounts, paymentToken, billingDate, billingDate.getDayOfMonth(), billingDate,
-                billingDate.toString(), billingDate, billingDate.toString());
+                accounts, paymentToken, billingDate, billingDate.getDayOfMonth(), billingDate, billingDate,
+                billingDate.toString(), billingDate);
     }
 
     private static DriverManagerDataSource dataSource(String url) {

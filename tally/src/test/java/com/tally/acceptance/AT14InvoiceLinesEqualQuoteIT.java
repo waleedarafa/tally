@@ -7,6 +7,7 @@ import com.tally.account.AccountApi;
 import com.tally.invoicing.InvoiceLineView;
 import com.tally.invoicing.InvoiceView;
 import com.tally.invoicing.InvoicingApi;
+import com.tally.invoicing.PricingReason;
 import com.tally.offers.Period;
 import com.tally.offers.PriceQuote;
 import com.tally.offers.Pricing;
@@ -21,6 +22,7 @@ import java.util.Currency;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
@@ -46,6 +48,9 @@ class AT14InvoiceLinesEqualQuoteIT extends AbstractProviderIntegrationTest {
     @Autowired
     Pricing pricing;
 
+    @Autowired
+    JdbcTemplate jdbc;
+
     @Test
     void theInvoiceCarriesTheQuotesLinesTotalAndOfferVersion() {
         UUID account = accounts.open(Currency.getInstance("AED"), ZoneId.of("Asia/Dubai")).id();
@@ -54,7 +59,7 @@ class AT14InvoiceLinesEqualQuoteIT extends AbstractProviderIntegrationTest {
         await().atMost(Duration.ofSeconds(10)).until(() -> !invoicing.invoicesFor(account).isEmpty());
         InvoiceView invoice = invoicing.invoicesFor(account).getFirst();
 
-        PriceQuote quote = pricing.quote(new QuoteRequest(subscription.id(), account, "STANDARD",
+        PriceQuote quote = pricing.quote(new QuoteRequest(subscription.id(), account, "STANDARD", subscription.offerVersion(),
                 new Period(1, invoice.periodStart(), invoice.periodEnd())));
 
         System.out.println("AT-14 quote   " + quote);
@@ -64,7 +69,18 @@ class AT14InvoiceLinesEqualQuoteIT extends AbstractProviderIntegrationTest {
                 .map(line -> new InvoiceLineView(line.description(), line.amount())).toList());
         assertThat(invoice.amount()).isEqualTo(quote.total());
         assertThat(invoice.offerVersion()).isEqualTo(quote.offerVersion()).isEqualTo(1);
-        assertThat(invoice.quoteReason()).isEqualTo(quote.reason().summary())
+        assertThat(invoice.quoteReason()).isEqualTo(new PricingReason(quote.reason().offerId(),
+                quote.reason().offerVersion(), quote.reason().kind(), quote.reason().flags()));
+        assertThat(invoice.quoteReason().summary()).isEqualTo(quote.reason().summary())
                 .contains("STANDARD").contains("version 1");
+
+        // Stored as data, not text, so ADR-010's flag report can query it.
+        String stored = jdbc.queryForObject("SELECT jsonb_build_object('offerId', quote_reason->>'offerId',"
+                        + " 'version', (quote_reason->>'offerVersion')::int, 'kind', quote_reason->>'kind',"
+                        + " 'noFlags', quote_reason->'flags' = '{}'::jsonb)::text"
+                        + " FROM invoicing.invoice WHERE id = ?", String.class, invoice.id());
+        System.out.println("AT-14 stored reason " + stored);
+        assertThat(stored).isEqualTo(
+                "{\"kind\": \"fixed-price-phase\", \"noFlags\": true, \"offerId\": \"STANDARD\", \"version\": 1}");
     }
 }

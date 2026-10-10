@@ -30,7 +30,7 @@ public final class Quiesce {
         return jdbc.execute((Connection c) -> {
             Array ids = c.createArrayOf("uuid", accounts.toArray());
             Array keys = c.createArrayOf("text", accounts.stream().map(UUID::toString).toArray());
-            try (var billing = c.prepareStatement("SELECT count(*) FROM invoicing.billing_schedule"
+            try (var billing = c.prepareStatement("SELECT count(*) FROM subscription.renewal"
                     + " WHERE split_part(queue_key, ':', 1) = ANY (?)"
                     + " AND (status = 'IN_PROCESSING' OR (status = 'READY' AND due_at <= ?))");
                  var attempts = c.prepareStatement("SELECT count(*) FROM payment.payment_attempt"

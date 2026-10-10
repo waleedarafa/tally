@@ -6,8 +6,6 @@ import com.tally.invoicing.InvoiceIssued;
 import com.tally.invoicing.InvoicePaid;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.Invoices;
-import com.tally.invoicing.domain.SubscriptionBilling;
-import com.tally.invoicing.domain.SubscriptionBillings;
 import com.tally.payment.FailureReason;
 import com.tally.payment.PaymentApi;
 import com.tally.payment.PaymentFailed;
@@ -15,7 +13,7 @@ import com.tally.payment.PaymentSucceeded;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionChanged;
 import java.time.Clock;
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,21 +31,16 @@ class InvoicingListeners {
     private static final Logger log = LoggerFactory.getLogger(InvoicingListeners.class);
 
     private final Invoices invoices;
-    private final SubscriptionBillings subscriptions;
     private final InvoiceIssuer issuer;
-    private final BillingSchedule schedule;
     private final AccountApi accounts;
     private final PaymentApi payments;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    InvoicingListeners(Invoices invoices, SubscriptionBillings subscriptions, InvoiceIssuer issuer,
-            BillingSchedule schedule, AccountApi accounts, PaymentApi payments, ApplicationEventPublisher events,
-            Clock clock) {
+    InvoicingListeners(Invoices invoices, InvoiceIssuer issuer, AccountApi accounts, PaymentApi payments,
+            ApplicationEventPublisher events, Clock clock) {
         this.invoices = invoices;
-        this.subscriptions = subscriptions;
         this.issuer = issuer;
-        this.schedule = schedule;
         this.accounts = accounts;
         this.payments = payments;
         this.events = events;
@@ -55,31 +48,39 @@ class InvoicingListeners {
     }
 
     /**
-     * First invoice, at subscribe: one period from the local day the subscription starts, no
-     * proration, no tax (brief section 1). Records the billing calendar and schedules the first
-     * renewal in the same transaction.
+     * Bills the subscription's current period when it starts and each time it renews (Design Record §12):
+     * the event carries the period and the offer version. The first invoice is due when the subscription
+     * starts; a renewal's at local midnight of the period's first day (D6). Idempotent: the invoice ID is
+     * the subscription and period number, so a duplicate delivery, even a concurrent one, adds nothing.
      */
     @ApplicationModuleListener
     void on(SubscriptionChanged changed) {
-        if (changed.type() != SubscriptionChangeType.STARTED) {
+        boolean billable = changed.type() == SubscriptionChangeType.STARTED
+                || changed.type() == SubscriptionChangeType.PERIOD_RENEWED;
+        if (!billable) {
+            return;
+        }
+        if (changed.periodNumber() == null) {
+            // Published by a release before Slice 1R PR-5, which billed through Invoicing's own schedule.
+            log.warn("Subscription {} change without a period ignored", changed.subscriptionId());
             return;
         }
         AccountView account = accounts.get(changed.accountId()).orElseThrow();
-        LocalDate startedOn = LocalDate.ofInstant(changed.occurredAt(), account.timeZone());
-        // Atomic: a duplicate delivery, even a concurrent one, finds the record and changes nothing (FR-028).
-        subscriptions.insertIfAbsent(
-                new SubscriptionBilling(changed.subscriptionId(), changed.accountId(), changed.planId(), startedOn));
-        SubscriptionBilling billing = subscriptions.findById(changed.subscriptionId()).orElseThrow();
-        LocalDate periodEnd = billing.calendar().nextBillingDate(startedOn);
-        // The first invoice is due when the subscription starts.
-        issuer.issue(changed.accountId(), changed.subscriptionId(), changed.planId(), 1, startedOn, periodEnd,
-                changed.occurredAt());
-        schedule.schedule(changed.accountId(), changed.subscriptionId(), periodEnd, account.timeZone());
+        Instant billedFor = changed.type() == SubscriptionChangeType.STARTED ? changed.occurredAt()
+                : changed.periodStart().atStartOfDay(account.timeZone()).toInstant();
+        issuer.issue(changed.accountId(), changed.subscriptionId(), changed.planId(), changed.offerVersion(),
+                changed.periodNumber(), changed.periodStart(), changed.periodEnd(), billedFor);
     }
 
-    /** Every committed InvoiceIssued leads to exactly one collection request (D2). Payment is idempotent per reference. */
+    /**
+     * Every committed InvoiceIssued with something to pay leads to exactly one collection request (D2).
+     * Payment is idempotent per reference. A zero invoice is paid when issued and never reaches Payment.
+     */
     @ApplicationModuleListener
     void on(InvoiceIssued issued) {
+        if (issued.amount().minorUnits() == 0) {
+            return;
+        }
         String token = accounts.get(issued.accountId()).flatMap(AccountView::paymentToken)
                 .orElseThrow(() -> new IllegalStateException("Account " + issued.accountId() + " has no payment token"));
         payments.requestCollection(issued.paymentReference(), issued.accountId(), issued.amount(), token);
@@ -87,7 +88,7 @@ class InvoicingListeners {
 
     @ApplicationModuleListener
     void on(PaymentSucceeded succeeded) {
-        invoices.findByPaymentReference(succeeded.reference()).ifPresentOrElse(invoice -> {
+        invoices.forPaymentReference(succeeded.reference()).ifPresentOrElse(invoice -> {
             if (invoice.paid(clock.instant())) {
                 events.publishEvent(new InvoicePaid(UUID.randomUUID(), clock.instant(), invoice.accountId(),
                         invoice.id(), invoice.paymentReference()));
@@ -101,7 +102,7 @@ class InvoicingListeners {
         if (failed.reason() == FailureReason.UNKNOWN) {
             return;
         }
-        invoices.findByPaymentReference(failed.reference())
+        invoices.forPaymentReference(failed.reference())
                 .ifPresentOrElse(Invoice::paymentFailed, () -> unknownReference(failed.reference()));
     }
 

@@ -6,7 +6,8 @@ import java.util.UUID;
 /** A subscription's history of changes (a port; {@code adapter.persistence} implements it, F9). */
 public interface SubscriptionChanges {
 
-    SubscriptionChange save(SubscriptionChange change);
+    void add(SubscriptionChange change);
 
-    List<SubscriptionChange> findBySubscriptionIdOrderByVersion(UUID subscriptionId);
+    /** Oldest first. */
+    List<SubscriptionChange> historyOf(UUID subscriptionId);
 }

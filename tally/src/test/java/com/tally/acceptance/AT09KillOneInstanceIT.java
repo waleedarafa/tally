@@ -66,7 +66,7 @@ class AT09KillOneInstanceIT {
         // Mid-run: kill instance A once about a tenth of the invoices exist.
         await().atMost(Duration.ofMinutes(2)).pollInterval(Duration.ofMillis(100))
                 .until(() -> count(jdbc, "SELECT count(*) FROM invoicing.invoice") >= ACCOUNTS / 10);
-        long claimedByA = count(jdbc, "SELECT count(*) FROM invoicing.billing_schedule"
+        long claimedByA = count(jdbc, "SELECT count(*) FROM subscription.renewal"
                 + " WHERE status = 'IN_PROCESSING' AND claimed_by LIKE 'at09-a%'");
         long collectionsClaimedByA = count(jdbc, "SELECT count(*) FROM payment.collection_queue"
                 + " WHERE status = 'IN_PROCESSING' AND claimed_by LIKE 'at09-a%'");
@@ -75,7 +75,7 @@ class AT09KillOneInstanceIT {
 
         // Instance B finishes alone: every renewal done, every invoice's collection requested.
         await().atMost(Duration.ofMinutes(10)).pollInterval(Duration.ofSeconds(1)).until(() ->
-                count(jdbc, "SELECT count(*) FROM invoicing.billing_schedule WHERE queue_key LIKE ? AND status = 'DONE'",
+                count(jdbc, "SELECT count(*) FROM subscription.renewal WHERE queue_key LIKE ? AND status = 'DONE'",
                         "%:" + billingDate) == ACCOUNTS
                         && count(jdbc, "SELECT count(DISTINCT reference) FROM payment.payment_attempt") == ACCOUNTS
                         && count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE state IN ('PENDING', 'IN_FLIGHT')") == 0);
@@ -89,18 +89,18 @@ class AT09KillOneInstanceIT {
         assertThat(count(jdbc, "SELECT count(*) FROM (SELECT account_id FROM invoicing.invoice"
                 + " GROUP BY account_id, period_start HAVING count(*) > 1) d")).isZero();
         // Exactly one next billing date scheduled per account.
-        assertThat(count(jdbc, "SELECT count(*) FROM invoicing.billing_schedule WHERE queue_key LIKE ?", "%:" + nextDate))
+        assertThat(count(jdbc, "SELECT count(*) FROM subscription.renewal WHERE queue_key LIKE ?", "%:" + nextDate))
                 .isEqualTo(ACCOUNTS);
         // Exactly one payment attempt per invoice; nothing left claimed.
         assertThat(count(jdbc, "SELECT count(*) FROM payment.payment_attempt")).isEqualTo(ACCOUNTS);
         assertThat(count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE reference NOT IN"
                 + " (SELECT payment_reference FROM invoicing.invoice)")).isZero();
-        assertThat(count(jdbc, "SELECT count(*) FROM invoicing.billing_schedule WHERE status = 'IN_PROCESSING'")).isZero();
+        assertThat(count(jdbc, "SELECT count(*) FROM subscription.renewal WHERE status = 'IN_PROCESSING'")).isZero();
         assertThat(count(jdbc, "SELECT count(*) FROM payment.collection_queue WHERE status = 'IN_PROCESSING'")).isZero();
         assertThat(count(jdbc, "SELECT count(*) FROM (SELECT reference FROM payment.payment_attempt"
                 + " WHERE state = 'SUCCEEDED' GROUP BY reference HAVING count(*) > 1) d")).isZero();
 
-        long renewalsRedone = count(jdbc, "SELECT count(*) FROM invoicing.billing_schedule"
+        long renewalsRedone = count(jdbc, "SELECT count(*) FROM subscription.renewal"
                 + " WHERE queue_key LIKE ? AND attempts > 1", "%:" + billingDate);
         long unknown = count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE state = 'UNKNOWN'");
         long succeeded = count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE state = 'SUCCEEDED'");

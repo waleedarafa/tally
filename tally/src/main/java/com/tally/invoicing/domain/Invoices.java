@@ -9,17 +9,20 @@ import java.util.UUID;
 public interface Invoices {
 
     /**
-     * Inserts {@code invoice} unless the account already has one for its billing date (D1), atomically:
-     * a concurrent caller waits for the first insert to commit, then inserts nothing (FR-028).
-     * Returns whether this call inserted it.
+     * Adds {@code invoice} unless its subscription already has an invoice for that period (I2, D1),
+     * atomically: a concurrent caller waits for the first insert to commit, then adds nothing (FR-028).
+     * Returns whether this call added it.
      */
-    boolean insertIfAbsent(Invoice invoice);
+    boolean addIfAbsent(Invoice invoice);
 
-    Optional<Invoice> findByPaymentReference(String paymentReference);
+    Optional<Invoice> forPaymentReference(String paymentReference);
 
-    List<Invoice> findByAccountIdOrderByPeriodStart(UUID accountId);
+    /** Oldest period first. */
+    List<Invoice> ofAccount(UUID accountId);
 
-    List<Invoice> findBySubscriptionIdOrderByPeriodStart(UUID subscriptionId);
+    /** Oldest period first. */
+    List<Invoice> ofSubscription(UUID subscriptionId);
 
-    List<Invoice> findByIssuedAtGreaterThanEqualAndIssuedAtLessThan(Instant from, Instant to);
+    /** Issued in {@code [from, to)}. */
+    List<Invoice> issuedBetween(Instant from, Instant to);
 }

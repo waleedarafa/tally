@@ -1,4 +1,4 @@
-package com.tally.invoicing.domain;
+package com.tally.subscription.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

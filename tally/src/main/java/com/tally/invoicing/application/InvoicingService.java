@@ -22,13 +22,13 @@ class InvoicingService implements InvoicingApi {
     @Override
     @Transactional(readOnly = true)
     public List<InvoiceView> invoicesFor(UUID accountId) {
-        return invoices.findByAccountIdOrderByPeriodStart(accountId).stream().map(InvoicingService::view).toList();
+        return invoices.ofAccount(accountId).stream().map(InvoicingService::view).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<InvoiceView> invoicesForSubscription(UUID subscriptionId) {
-        return invoices.findBySubscriptionIdOrderByPeriodStart(subscriptionId).stream().map(InvoicingService::view)
+        return invoices.ofSubscription(subscriptionId).stream().map(InvoicingService::view)
                 .toList();
     }
 

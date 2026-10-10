@@ -1,4 +1,4 @@
-package com.tally.invoicing.domain;
+package com.tally.subscription.domain;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -6,7 +6,7 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 
 /**
- * The billing calendar (FR-002; brief section 1). Invoicing is its only owner.
+ * The billing calendar (brief section 1). Subscription owns it since Slice 1R PR-5 (Design Record §12).
  *
  * <p>The anchor day is the local calendar day the subscription started. In a shorter month the
  * account is billed on the month's last day, but the anchor is kept: a subscription from 31 January

@@ -15,5 +15,5 @@ import java.util.UUID;
  */
 public record InvoiceView(UUID id, UUID accountId, UUID subscriptionId, InvoiceStatus status, Money amount,
         LocalDate periodStart, LocalDate periodEnd, String paymentReference, Instant issuedAt, Instant billedFor,
-        List<InvoiceLineView> lines, Integer offerVersion, String quoteReason) {
+        List<InvoiceLineView> lines, Integer offerVersion, PricingReason quoteReason) {
 }

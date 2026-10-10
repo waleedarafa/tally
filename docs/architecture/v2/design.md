@@ -64,8 +64,8 @@ Named interfaces: `account` exposes a read API to every module that lists it, an
 
 | Module | Public API | Events |
 |---|---|---|
-| `offers` | `Pricing.quote(QuoteRequest) → PriceQuote`; `Offers.isOffered(offerId, accountId)` | `OfferVersionPublished` |
-| `subscription` | `Subscriptions.start`, `changePlan`, `cancel(id, requestedAt)`, `cancelForWriteOff` | `SubscriptionChanged` with types: started, plan changed, period renewed, renewal reversed, cancelled |
+| `offers` | `Pricing.quote(QuoteRequest) → PriceQuote`; `Offers.isOffered(offerId, accountId)`, `Offers.currentVersion(offerId, accountId)` | `OfferVersionPublished` |
+| `subscription` | `SubscriptionApi.subscribe(accountId, offerId)` (the design's `Subscriptions.start`), `changePlan`, `cancel(id, requestedAt)`, `cancelForWriteOff` | `SubscriptionChanged` with types: started, plan changed, period renewed, renewal reversed, cancelled. Since Slice 1R PR-5 it carries the offer version and the current period (number, start, end) |
 | `invoicing` | `Invoicing.requestPaymentAgain(invoiceId)`, `invoicesFor(accountId)` | `InvoiceIssued`, `InvoicePaymentDeclined`, `InvoicePaid`, `CreditNoteIssued` |
 | `payment` | `Payments.collect(reference, amount, methodToken)`, `status(reference)` | `PaymentSucceeded`, `PaymentFailed` with reason declined; technical failures publish nothing |
 | `account` | `Accounts.get(id)`; `AccountStanding.set(id, standing, cause)` | `StandingChanged` |
@@ -74,11 +74,15 @@ Named interfaces: `account` exposes a read API to every module that lists it, an
 ```java
 public record PriceQuote(UUID subscriptionId, String offerId, int offerVersion,
                          Period period, List<PriceLine> lines, Money total, QuoteReason reason) {}
+public record QuoteRequest(UUID subscriptionId, UUID accountId, String offerId,
+                           int offerVersion, Period period) {}               // the version is required
 public record Period(int number, LocalDate start, LocalDate end) {}       // [start, end)
 public record PriceLine(String description, Money amount) {}            // a credit is negative
 public record QuoteReason(String offerId, int offerVersion, String kind, Map<String, Boolean> flags) {}
 ```
 *(Real names since Slice 1R PR-4: identifiers are `UUID` and `String`, not value types.)*
+
+**Offer version (Slice 1R PR-5, clarifies O3):** a subscription keeps the offer version it signed up to; `QuoteRequest.offerVersion` is required and `Pricing.quote` prices that version. A new version applies to new sign-ups only; moving existing subscribers is a later, explicit, dated change.
 
 **Envelope:** every event carries event ID, occurrence time, account ID and the aggregate version as a sequence number.
 **Evolution:** add fields only; never rename or move an event class; every shared enum has `UNKNOWN`, which unknown input maps to.

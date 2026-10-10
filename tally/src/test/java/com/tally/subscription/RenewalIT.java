@@ -1,9 +1,12 @@
-package com.tally.invoicing;
+package com.tally.subscription;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.account.AccountApi;
+import com.tally.invoicing.InvoiceStatus;
+import com.tally.invoicing.InvoiceView;
+import com.tally.invoicing.InvoicingApi;
 import com.tally.shared.Money;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.support.AbstractProviderIntegrationTest;
@@ -22,7 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
-/** Renewals run from the billing schedule queue (FR-002, FR-017). Own context: it moves the clock. */
+/** Renewals run from Subscription's renewal queue (Design Record §12, FR-017). Own context: it moves the clock. */
 @TestPropertySource(properties = {
         "tally.platform.polling-enabled=true",
         "tally.platform.poll-interval=100ms",
@@ -56,7 +59,7 @@ class RenewalIT extends AbstractProviderIntegrationTest {
     }
 
     Instant dueAt(UUID account, LocalDate billingDate) {
-        return jdbc.queryForObject("SELECT due_at FROM invoicing.billing_schedule WHERE queue_key = ?",
+        return jdbc.queryForObject("SELECT due_at FROM subscription.renewal WHERE queue_key = ?",
                 OffsetDateTime.class, account + ":" + billingDate).toInstant();
     }
 
@@ -95,14 +98,14 @@ class RenewalIT extends AbstractProviderIntegrationTest {
         Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(10));
 
         // As if the instance crashed after committing the renewal, before marking the item done.
-        jdbc.update("UPDATE invoicing.billing_schedule SET status = 'READY' WHERE queue_key = ?",
+        jdbc.update("UPDATE subscription.renewal SET status = 'READY' WHERE queue_key = ?",
                 account + ":" + renewal);
 
         await().atMost(Duration.ofSeconds(10)).until(() -> "DONE".equals(jdbc.queryForObject(
-                "SELECT status FROM invoicing.billing_schedule WHERE queue_key = ?", String.class, account + ":" + renewal)));
+                "SELECT status FROM subscription.renewal WHERE queue_key = ?", String.class, account + ":" + renewal)));
         assertThat(invoicing.invoicesFor(account)).hasSize(2);
         // The renewal date and the one after it; the first invoice was issued at subscribe, not from the schedule.
-        assertThat(jdbc.queryForList("SELECT queue_key FROM invoicing.billing_schedule WHERE queue_key LIKE ?",
+        assertThat(jdbc.queryForList("SELECT queue_key FROM subscription.renewal WHERE queue_key LIKE ?",
                 String.class, account + ":%"))
                 .containsExactlyInAnyOrder(account + ":" + renewal, account + ":" + renewal.plusMonths(1));
         assertThat(FakeProvider.chargeCount(invoicing.invoicesFor(account).get(1).paymentReference())).isEqualTo(1);

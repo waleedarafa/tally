@@ -25,8 +25,8 @@ One top-level package per module under `com.tally`, with dependencies declared i
 | `platform` | Durable queues, periodic jobs, retention, the event-listener executor and health metrics. No business logic (FR-027) |
 | `account` | Accounts, their currency, time zone and payment token |
 | `offers` | Offers and their published versions, kinds of offer, and pricing: one rule per kind, `Pricing.quote` returns a `PriceQuote` with its reason (ADR-015) |
-| `subscription` | Subscriptions and their changes |
-| `invoicing` | The billing calendar, invoices, and the invoiced-versus-collected check |
+| `subscription` | Subscriptions, their periods and the billing calendar; renewals run on its own queue and publish `SubscriptionChanged` (Design Record §12) |
+| `invoicing` | Invoices, one per subscription period (I2), with the PriceQuote's lines; the invoiced-versus-collected check |
 | `payment` | Collection requests, payment attempts, provider calls and reconciliation. Knows nothing about invoices (FR-014) |
 | `entitlement` | Access granted to accounts |
 | `checkout` | A process module: record the card token, subscribe, wait briefly for the first payment (FR-034) |

@@ -25,11 +25,14 @@ class InvoicingInvariants {
                 """, Long.class));
     }
 
-    /** FR-024: no zero or negative invoices. */
+    /**
+     * FR-024, changed in Slice 1R PR-5: no negative invoices. A zero invoice is valid (a free trial's
+     * period); it is paid when issued and never reaches Payment.
+     */
     @Bean
-    InvariantCheck nonPositiveInvoices(JdbcTemplate jdbc) {
-        return check("invoicing.non-positive-invoices",
-                () -> jdbc.queryForObject("SELECT count(*) FROM invoicing.invoice WHERE amount_minor <= 0", Long.class));
+    InvariantCheck negativeInvoices(JdbcTemplate jdbc) {
+        return check("invoicing.negative-invoices",
+                () -> jdbc.queryForObject("SELECT count(*) FROM invoicing.invoice WHERE amount_minor < 0", Long.class));
     }
 
     static InvariantCheck check(String name, LongSupplier violations) {
