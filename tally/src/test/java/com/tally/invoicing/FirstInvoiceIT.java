@@ -112,7 +112,7 @@ class FirstInvoiceIT extends AbstractProviderIntegrationTest {
         transactions.executeWithoutResult(tx -> events.publishEvent(again));
         // A late failure for the paid invoice changes nothing either.
         transactions.executeWithoutResult(tx -> events.publishEvent(new PaymentFailed(UUID.randomUUID(),
-                clock.instant(), account, invoice.paymentReference(), invoice.amount(), FailureReason.HARD)));
+                clock.instant(), account, invoice.paymentReference(), invoice.amount(), FailureReason.HARD, 1L)));
 
         await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(3)).until(() -> {
             List<InvoiceView> all = invoicing.invoicesFor(account);
@@ -126,7 +126,7 @@ class FirstInvoiceIT extends AbstractProviderIntegrationTest {
         String reference = "NOT-AN-INVOICE-" + UUID.randomUUID();
 
         transactions.executeWithoutResult(tx -> events.publishEvent(new PaymentSucceeded(UUID.randomUUID(),
-                clock.instant(), UUID.randomUUID(), reference, Money.of(100, "USD"), "ch_x")));
+                clock.instant(), UUID.randomUUID(), reference, Money.of(100, "USD"), "ch_x", 1L)));
 
         // The listener completed its publication without error.
         await().atMost(Duration.ofSeconds(5)).until(() -> incompletePublications(reference) == 0

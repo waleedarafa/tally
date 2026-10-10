@@ -10,5 +10,7 @@ public record InvoicePaid(
         Instant occurredAt,
         UUID accountId,
         UUID invoiceId,
-        String paymentReference) implements DomainEvent {
+        String paymentReference,
+        /** The aggregate's version: the sequence number (ADR-016). Null if published before Slice 1R PR-7. */
+        Long sequence) implements DomainEvent {
 }

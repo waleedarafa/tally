@@ -120,15 +120,16 @@ class CollectionWorker implements QueueHandler {
         switch (result) {
             case PaymentGateway.Charged charged -> {
                 attempt.succeeded(charged.chargeId(), clock.instant());
+                Long sequence = requests.settle(attempt);
                 events.publishEvent(new PaymentSucceeded(UUID.randomUUID(), clock.instant(), attempt.accountId(),
-                        attempt.reference(), attempt.amount(), charged.chargeId()));
+                        attempt.reference(), attempt.amount(), charged.chargeId(), sequence));
             }
             case PaymentGateway.Declined declined -> {
                 attempt.declined(declined.reason(), clock.instant());
+                Long sequence = requests.settle(attempt);
                 events.publishEvent(new PaymentFailed(UUID.randomUUID(), clock.instant(), attempt.accountId(),
-                        attempt.reference(), attempt.amount(), declined.reason()));
+                        attempt.reference(), attempt.amount(), declined.reason(), sequence));
             }
         }
-        requests.settle(attempt);
     }
 }

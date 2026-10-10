@@ -61,10 +61,10 @@ class InvoiceIssuer {
             return Optional.empty();
         }
         events.publishEvent(new InvoiceIssued(UUID.randomUUID(), clock.instant(), invoice.accountId(), invoice.id(),
-                invoice.paymentReference(), invoice.amount()));
+                invoice.paymentReference(), invoice.amount(), Invoice.ISSUED_VERSION));
         if (invoice.status() == InvoiceStatus.PAID) {
             events.publishEvent(new InvoicePaid(UUID.randomUUID(), clock.instant(), invoice.accountId(), invoice.id(),
-                    invoice.paymentReference()));
+                    invoice.paymentReference(), invoice.version()));
         }
         return Optional.of(invoice);
     }

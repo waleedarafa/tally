@@ -51,13 +51,18 @@ interface JpaInvoices extends JpaRepository<Invoice, UUID>, Invoices {
      * serialises them; the second then meets the committed row on the ID, and adds nothing (rule 7, rule 11).
      */
     @Override
+    default void update(Invoice invoice) {
+        saveAndFlush(invoice);
+    }
+
+    @Override
     default boolean addIfAbsent(Invoice invoice) {
         lockInvoiceId(invoice.id().toString());
         boolean inserted = insertRow(invoice.id(), invoice.accountId(), invoice.subscriptionId(), invoice.planId(),
                 invoice.status().name(), invoice.amount().minorUnits(), invoice.amount().currency().getCurrencyCode(),
                 invoice.periodStart(), invoice.periodEnd(), invoice.paymentReference(), invoice.issuedAt(),
                 invoice.billedFor(), invoice.offerVersion(), new PricingReasonJson().convertToDatabaseColumn(invoice.quoteReason()),
-                invoice.periodNumber(), invoice.paidAt()) == 1;
+                invoice.periodNumber(), invoice.paidAt(), invoice.version()) == 1;
         if (inserted) {
             // Same transaction as the invoice row: both commit, or neither does.
             List<InvoiceLine> lines = invoice.lines();
@@ -73,15 +78,15 @@ interface JpaInvoices extends JpaRepository<Invoice, UUID>, Invoices {
     @Query(nativeQuery = true, value = """
             INSERT INTO invoicing.invoice (id, account_id, subscription_id, plan_id, status, amount_minor, currency,
                                            period_start, period_end, payment_reference, issued_at, billed_for,
-                                           offer_version, quote_reason, period_number, paid_at)
+                                           offer_version, quote_reason, period_number, paid_at, version)
             VALUES (:id, :accountId, :subscriptionId, :planId, :status, :amountMinor, :currency,
                     :periodStart, :periodEnd, :paymentReference, :issuedAt, :billedFor,
-                    :offerVersion, CAST(:quoteReason AS jsonb), :periodNumber, :paidAt)
+                    :offerVersion, CAST(:quoteReason AS jsonb), :periodNumber, :paidAt, :version)
             ON CONFLICT (id) DO NOTHING
             """)
     int insertRow(UUID id, UUID accountId, UUID subscriptionId, String planId, String status, long amountMinor,
             String currency, LocalDate periodStart, LocalDate periodEnd, String paymentReference, Instant issuedAt,
-            Instant billedFor, Integer offerVersion, String quoteReason, Integer periodNumber, Instant paidAt);
+            Instant billedFor, Integer offerVersion, String quoteReason, Integer periodNumber, Instant paidAt, long version);
 
     /** Held until the transaction ends; serialises concurrent inserts of the same invoice. */
     @Query(nativeQuery = true, value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtextextended(:invoiceId, 0))) held")

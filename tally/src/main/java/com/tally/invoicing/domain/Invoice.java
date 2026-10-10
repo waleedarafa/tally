@@ -86,9 +86,13 @@ public class Invoice {
     @Column(name = "quote_reason", columnDefinition = "jsonb", insertable = false, updatable = false)
     private PricingReason quoteReason;
 
+    /** The version an invoice is issued at: the sequence InvoiceIssued carries (ADR-016). */
+    public static final long ISSUED_VERSION = 1;
+
     /**
      * Optimistic lock. A listener may run twice at the same time (Spike A): without it, two concurrent
      * deliveries of one PaymentSucceeded could both mark the invoice paid and both publish InvoicePaid.
+     * Also the sequence its events carry (ADR-016).
      */
     @Version
     private long version;
@@ -133,9 +137,12 @@ public class Invoice {
         i.paymentReference = "INV-" + i.id;
         i.issuedAt = now;
         i.billedFor = billedFor;
+        i.version = ISSUED_VERSION;
         if (amount.minorUnits() == 0) {
+            // Issued and paid in one insert: two changes, so InvoiceIssued and InvoicePaid stay in order.
             i.status = InvoiceStatus.PAID;
             i.paidAt = now;
+            i.version = ISSUED_VERSION + 1;
         }
         return i;
     }
@@ -198,6 +205,11 @@ public class Invoice {
 
     public Integer periodNumber() {
         return periodNumber;
+    }
+
+    /** After {@link Invoices#update}, the version the last change committed. */
+    public long version() {
+        return version;
     }
 
     public Instant paidAt() {

@@ -18,6 +18,12 @@ public interface Invoices {
 
     Optional<Invoice> forPaymentReference(String paymentReference);
 
+    /**
+     * Writes the invoice's changes now, so its version is the one they commit (the sequence of the event
+     * that reports them, ADR-016), and a concurrent change fails here, before anything is published.
+     */
+    void update(Invoice invoice);
+
     /** Oldest period first. */
     List<Invoice> ofAccount(UUID accountId);
 

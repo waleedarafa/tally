@@ -20,8 +20,15 @@ class CollectionRequestSettlement {
         this.clock = clock;
     }
 
-    void settle(PaymentAttempt attempt) {
-        attempt.requestId().flatMap(requests::find)
-                .ifPresent(request -> request.settle(attempt.state(), clock.instant()));
+    /**
+     * Returns the request's version after the change: the sequence of the event that reports the attempt's
+     * outcome (ADR-016), so call it before publishing. Null for an attempt from before FR-041, with no request.
+     */
+    Long settle(PaymentAttempt attempt) {
+        return attempt.requestId().flatMap(requests::find).map(request -> {
+            request.settle(attempt.state(), clock.instant());
+            requests.update(request);
+            return request.version();
+        }).orElse(null);
     }
 }

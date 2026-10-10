@@ -16,4 +16,13 @@ public interface DomainEvent {
     Instant occurredAt();
 
     UUID accountId();
+
+    /**
+     * The aggregate's version after the change this event reports: its sequence number (ADR-016). A
+     * consumer can order the events of one aggregate by it, and tell a stale one from a newer one.
+     * Versions may skip numbers: not every change publishes an event. Null in an event published before
+     * Slice 1R PR-7, which had no sequence: a boxed type, because Jackson 3 refuses a missing primitive
+     * ({@code FAIL_ON_NULL_FOR_PRIMITIVES} is on by default), so a primitive would not be an added field.
+     */
+    Long sequence();
 }

@@ -32,4 +32,10 @@ public record SubscriptionChanged(
             int version, SubscriptionChangeType type) {
         this(eventId, occurredAt, accountId, subscriptionId, planId, version, type, null, null, null, null);
     }
+
+    /** {@code version} has carried the aggregate's version since the first run: it is the sequence. */
+    @Override
+    public Long sequence() {
+        return (long) version;
+    }
 }
