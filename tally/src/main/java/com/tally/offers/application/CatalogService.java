@@ -1,13 +1,13 @@
-package com.tally.catalog.application;
+package com.tally.offers.application;
 
 import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
 import com.tally.account.UnknownAccountException;
-import com.tally.catalog.BillingPeriod;
-import com.tally.catalog.CatalogApi;
-import com.tally.catalog.PriceQuote;
-import com.tally.catalog.UnknownPlanException;
-import com.tally.catalog.domain.PriceBook;
+import com.tally.offers.BillingPeriod;
+import com.tally.offers.CatalogApi;
+import com.tally.offers.PriceQuote;
+import com.tally.offers.UnknownPlanException;
+import com.tally.offers.domain.PriceBook;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 

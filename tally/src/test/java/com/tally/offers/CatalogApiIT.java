@@ -1,4 +1,4 @@
-package com.tally.catalog;
+package com.tally.offers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

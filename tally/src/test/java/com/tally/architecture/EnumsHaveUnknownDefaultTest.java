@@ -34,7 +34,7 @@ class EnumsHaveUnknownDefaultTest {
         Set<Class<?>> enums = crossModuleOrEventEnums();
         // The list this rule covers, so a new enum shows up in review. Update it when one is added.
         assertThat(enums).extracting(Class::getName).containsExactlyInAnyOrder(
-                "com.tally.catalog.BillingPeriod",
+                "com.tally.offers.BillingPeriod",
                 "com.tally.invoicing.InvoiceStatus",
                 "com.tally.payment.AttemptState",
                 "com.tally.payment.FailureReason",

@@ -1,4 +1,4 @@
-package com.tally.catalog;
+package com.tally.offers;
 
 public class UnknownPlanException extends RuntimeException {
 

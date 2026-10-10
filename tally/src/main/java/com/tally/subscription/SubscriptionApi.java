@@ -10,7 +10,7 @@ public interface SubscriptionApi {
      * Starts a subscription and publishes {@link SubscriptionChanged} of type STARTED.
      *
      * @throws com.tally.account.UnknownAccountException if there is no such account
-     * @throws com.tally.catalog.UnknownPlanException if the plan cannot be sold to the account
+     * @throws com.tally.offers.UnknownPlanException if the plan cannot be sold to the account
      * @throws AlreadySubscribedException if the account already has a subscription (one per account in slice 1)
      */
     SubscriptionView subscribe(UUID accountId, String planId);

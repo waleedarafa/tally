@@ -5,9 +5,9 @@
 shared:
 platform: shared
 account: shared, platform
-catalog: shared, platform, account
-subscription: shared, platform, account, catalog
-invoicing: shared, platform, account, catalog, subscription, payment
-checkout: account, catalog, subscription, invoicing, payment
+offers: shared, platform, account
+subscription: shared, platform, account, offers
+invoicing: shared, platform, account, offers, subscription, payment
+checkout: account, offers, subscription, invoicing, payment
 payment: shared, platform
 entitlement: shared, platform, subscription, payment

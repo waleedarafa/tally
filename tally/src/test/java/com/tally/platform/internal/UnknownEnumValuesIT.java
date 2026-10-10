@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.AbstractIntegrationTest;
-import com.tally.catalog.BillingPeriod;
+import com.tally.offers.BillingPeriod;
 import com.tally.invoicing.InvoiceStatus;
 import com.tally.payment.AttemptState;
 import com.tally.payment.FailureReason;

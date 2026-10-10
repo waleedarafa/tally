@@ -1,6 +1,6 @@
-package com.tally.catalog.domain;
+package com.tally.offers.domain;
 
-import com.tally.catalog.BillingPeriod;
+import com.tally.offers.BillingPeriod;
 import com.tally.shared.Money;
 import java.util.Currency;
 import java.util.Optional;
