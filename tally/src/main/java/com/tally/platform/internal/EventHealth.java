@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
  *   <li>{@code tally.events.oldest_incomplete_age_seconds}: age of the oldest of them; FR-022 alerts
  *       above 15 minutes</li>
  * </ul>
+ * {@link EventResubmission} adds {@code tally.events.unreadable}: publications its last run skipped
+ * because their event could not be read (ADR-016, AT-17).
  * The registry dates publications with the injected clock (Spike A), so ages use it too.
  */
 @Component

@@ -78,7 +78,7 @@ class ConcurrentDeliveryIT extends AbstractIntegrationTest {
         for (int round = 0; round < 20; round++) {
             String reference = pendingInvoice();
             PaymentSucceeded succeeded = new PaymentSucceeded(UUID.randomUUID(), clock.instant(), UUID.randomUUID(),
-                    reference, Money.of(999, "USD"), "ch_" + round);
+                    reference, Money.of(999, "USD"), "ch_" + round, 1L);
             CyclicBarrier together = new CyclicBarrier(2);
             Thread a = Thread.ofPlatform().start(() -> deliver(together, succeeded));
             Thread b = Thread.ofPlatform().start(() -> deliver(together, succeeded));

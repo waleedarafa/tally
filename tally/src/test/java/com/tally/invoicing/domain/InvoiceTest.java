@@ -60,4 +60,19 @@ class InvoiceTest {
                 .isEqualTo(Invoice.idOf(subscription, 2))
                 .isNotEqualTo(Invoice.idOf(subscription, 3));
     }
+
+    /**
+     * ADR-016: the version is the sequence the invoice's events carry. Issued at 1; a zero invoice is
+     * issued and paid in one insert, at 2, so InvoiceIssued (1) still comes before InvoicePaid (2).
+     */
+    @Test
+    void anInvoiceIsIssuedAtVersionOneAndAZeroInvoiceIsAlsoPaidAtTwo() {
+        Invoice due = issue(UUID.randomUUID(), 1, List.of(InvoiceLine.of("Price", Money.of(999, "USD"))));
+        Invoice zero = issue(UUID.randomUUID(), 1, List.of(InvoiceLine.of("Price", Money.of(999, "USD")),
+                InvoiceLine.of("Discount", Money.of(-999, "USD"))));
+
+        assertThat(due.version()).isEqualTo(Invoice.ISSUED_VERSION).isEqualTo(1);
+        assertThat(zero.status()).isEqualTo(InvoiceStatus.PAID);
+        assertThat(zero.version()).isEqualTo(2);
+    }
 }

@@ -18,4 +18,10 @@ public interface CollectionRequests {
     Optional<CollectionRequest> forReference(String reference);
 
     Optional<CollectionRequest> find(UUID id);
+
+    /**
+     * Writes the request's changes now, so its version is the one they commit: the sequence of the event
+     * that reports them (ADR-016).
+     */
+    void update(CollectionRequest request);
 }

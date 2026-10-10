@@ -60,7 +60,7 @@ class UnknownEnumValuesIT extends AbstractIntegrationTest {
                 UUID.randomUUID(), account, UUID.randomUUID(), LocalDate.parse("2026-01-15"),
                 LocalDate.parse("2026-02-15"), reference, earlier.atOffset(ZoneOffset.UTC));
         String failed = json.writeValueAsString(new PaymentFailed(UUID.randomUUID(), earlier, account, reference,
-                Money.of(999, "USD"), FailureReason.HARD)).replace("\"HARD\"", "\"AUTHENTICATION_REQUIRED\"");
+                Money.of(999, "USD"), FailureReason.HARD, 1L)).replace("\"HARD\"", "\"AUTHENTICATION_REQUIRED\"");
         UUID failedPublication = store(PaymentFailed.class, failed,
                 "com.tally.invoicing.application.InvoicingListeners.on(com.tally.payment.PaymentFailed)", earlier);
 

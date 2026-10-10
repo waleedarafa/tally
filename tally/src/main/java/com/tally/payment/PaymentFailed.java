@@ -12,5 +12,7 @@ public record PaymentFailed(
         UUID accountId,
         String reference,
         Money amount,
-        FailureReason reason) implements DomainEvent {
+        FailureReason reason,
+        /** The aggregate's version: the sequence number (ADR-016). Null if published before Slice 1R PR-7. */
+        Long sequence) implements DomainEvent {
 }

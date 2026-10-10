@@ -134,13 +134,15 @@ class Reconciliation implements PeriodicJob {
         if (charged.isPresent()) {
             AttemptState was = attempt.resolvedCharged(charged.get(), clock.instant());
             corrected(was, AttemptState.SUCCEEDED, attempt);
+            Long sequence = requests.settle(attempt);
             events.publishEvent(new PaymentSucceeded(UUID.randomUUID(), clock.instant(), attempt.accountId(),
-                    attempt.reference(), attempt.amount(), charged.get()));
+                    attempt.reference(), attempt.amount(), charged.get(), sequence));
         } else if (attempt.state() == AttemptState.UNKNOWN && declined.isPresent()) {
             attempt.resolvedDeclined(declined.get(), clock.instant());
             corrected(AttemptState.UNKNOWN, AttemptState.DECLINED, attempt);
+            Long sequence = requests.settle(attempt);
             events.publishEvent(new PaymentFailed(UUID.randomUUID(), clock.instant(), attempt.accountId(),
-                    attempt.reference(), attempt.amount(), declined.get()));
+                    attempt.reference(), attempt.amount(), declined.get(), sequence));
         } else if (attempt.state() == AttemptState.UNKNOWN && attempt.noChargeIsCertain(
                 properties.provider().lookupConsistent(),
                 properties.provider().callTimeout().plus(properties.provider().lookupDelay()), clock.instant())) {
@@ -149,11 +151,10 @@ class Reconciliation implements PeriodicJob {
             corrected(AttemptState.UNKNOWN, AttemptState.TECHNICAL_FAILURE, attempt);
             requests.settle(attempt);
             worker.retry(attempt, clock.instant());
-            return;
         } else {
             attempt.checkedWithoutChange(clock.instant());
+            requests.settle(attempt);
         }
-        requests.settle(attempt);
     }
 
     private void corrected(AttemptState from, AttemptState to, PaymentAttempt attempt) {

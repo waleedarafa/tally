@@ -49,7 +49,10 @@ public class CollectionRequest {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    /** The Payment aggregate's version: the sequence its events will carry (ADR-016, Slice 1R PR-7). */
+    /**
+     * The Payment aggregate's version: the sequence its events carry (ADR-016). 1 when requested; each
+     * change of outcome adds one.
+     */
     @Version
     @Column(nullable = false)
     private long version;
@@ -69,6 +72,10 @@ public class CollectionRequest {
             outcome = next;
             updatedAt = now;
         }
+    }
+
+    public long version() {
+        return version;
     }
 
     public UUID id() {

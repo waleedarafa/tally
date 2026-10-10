@@ -28,13 +28,19 @@ interface JpaCollectionRequests extends JpaRepository<CollectionRequest, UUID>, 
         return findById(id);
     }
 
+    @Override
+    default void update(CollectionRequest request) {
+        saveAndFlush(request);
+    }
+
     Optional<CollectionRequest> findByReference(String reference);
 
     @Modifying
     @Query(nativeQuery = true, value = """
             INSERT INTO payment.collection_request
-                (id, reference, account_id, amount_minor, currency, payment_token, outcome, created_at, updated_at)
-            VALUES (:id, :reference, :accountId, :amountMinor, :currency, :paymentToken, 'OPEN', :now, :now)
+                (id, reference, account_id, amount_minor, currency, payment_token, outcome, created_at, updated_at,
+                 version)
+            VALUES (:id, :reference, :accountId, :amountMinor, :currency, :paymentToken, 'OPEN', :now, :now, 1)
             ON CONFLICT ON CONSTRAINT collection_request_one_per_reference DO NOTHING
             """)
     int insertIfAbsent(UUID id, String reference, UUID accountId, long amountMinor, String currency,

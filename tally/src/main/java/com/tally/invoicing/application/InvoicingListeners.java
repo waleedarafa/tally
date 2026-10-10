@@ -90,8 +90,9 @@ class InvoicingListeners {
     void on(PaymentSucceeded succeeded) {
         invoices.forPaymentReference(succeeded.reference()).ifPresentOrElse(invoice -> {
             if (invoice.paid(clock.instant())) {
+                invoices.update(invoice);
                 events.publishEvent(new InvoicePaid(UUID.randomUUID(), clock.instant(), invoice.accountId(),
-                        invoice.id(), invoice.paymentReference()));
+                        invoice.id(), invoice.paymentReference(), invoice.version()));
             }
         }, () -> unknownReference(succeeded.reference()));
     }

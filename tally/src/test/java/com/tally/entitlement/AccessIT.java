@@ -42,7 +42,7 @@ class AccessIT {
 
         PaymentSucceeded paid(UUID account) {
             return new PaymentSucceeded(UUID.randomUUID(), clock.instant(), account, "INV-x", Money.of(999, "USD"),
-                    "ch_x");
+                    "ch_x", 1L);
         }
     }
 

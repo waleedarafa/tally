@@ -69,7 +69,7 @@ class DuplicateCollectionRequestIT extends AbstractProviderIntegrationTest {
 
     InvoiceIssued issued(UUID account, String reference) {
         return new InvoiceIssued(UUID.randomUUID(), clock.instant(), account, UUID.randomUUID(), reference,
-                Money.of(999, "USD"));
+                Money.of(999, "USD"), 1L);
     }
 
     long count(String table, String reference) {
