@@ -8,8 +8,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Starts a {@link QueuePoller} for every registered queue once the application is up, and stops
- * them on shutdown. The only place that owns threads for background work (ADR-027): there is
- * no {@code @Scheduled} anywhere (ADR-017). Each poller and reaper is a job with a health signal.
+ * them on shutdown. The only place that owns threads for background work (FR-027): there is
+ * no {@code @Scheduled} anywhere (FR-017). Each poller and reaper is a job with a health signal.
  */
 @Component
 class QueueRuntime implements SmartLifecycle {

@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 /**
  * Deletes finished infrastructure rows once they are older than {@code tally.retention.keep}
  * (slice 1 report Q5). A periodic job on the platform's queue, so one instance runs it at a time
- * (ADR-017), with the usual job health (ADR-023): {@code tally.job.*{job="retention"}}, whose
+ * (FR-017), with the usual job health (FR-023): {@code tally.job.*{job="retention"}}, whose
  * waiting work is the number of rows due for deletion.
  * <ul>
  *   <li>Queue items with status {@code DONE}, in every registered queue, claimed before the cutoff.
@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
  *       it finished. {@code READY}, {@code IN_PROCESSING} and {@code FAILED} items are never
  *       deleted; failed items wait for a person (D12). Periodic job rows never become {@code DONE}.</li>
  *   <li>Completed event publications, through Spring Modulith's {@link CompletedEventPublications}.
- *       Incomplete publications are never deleted; ADR-022's resubmission owns them.</li>
+ *       Incomplete publications are never deleted; FR-022's resubmission owns them.</li>
  * </ul>
  */
 @Component

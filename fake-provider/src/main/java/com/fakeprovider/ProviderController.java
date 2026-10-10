@@ -43,7 +43,7 @@ class ProviderController {
         this.ledger = ledger;
     }
 
-    /** Simulates the hosted card form: the card stays with the provider, Tally gets a token (ADR-015). */
+    /** Simulates the hosted card form: the card stays with the provider, Tally gets a token (FR-015). */
     @PostMapping("/tokens")
     Map<String, String> token() {
         return Map.of("token", ledger.issueToken());

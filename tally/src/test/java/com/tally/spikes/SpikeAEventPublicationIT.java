@@ -25,10 +25,10 @@ import spike.modulith.SpikeListener;
 import spike.modulith.SpikeListener.Behaviour;
 
 /**
- * Spike A (brief section 9, ADR-022): what does Spring Modulith 2.1.1 really do with event
+ * Spike A (brief section 9, FR-022): what does Spring Modulith 2.1.1 really do with event
  * publications? Each experiment starts and stops real application contexts on the shared test
  * database, so "crash" and "restart" are separate application instances. Prints its evidence with
- * the prefix SPIKE-A, and asserts the behaviour observed, so it stays a permanent test (ADR-022's
+ * the prefix SPIKE-A, and asserts the behaviour observed, so it stays a permanent test (FR-022's
  * compliance): a Modulith upgrade that changes it fails the build. Findings: docs/briefs/slice-1-spikes.md.
  */
 class SpikeAEventPublicationIT {

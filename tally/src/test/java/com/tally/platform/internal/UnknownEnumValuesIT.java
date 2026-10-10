@@ -81,7 +81,7 @@ class UnknownEnumValuesIT extends AbstractIntegrationTest {
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(jdbc.queryForList(
                 "SELECT id FROM event_publication WHERE completion_date IS NOT NULL AND id IN (?, ?, ?)", UUID.class,
                 failedPublication, invoicingPublication, entitlementPublication)).hasSize(3));
-        // An unknown failure reason is unresolved: the invoice still waits (ADR-018).
+        // An unknown failure reason is unresolved: the invoice still waits (FR-018).
         assertThat(jdbc.queryForObject("SELECT status FROM invoicing.invoice WHERE payment_reference = ?",
                 String.class, reference)).isEqualTo("PAYMENT_PENDING");
         // An unknown change type grants nothing and invoices nothing.

@@ -18,7 +18,7 @@ CREATE UNIQUE INDEX payment_attempt_one_open_per_reference
     ON payment.payment_attempt (reference) WHERE state IN ('PENDING', 'IN_FLIGHT', 'UNKNOWN');
 CREATE INDEX payment_attempt_by_reference ON payment.payment_attempt (reference, created_at);
 
--- Payment's durable queue of attempts to make (ADR-017). Shape documented on QueueDefinition.
+-- Payment's durable queue of attempts to make (FR-017). Shape documented on QueueDefinition.
 CREATE TABLE payment.collection_queue (
     id              BIGSERIAL    PRIMARY KEY,
     queue_key       TEXT         NOT NULL UNIQUE,

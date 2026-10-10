@@ -18,7 +18,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 /**
- * Anticorruption layer to the provider's HTTP API (ADR-014). Connect and read timeouts follow brief
+ * Anticorruption layer to the provider's HTTP API (FR-014). Connect and read timeouts follow brief
  * section 5. It tells apart failures where the provider certainly did not charge (429, 503, request
  * never sent) from those where it may have (read timeout, any other error): see {@link PaymentGateway}.
  */

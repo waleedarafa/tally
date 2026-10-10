@@ -17,7 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /**
  * Q5: finished queue items and completed event publications older than {@code tally.retention.keep}
  * (30 days) are deleted; nothing unfinished is. The job runs on the platform's queue and reports
- * its health like every job (ADR-017, ADR-023).
+ * its health like every job (FR-017, FR-023).
  */
 class RetentionIT extends AbstractIntegrationTest {
 

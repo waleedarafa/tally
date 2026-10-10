@@ -21,7 +21,7 @@ public class PaymentAttempt {
     @Id
     private UUID id;
 
-    /** The collection request this attempt belongs to (ADR-041). Empty only for rows of an older release. */
+    /** The collection request this attempt belongs to (FR-041). Empty only for rows of an older release. */
     @Column(name = "request_id")
     private UUID requestId;
 
@@ -94,7 +94,7 @@ public class PaymentAttempt {
         this.state = AttemptState.FAILED;
         this.failureReason = reason;
         this.updatedAt = now;
-        // A provider can report a failure for a charge that went through: re-checked for 48 hours (ADR-018).
+        // A provider can report a failure for a charge that went through: re-checked for 48 hours (FR-018).
         this.reconcileAt = ReconciliationSchedule.first(now);
     }
 
@@ -108,7 +108,7 @@ public class PaymentAttempt {
         this.updatedAt = now;
     }
 
-    /** The provider may or may not have charged. Never retried; reconciled (ADR-018). */
+    /** The provider may or may not have charged. Never retried; reconciled (FR-018). */
     public void unknown(Instant now) {
         requireInFlight();
         this.state = AttemptState.UNKNOWN;
@@ -116,7 +116,7 @@ public class PaymentAttempt {
         this.reconcileAt = ReconciliationSchedule.first(now);
     }
 
-    /** Reconciliation found the provider charged it (ADR-018). Returns the state it corrected. */
+    /** Reconciliation found the provider charged it (FR-018). Returns the state it corrected. */
     public AttemptState reconciledAsCharged(String chargeId, Instant now) {
         AttemptState was = requireReconcilable();
         this.state = AttemptState.SUCCEEDED;

@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * ADR-037: money queues are flagged in their registration, and their health metrics carry
+ * FR-037: money queues are flagged in their registration, and their health metrics carry
  * {@code money="true"} for the alert rules to select on (slice 2, step 0). The list is pinned, so a
  * new queue's money decision shows up in review.
  */

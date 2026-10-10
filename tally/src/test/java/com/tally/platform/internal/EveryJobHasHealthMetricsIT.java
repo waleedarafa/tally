@@ -15,7 +15,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * Fitness function FF-10b (ADR-023), the runtime half of FF-10: in the running application,
+ * Fitness function FF-10b (FR-023), the runtime half of FF-10: in the running application,
  * every background job has a {@code tally.job.last_success_age_seconds} metric, and every queue
  * has its queue metrics. Covers jobs the platform registers (pollers, reapers, periodic jobs)
  * and any {@link BackgroundJob} bean, so a job that runs outside the platform is caught too.
@@ -58,6 +58,6 @@ class EveryJobHasHealthMetricsIT extends AbstractIntegrationTest {
             }
         }
 
-        assertThat(missing).as("Every background job and queue reports health (ADR-023)").isEmpty();
+        assertThat(missing).as("Every background job and queue reports health (FR-023)").isEmpty();
     }
 }

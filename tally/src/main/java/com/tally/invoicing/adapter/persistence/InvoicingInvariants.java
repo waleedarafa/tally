@@ -6,14 +6,14 @@ import org.springframework.context.annotation.Configuration;
 import java.util.function.LongSupplier;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** Invoicing's business invariants (ADR-024), checked daily on its own data. */
+/** Invoicing's business invariants (FR-024), checked daily on its own data. */
 @Configuration(proxyBeanMethods = false)
 class InvoicingInvariants {
 
     static final String JOBS = "invoicing.jobs";
 
     /**
-     * D1, ADR-024: no account has two invoices for overlapping periods. The unique constraint already
+     * D1, FR-024: no account has two invoices for overlapping periods. The unique constraint already
      * stops two invoices on one billing date; this also catches overlaps from any other cause.
      */
     @Bean
@@ -25,7 +25,7 @@ class InvoicingInvariants {
                 """, Long.class));
     }
 
-    /** ADR-024: no zero or negative invoices. */
+    /** FR-024: no zero or negative invoices. */
     @Bean
     InvariantCheck nonPositiveInvoices(JdbcTemplate jdbc) {
         return check("invoicing.non-positive-invoices",

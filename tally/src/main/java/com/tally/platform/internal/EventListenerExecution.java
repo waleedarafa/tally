@@ -19,19 +19,19 @@ import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 /**
- * The platform owns the threads that run asynchronous event listeners (ADR-027; slice 1 report
+ * The platform owns the threads that run asynchronous event listeners (FR-027; slice 1 report
  * D13 and R3). Spring Modulith's {@code @ApplicationModuleListener} is {@code @Async}; the
  * {@link AsyncConfigurer} below hands every such listener to {@code eventListenerExecutor}. That
  * pool is the application's only {@code Executor} bean, so Spring Boot does not create its own.
  *
- * <p>Health (ADR-023), per instance:
+ * <p>Health (FR-023), per instance:
  * <ul>
  *   <li>{@code tally.events.listeners.active}: listeners running now</li>
  *   <li>{@code tally.events.listeners.queued}: listeners waiting for a thread (waiting work)</li>
  *   <li>{@code tally.events.listeners.threads}: threads in the pool</li>
  *   <li>{@code tally.events.listeners.completed}: listener runs finished, successful or not</li>
  *   <li>{@code tally.events.listeners.failed}: listener runs that threw; the publication stays
- *       incomplete and is resubmitted (ADR-022)</li>
+ *       incomplete and is resubmitted (FR-022)</li>
  *   <li>{@code tally.events.listeners.last_success_age_seconds}: since a listener last completed
  *       without throwing, or since start-up if none has</li>
  * </ul>
@@ -104,7 +104,7 @@ class EventListenerExecution {
                     FAILED.set(true);
                     failed.increment();
                     log.warn("Event listener {}.{} failed; its publication stays incomplete for resubmission"
-                            + " (ADR-022)", method.getDeclaringClass().getSimpleName(), method.getName(), error);
+                            + " (FR-022)", method.getDeclaringClass().getSimpleName(), method.getName(), error);
                 };
             }
         };

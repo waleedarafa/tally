@@ -9,7 +9,7 @@ import java.util.UUID;
 
 /**
  * Invoicing's own record of a subscription, built from Subscription's events: its anticorruption
- * layer (ADR-014). Holds the anchor day of the billing calendar (ADR-002).
+ * layer (FR-014). Holds the anchor day of the billing calendar (FR-002).
  */
 @Entity
 @Table(schema = "invoicing", name = "subscription_billing")

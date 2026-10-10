@@ -23,7 +23,7 @@ import spike.modulith.SpikeEvent;
 import spike.modulith.SpikeListener;
 import spike.modulith.SpikeListener.Behaviour;
 
-/** ADR-022: incomplete publications are resubmitted by a queue job, and monitored. */
+/** FR-022: incomplete publications are resubmitted by a queue job, and monitored. */
 @Import(SpikeConfiguration.class)
 @TestPropertySource(properties = {
         "tally.platform.polling-enabled=true",

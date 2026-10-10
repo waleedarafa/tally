@@ -18,7 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * ADR-028: Invoicing's SubscriptionChanged listener absorbs duplicate deliveries, at the same moment
+ * FR-028: Invoicing's SubscriptionChanged listener absorbs duplicate deliveries, at the same moment
  * or later. Every delivery completes (none fails, so none is resubmitted or alarms anyone), and the
  * subscription leaves one billing record, one first invoice and one scheduled renewal.
  */

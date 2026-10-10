@@ -54,7 +54,7 @@ class ArchitectureRulesTest {
             .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_JARS)
             .importPackages(ROOT);
 
-    /** ADR-001, ADR-003: modules refer to each other's aggregates by ID only. */
+    /** FR-001, FR-003: modules refer to each other's aggregates by ID only. */
     @Test
     void noJpaRelationsBetweenModules() {
         List<Class<? extends Annotation>> relations =
@@ -62,12 +62,12 @@ class ArchitectureRulesTest {
 
         ArchRule rule = classes()
                 .should(haveJpaRelationsOnlyWithinTheirModule(relations))
-                .because("modules refer to each other by ID only (ADR-003)");
+                .because("modules refer to each other by ID only (FR-003)");
 
         rule.check(CLASSES);
     }
 
-    /** D4, ADR-003: time comes from the injected Clock, so tests can move it. */
+    /** D4, FR-003: time comes from the injected Clock, so tests can move it. */
     @Test
     void noDirectReadsOfTheSystemClock() {
         ArchRule rule = noClasses()
@@ -80,25 +80,25 @@ class ArchitectureRulesTest {
         rule.check(CLASSES);
     }
 
-    /** ADR-017, ADR-027: scheduling belongs to the platform's queue pollers. */
+    /** FR-017, FR-027: scheduling belongs to the platform's queue pollers. */
     @Test
     void noSchedulingOutsidePlatform() {
         ArchRule scheduledMethods = noMethods()
                 .that().areDeclaredInClassesThat().resideOutsideOfPackage(PLATFORM)
                 .should().beAnnotatedWith(Scheduled.class)
                 .orShould().beAnnotatedWith(Schedules.class)
-                .because("scheduled work runs on the durable queues (ADR-017)");
+                .because("scheduled work runs on the durable queues (FR-017)");
 
         ArchRule enableScheduling = noClasses()
                 .that().resideOutsideOfPackage(PLATFORM)
                 .should().beAnnotatedWith(EnableScheduling.class)
-                .because("scheduled work runs on the durable queues (ADR-017)");
+                .because("scheduled work runs on the durable queues (FR-017)");
 
         scheduledMethods.check(CLASSES);
         enableScheduling.check(CLASSES);
     }
 
-    /** ADR-027: one place owns threads for background work. */
+    /** FR-027: one place owns threads for background work. */
     @Test
     void noThreadOrExecutorCreationOutsidePlatform() {
         ArchRule rule = noClasses()
@@ -106,23 +106,23 @@ class ArchitectureRulesTest {
                 .should().dependOnClassesThat().areAssignableTo(Executors.class)
                 .orShould().callConstructorWhere(createsAThreadOrExecutor())
                 .orShould().callMethodWhere(startsAThreadThroughThreadBuilders())
-                .because("only the platform creates threads for background work (ADR-027)");
+                .because("only the platform creates threads for background work (FR-027)");
 
         rule.check(CLASSES);
     }
 
-    /** ADR-014: Payment accepts an amount and an opaque reference, and knows nothing about invoices. */
+    /** FR-014: Payment accepts an amount and an opaque reference, and knows nothing about invoices. */
     @Test
     void paymentDoesNotDependOnInvoicing() {
         ArchRule rule = noClasses()
                 .that().resideInAPackage("com.tally.payment..")
                 .should().dependOnClassesThat().resideInAPackage("com.tally.invoicing..")
-                .because("payment knows nothing about invoices (ADR-014)");
+                .because("payment knows nothing about invoices (FR-014)");
 
         rule.check(CLASSES);
     }
 
-    /** ADR-003: the domain does not depend on adapters, nor on web technology. */
+    /** FR-003: the domain does not depend on adapters, nor on web technology. */
     @Test
     void domainDoesNotDependOnAdapters() {
         ArchRule rule = noClasses()
@@ -132,19 +132,19 @@ class ArchitectureRulesTest {
                         "org.springframework.web..",
                         "org.springframework.http..",
                         "jakarta.servlet..")
-                .because("domain packages do not depend on web or adapter packages (ADR-003)");
+                .because("domain packages do not depend on web or adapter packages (FR-003)");
 
         rule.check(CLASSES);
     }
 
-    /** ADR-023: every background job reports its last success and its waiting work. */
+    /** FR-023: every background job reports its last success and its waiting work. */
     @Test
     void everyBackgroundJobReportsHealth() {
         ArchRule rule = classes()
                 .that().implement(BackgroundJob.class)
                 .and().areNotInterfaces()
                 .should().implement(HealthSignal.class)
-                .because("every background job reports health (ADR-023)");
+                .because("every background job reports health (FR-023)");
 
         rule.check(CLASSES);
     }

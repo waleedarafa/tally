@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * POST /v1/subscriptions: checkout. Answers 201 with SUCCEEDED or FAILED when the first payment
  * finishes within the wait, otherwise 202 with PROCESSING; the client then polls
- * GET /v1/payments/{reference}/status (ADR-019).
+ * GET /v1/payments/{reference}/status (FR-019).
  */
 @RestController
 class CheckoutController {

@@ -6,7 +6,7 @@ import java.time.Clock;
 import org.springframework.stereotype.Component;
 
 /**
- * Keeps a collection request's outcome in step with its attempt (ADR-041). Called inside the
+ * Keeps a collection request's outcome in step with its attempt (FR-041). Called inside the
  * transaction that changes the attempt: the request and its attempts are one aggregate.
  */
 @Component

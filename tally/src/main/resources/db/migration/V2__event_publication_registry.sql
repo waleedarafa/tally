@@ -1,4 +1,4 @@
--- Spring Modulith's event publication registry (ADR-022), schema "v2" as shipped in
+-- Spring Modulith's event publication registry (FR-022), schema "v2" as shipped in
 -- spring-modulith-events-jdbc 2.1.1 (schemas/v2/schema-postgresql.sql). It belongs to no single
 -- module: every module's events are stored here with the transaction that published them.
 CREATE TABLE event_publication

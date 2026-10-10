@@ -1,5 +1,5 @@
 /**
- * Subscriptions: records business changes only (ADR-002).
+ * Subscriptions: records business changes only (FR-002).
  */
 @ApplicationModule(displayName = "Subscription", allowedDependencies = { "shared", "platform", "account", "catalog" })
 package com.tally.subscription;

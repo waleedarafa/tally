@@ -55,7 +55,7 @@ class SubscriptionService implements SubscriptionApi {
         }
         changes.save(new SubscriptionChange(subscription.id(), subscription.version(),
                 SubscriptionChangeType.STARTED, planId, subscription.startedAt()));
-        // Stored in the event publication registry in this transaction (ADR-022).
+        // Stored in the event publication registry in this transaction (FR-022).
         events.publishEvent(new SubscriptionChanged(UUID.randomUUID(), subscription.startedAt(), accountId,
                 subscription.id(), planId, subscription.version(), SubscriptionChangeType.STARTED));
         return new SubscriptionView(subscription.id(), accountId, planId, subscription.startedAt(),

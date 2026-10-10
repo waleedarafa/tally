@@ -17,7 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * ADR-024, report Q4: collected versus invoiced. A PAID invoice must match what Payment collected
+ * FR-024, report Q4: collected versus invoiced. A PAID invoice must match what Payment collected
  * for its reference, and an unpaid one must have nothing collected.
  */
 class InvoicedVersusCollectedIT extends AbstractIntegrationTest {

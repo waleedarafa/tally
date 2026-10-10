@@ -1,7 +1,7 @@
--- ADR-041: one collection request per reference. The request is never deleted, so its unique
--- constraint is Payment's permanent guard against a second charge for one reference (ADR-037).
--- Additive (ADR-025): payment_attempt.request_id stays nullable while instances of the previous
--- release, which do not set it, may still be running (ADR-007). A later release backfills again
+-- FR-041: one collection request per reference. The request is never deleted, so its unique
+-- constraint is Payment's permanent guard against a second charge for one reference (FR-037).
+-- Additive (FR-025): payment_attempt.request_id stays nullable while instances of the previous
+-- release, which do not set it, may still be running (FR-007). A later release backfills again
 -- and makes it NOT NULL.
 CREATE TABLE payment.collection_request (
     id            UUID         PRIMARY KEY,

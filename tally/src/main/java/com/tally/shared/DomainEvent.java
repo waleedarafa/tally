@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Envelope every Tally event carries (ADR-009). Implementations are pinned by name:
+ * Envelope every Tally event carries (FR-009). Implementations are pinned by name:
  * an event class is never renamed or moved, because Spring Modulith stores the class
  * name with each pending publication.
  */

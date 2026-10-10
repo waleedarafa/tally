@@ -6,7 +6,7 @@ import java.util.UUID;
 
 /**
  * A subscription changed. Thin: identifiers, version and type only (brief section 2).
- * Pinned by name (ADR-009): never rename or move this class; change it additively only.
+ * Pinned by name (FR-009): never rename or move this class; change it additively only.
  */
 public record SubscriptionChanged(
         UUID eventId,

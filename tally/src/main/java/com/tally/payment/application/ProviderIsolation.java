@@ -17,7 +17,7 @@ import java.time.Duration;
 import org.springframework.stereotype.Component;
 
 /**
- * Isolates Tally from the provider (brief section 5, ADR-005): a per-instance rate limit (the
+ * Isolates Tally from the provider (brief section 5, FR-005): a per-instance rate limit (the
  * provider's limit divided by the instance count) and a circuit breaker. The breaker is also the
  * payment queue's claim gate: while it is open, workers stop claiming. The worker pool is the
  * bulkhead. Resilience4j core modules, with the injected clock (D4); no threads of their own.

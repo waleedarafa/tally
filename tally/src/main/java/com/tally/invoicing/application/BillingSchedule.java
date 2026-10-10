@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * The billing schedule (ADR-002, ADR-017): one queue item per account and billing date, due at local
+ * The billing schedule (FR-002, FR-017): one queue item per account and billing date, due at local
  * midnight. The key is the D1 business key, so a billing date can be scheduled only once. Each
  * renewal issues its period's invoice and schedules the next billing date in one transaction.
  */
@@ -31,7 +31,7 @@ class BillingSchedule implements QueueHandler {
 
     private static final Logger log = LoggerFactory.getLogger(BillingSchedule.class);
 
-    // The permanent guard (ADR-037): one invoice per account and billing date. Re-running a billing item
+    // The permanent guard (FR-037): one invoice per account and billing date. Re-running a billing item
     // whose row retention deleted finds the invoice and issues nothing (D1).
     static final QueueDefinition DEFINITION = QueueDefinition.of("billing-schedule", "invoicing.billing_schedule",
             "invoicing.invoice_one_per_account_and_period").asMoneyQueue();

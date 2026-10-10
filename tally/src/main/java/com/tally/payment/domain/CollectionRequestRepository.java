@@ -10,7 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 public interface CollectionRequestRepository extends JpaRepository<CollectionRequest, UUID> {
 
     /**
-     * ADR-041: creates the request for {@code reference} unless one exists, atomically. A concurrent
+     * FR-041: creates the request for {@code reference} unless one exists, atomically. A concurrent
      * caller waits for the first insert to commit, then inserts nothing. Returns 1 if this call created it.
      */
     @Modifying

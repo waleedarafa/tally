@@ -14,7 +14,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.stereotype.Service;
 
 /**
- * Checkout (ADR-019): record the token, start the subscription, then wait briefly for the first
+ * Checkout (FR-019): record the token, start the subscription, then wait briefly for the first
  * payment's result. It lives in its own process module because it uses Account, Subscription,
  * Invoicing and Payment, which no business module may all depend on.
  * Not transactional: the subscription must commit so the event flow can run while checkout waits.

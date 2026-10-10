@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 /**
- * ADR-009: event classes never change name or package. Every implementation of
+ * FR-009: event classes never change name or package. Every implementation of
  * {@link DomainEvent} must appear in {@code architecture/pinned-events.txt}, and every pinned
  * name must still exist. A rename or move therefore fails the build on the missing name.
  */
@@ -34,10 +34,10 @@ class PinnedEventClassesTest {
         Set<String> pinned = pinnedEventClasses();
 
         assertThat(pinned)
-                .as("Pinned event classes that no longer exist. Event classes are never renamed or moved (ADR-009)")
+                .as("Pinned event classes that no longer exist. Event classes are never renamed or moved (FR-009)")
                 .isSubsetOf(actual);
         assertThat(actual)
-                .as("Event classes missing from architecture/pinned-events.txt. Pin every new event (ADR-009)")
+                .as("Event classes missing from architecture/pinned-events.txt. Pin every new event (FR-009)")
                 .isSubsetOf(pinned);
     }
 

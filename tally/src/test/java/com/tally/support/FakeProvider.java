@@ -15,7 +15,7 @@ import org.testcontainers.images.builder.ImageFromDockerfile;
 
 /**
  * The fake provider as a container, built from the jar the reactor built first, so Tally's calls
- * cross a real network (ADR-020). One container per test run.
+ * cross a real network (FR-020). One container per test run.
  */
 public final class FakeProvider {
 
@@ -43,7 +43,7 @@ public final class FakeProvider {
         return RestClient.create(baseUrl());
     }
 
-    /** A token, as the hosted card form would give the customer's browser (ADR-015). */
+    /** A token, as the hosted card form would give the customer's browser (FR-015). */
     public static String token() {
         return http().post().uri("/tokens").retrieve()
                 .body(new ParameterizedTypeReference<Map<String, String>>() { }).get("token");

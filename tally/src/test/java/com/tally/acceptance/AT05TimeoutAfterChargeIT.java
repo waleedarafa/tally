@@ -27,7 +27,7 @@ class AT05TimeoutAfterChargeIT extends AbstractReconcilingTest {
         InvoiceView invoice = firstInvoice(account);
         String reference = invoice.paymentReference();
 
-        // Attempt UNKNOWN; the invoice waits for the truth (ADR-018).
+        // Attempt UNKNOWN; the invoice waits for the truth (FR-018).
         awaitAttempt(reference, AttemptState.UNKNOWN, Duration.ofSeconds(15));
         FakeProvider.mode("NORMAL");
         assertThat(invoicing.invoicesFor(account).getFirst().status()).isEqualTo(InvoiceStatus.PAYMENT_PENDING);

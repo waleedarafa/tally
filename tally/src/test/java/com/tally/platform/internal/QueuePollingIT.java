@@ -24,14 +24,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
-/** Pollers and worker pools run queues in the background (ADR-017, ADR-027). */
+/** Pollers and worker pools run queues in the background (FR-017, FR-027). */
 @TestPropertySource(properties = {
         "tally.platform.polling-enabled=true",
         "tally.platform.poll-interval=50ms"
 })
 class QueuePollingIT extends AbstractIntegrationTest {
 
-    /** A unique constraint on a test business table: the permanent duplicate guard (ADR-037). */
+    /** A unique constraint on a test business table: the permanent duplicate guard (FR-037). */
     static final String GUARD = "platform_test.work_done_one_per_key";
 
     static final Set<String> handled = ConcurrentHashMap.newKeySet();

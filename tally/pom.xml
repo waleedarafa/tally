@@ -34,7 +34,7 @@
             <groupId>org.springframework.modulith</groupId>
             <artifactId>spring-modulith-starter-core</artifactId>
         </dependency>
-        <!-- Event publication registry on JDBC (ADR-022). Table created by Flyway (V2). -->
+        <!-- Event publication registry on JDBC (FR-022). Table created by Flyway (V2). -->
         <dependency>
             <groupId>org.springframework.modulith</groupId>
             <artifactId>spring-modulith-starter-jdbc</artifactId>

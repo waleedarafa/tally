@@ -7,7 +7,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
-/** A light domain model (ADR-003). Refers to the account and plan by identifier only. */
+/** A light domain model (FR-003). Refers to the account and plan by identifier only. */
 @Entity
 @Table(schema = "subscription", name = "subscription")
 public class Subscription {

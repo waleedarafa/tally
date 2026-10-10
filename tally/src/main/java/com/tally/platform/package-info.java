@@ -1,5 +1,5 @@
 /**
- * Queue and job infrastructure only, never business logic. Depends on no business module (ADR-027).
+ * Queue and job infrastructure only, never business logic. Depends on no business module (FR-027).
  */
 @ApplicationModule(displayName = "Platform", allowedDependencies = { "shared" })
 package com.tally.platform;

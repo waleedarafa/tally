@@ -9,10 +9,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Health of the event publication registry (ADR-022, brief section 4), read when scraped:
+ * Health of the event publication registry (FR-022, brief section 4), read when scraped:
  * <ul>
  *   <li>{@code tally.events.incomplete}: publications whose listener has not completed</li>
- *   <li>{@code tally.events.oldest_incomplete_age_seconds}: age of the oldest of them; ADR-022 alerts
+ *   <li>{@code tally.events.oldest_incomplete_age_seconds}: age of the oldest of them; FR-022 alerts
  *       above 15 minutes</li>
  * </ul>
  * The registry dates publications with the injected clock (Spike A), so ages use it too.

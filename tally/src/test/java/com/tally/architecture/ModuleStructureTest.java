@@ -8,7 +8,7 @@ import org.springframework.modulith.core.ApplicationModule;
 import org.springframework.modulith.core.ApplicationModules;
 
 /**
- * Spring Modulith verification (ADR-001, ADR-003, ADR-014, ADR-027): no cycles, no access to
+ * Spring Modulith verification (FR-001, FR-003, FR-014, FR-027): no cycles, no access to
  * another module's internal packages, and only the dependencies each module declares in its
  * {@code package-info.java}. This is also what keeps {@code platform} free of business modules.
  */

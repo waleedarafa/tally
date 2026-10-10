@@ -13,7 +13,7 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/** ADR-018: unknown outcomes are reconciled, never retried; recent failures are re-checked. Own context. */
+/** FR-018: unknown outcomes are reconciled, never retried; recent failures are re-checked. Own context. */
 class ReconciliationIT extends AbstractReconcilingTest {
 
 

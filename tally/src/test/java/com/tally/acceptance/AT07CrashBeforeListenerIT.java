@@ -28,7 +28,7 @@ import spike.modulith.SpikeListener;
 import spike.modulith.SpikeListener.Behaviour;
 
 /**
- * AT-7. Crash after the invoice commit, before the listener (D2, ADR-022). Pass when: collection is
+ * AT-7. Crash after the invoice commit, before the listener (D2, FR-022). Pass when: collection is
  * requested exactly once after recovery.
  *
  * <p>Two real Tally instances on one database. Instance A has a single async thread. Blocking it in

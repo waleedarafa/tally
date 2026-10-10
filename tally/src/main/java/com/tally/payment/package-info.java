@@ -1,5 +1,5 @@
 /**
- * Payment: accepts an amount and an opaque reference. Knows nothing about invoices (ADR-014).
+ * Payment: accepts an amount and an opaque reference. Knows nothing about invoices (FR-014).
  */
 @ApplicationModule(displayName = "Payment", allowedDependencies = { "shared", "platform" })
 package com.tally.payment;

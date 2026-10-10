@@ -19,10 +19,10 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** ADR-023 and brief section 4: every queue and job reports its health as metrics. */
+/** FR-023 and brief section 4: every queue and job reports its health as metrics. */
 class HealthMetricsIT extends AbstractIntegrationTest {
 
-    /** A unique constraint on a test business table: the permanent duplicate guard (ADR-037). */
+    /** A unique constraint on a test business table: the permanent duplicate guard (FR-037). */
     static final String GUARD = "platform_test.work_done_one_per_key";
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -127,7 +127,7 @@ class HealthMetricsIT extends AbstractIntegrationTest {
         assertThat(gauge("tally.job.overdue", "job", "test-health-job")).isZero();
 
         // The job stops running: its last success ages (D13). Its interval is 1 minute, so it is
-        // overdue after the 5-minute minimum (ADR-023), not after 2 minutes.
+        // overdue after the 5-minute minimum (FR-023), not after 2 minutes.
         clock.advance(Duration.ofMinutes(5));
         assertThat(gauge("tally.job.overdue", "job", "test-health-job")).isZero();
         clock.advance(Duration.ofMinutes(5));

@@ -8,7 +8,7 @@ import org.springframework.modulith.events.IncompleteEventPublications;
 import org.springframework.stereotype.Component;
 
 /**
- * Resubmits incomplete event publications (ADR-022). Spike A findings decide how:
+ * Resubmits incomplete event publications (FR-022). Spike A findings decide how:
  * <ul>
  *   <li>{@code resubmitIncompletePublicationsOlderThan}: the only API that also covers publications a
  *       crash left PUBLISHED or PROCESSING ({@code ResubmissionOptions} covers FAILED only);</li>

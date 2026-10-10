@@ -1,4 +1,4 @@
-# Image for the fake payment provider (ADR-020). Built from the jar that `./mvnw verify` produced.
+# Image for the fake payment provider (FR-020). Built from the jar that `./mvnw verify` produced.
 # Tally's integration tests build and start it with Testcontainers, so calls cross a real network.
 #   docker build -t fake-provider fake-provider/
 FROM eclipse-temurin:25-jre AS layers

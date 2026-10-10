@@ -24,10 +24,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** ADR-017: per-module queue tables, claimed with FOR UPDATE SKIP LOCKED, with a reaper. */
+/** FR-017: per-module queue tables, claimed with FOR UPDATE SKIP LOCKED, with a reaper. */
 class DurableQueueIT extends AbstractIntegrationTest {
 
-    /** A unique constraint on a test business table: the permanent duplicate guard (ADR-037). */
+    /** A unique constraint on a test business table: the permanent duplicate guard (FR-037). */
     static final String GUARD = "platform_test.work_done_one_per_key";
 
     static final QueueDefinition WORK = QueueDefinition.of("test-work", "platform_test.work_queue", GUARD);
@@ -200,7 +200,7 @@ class DurableQueueIT extends AbstractIntegrationTest {
 
         assertThatThrownBy(() -> transactions.executeWithoutResult(tx -> queue.processDue()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("ADR-005");
+                .hasMessageContaining("FR-005");
         assertThat(status("k")).isEqualTo("READY");
     }
 

@@ -22,7 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
-/** Renewals run from the billing schedule queue (ADR-002, ADR-017). Own context: it moves the clock. */
+/** Renewals run from the billing schedule queue (FR-002, FR-017). Own context: it moves the clock. */
 @TestPropertySource(properties = {
         "tally.platform.polling-enabled=true",
         "tally.platform.poll-interval=100ms",

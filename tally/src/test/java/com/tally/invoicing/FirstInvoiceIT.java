@@ -105,7 +105,7 @@ class FirstInvoiceIT extends AbstractProviderIntegrationTest {
         SubscriptionView subscription = subscriptions.subscribe(account, "BASIC");
         InvoiceView invoice = awaitInvoice(account, InvoiceStatus.PAID);
 
-        // The same fact delivered again, as a resubmission would (ADR-022).
+        // The same fact delivered again, as a resubmission would (FR-022).
         SubscriptionChanged again = new SubscriptionChanged(UUID.randomUUID(), subscription.startedAt(), account,
                 subscription.id(), "BASIC", 1, SubscriptionChangeType.STARTED);
         transactions.executeWithoutResult(tx -> events.publishEvent(again));
