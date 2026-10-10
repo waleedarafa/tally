@@ -65,7 +65,7 @@ class InvoicedVersusCollected implements InvariantCheck {
     @Transactional(readOnly = true)
     public long violations() {
         Instant now = clock.instant();
-        List<Invoice> checked = invoices.findByIssuedAtGreaterThanEqualAndIssuedAtLessThan(
+        List<Invoice> checked = invoices.issuedBetween(
                 now.minus(WINDOW), now.minus(SETTLE));
         Map<String, Money> collected = new HashMap<>();
         for (int i = 0; i < checked.size(); i += BATCH) {

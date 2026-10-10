@@ -59,7 +59,7 @@ class AT14InvoiceLinesEqualQuoteIT extends AbstractProviderIntegrationTest {
         await().atMost(Duration.ofSeconds(10)).until(() -> !invoicing.invoicesFor(account).isEmpty());
         InvoiceView invoice = invoicing.invoicesFor(account).getFirst();
 
-        PriceQuote quote = pricing.quote(new QuoteRequest(subscription.id(), account, "STANDARD",
+        PriceQuote quote = pricing.quote(new QuoteRequest(subscription.id(), account, "STANDARD", subscription.offerVersion(),
                 new Period(1, invoice.periodStart(), invoice.periodEnd())));
 
         System.out.println("AT-14 quote   " + quote);

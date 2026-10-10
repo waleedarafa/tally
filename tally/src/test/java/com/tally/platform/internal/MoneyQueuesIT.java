@@ -21,9 +21,9 @@ class MoneyQueuesIT extends AbstractIntegrationTest {
     MeterRegistry meters;
 
     @Test
-    void theBillingScheduleAndPaymentCollectionAreTheMoneyQueues() {
+    void theRenewalsAndPaymentCollectionAreTheMoneyQueues() {
         assertThat(queues.queues()).filteredOn(q -> q.definition().money()).extracting(JdbcDurableQueue::name)
-                .containsExactlyInAnyOrder("billing-schedule", "payment-collection");
+                .containsExactlyInAnyOrder("renewals", "payment-collection");
 
         for (JdbcDurableQueue queue : queues.queues()) {
             String money = String.valueOf(queue.definition().money());

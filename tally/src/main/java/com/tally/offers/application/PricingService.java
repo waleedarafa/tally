@@ -16,6 +16,7 @@ import com.tally.offers.domain.PricingRuleRegistry;
 import com.tally.shared.Money;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
@@ -40,7 +41,7 @@ class PricingService implements Pricing, Offers {
     public PriceQuote quote(QuoteRequest request) {
         AccountView account = account(request.accountId());
         String currency = account.currency().getCurrencyCode();
-        OfferVersion version = currentVersion(request.offerId())
+        OfferVersion version = catalogue.offer(request.offerId()).flatMap(o -> o.version(request.offerVersion()))
                 .orElseThrow(() -> new UnknownPlanException(request.offerId(), currency));
         Money price = version.terms().priceIn(account.currency())
                 .orElseThrow(() -> new UnknownPlanException(request.offerId(), currency));
@@ -51,8 +52,14 @@ class PricingService implements Pricing, Offers {
 
     @Override
     public boolean isOffered(String offerId, UUID accountId) {
+        return currentVersion(offerId, accountId).isPresent();
+    }
+
+    @Override
+    public OptionalInt currentVersion(String offerId, UUID accountId) {
         AccountView account = account(accountId);
-        return currentVersion(offerId).flatMap(v -> v.terms().priceIn(account.currency())).isPresent();
+        return currentVersion(offerId).filter(v -> v.terms().priceIn(account.currency()).isPresent())
+                .map(v -> OptionalInt.of(v.number())).orElse(OptionalInt.empty());
     }
 
     private AccountView account(UUID accountId) {

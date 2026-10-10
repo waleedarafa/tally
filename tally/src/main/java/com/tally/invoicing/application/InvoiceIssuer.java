@@ -7,6 +7,8 @@ import com.tally.offers.PriceQuote;
 import com.tally.offers.Pricing;
 import com.tally.offers.QuoteRequest;
 import com.tally.invoicing.InvoiceIssued;
+import com.tally.invoicing.InvoicePaid;
+import com.tally.invoicing.InvoiceStatus;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.Invoices;
 import java.time.Clock;
@@ -19,7 +21,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Issues one invoice per account and billing date (D1), and publishes InvoiceIssued with it. */
+/**
+ * Issues one invoice per subscription and period (I2, D1), and publishes InvoiceIssued with it. An
+ * invoice whose total is zero is paid at once: it also publishes InvoicePaid, and nothing is collected.
+ */
 @Component
 class InvoiceIssuer {
 
@@ -37,25 +42,30 @@ class InvoiceIssuer {
 
     /**
      * Issues the invoice for period {@code periodNumber}, {@code [periodStart, periodEnd)}, due at
-     * {@code billedFor}, with the lines of the offer's PriceQuote (I3; Invoicing applies no offer rule, R2). Empty if the account already has an invoice for that billing date. The
+     * {@code billedFor}, with the lines of the PriceQuote for the subscription's offer version (I3;
+     * Invoicing applies no offer rule, R2). Empty if the account already has an invoice for that billing date. The
      * insert is atomic on the unique constraint (account, period start), so a concurrent duplicate
      * waits, then issues nothing and does not fail (FR-028).
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    Optional<Invoice> issue(UUID accountId, UUID subscriptionId, String planId, int periodNumber,
+    Optional<Invoice> issue(UUID accountId, UUID subscriptionId, String planId, int offerVersion, int periodNumber,
             LocalDate periodStart, LocalDate periodEnd, Instant billedFor) {
-        PriceQuote quote = pricing.quote(new QuoteRequest(subscriptionId, accountId, planId,
+        PriceQuote quote = pricing.quote(new QuoteRequest(subscriptionId, accountId, planId, offerVersion,
                 new Period(periodNumber, periodStart, periodEnd)));
-        Invoice invoice = Invoice.issue(accountId, subscriptionId, planId,
+        Invoice invoice = Invoice.issue(accountId, subscriptionId, planId, periodNumber,
                 quote.lines().stream().map(line -> InvoiceLine.of(line.description(), line.amount())).toList(),
                 new PricingReason(quote.reason().offerId(), quote.reason().offerVersion(), quote.reason().kind(),
                         quote.reason().flags()),
                 periodStart, periodEnd, billedFor, clock.instant());
-        if (!invoices.insertIfAbsent(invoice)) {
+        if (!invoices.addIfAbsent(invoice)) {
             return Optional.empty();
         }
         events.publishEvent(new InvoiceIssued(UUID.randomUUID(), clock.instant(), invoice.accountId(), invoice.id(),
                 invoice.paymentReference(), invoice.amount()));
+        if (invoice.status() == InvoiceStatus.PAID) {
+            events.publishEvent(new InvoicePaid(UUID.randomUUID(), clock.instant(), invoice.accountId(), invoice.id(),
+                    invoice.paymentReference()));
+        }
         return Optional.of(invoice);
     }
 }

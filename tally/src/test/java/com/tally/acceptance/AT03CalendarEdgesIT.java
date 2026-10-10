@@ -82,7 +82,7 @@ class AT03CalendarEdgesIT extends AbstractProviderIntegrationTest {
     }
 
     Instant nextDue(List<UUID> accounts) {
-        return jdbc.queryForObject("SELECT min(due_at) FROM invoicing.billing_schedule"
+        return jdbc.queryForObject("SELECT min(due_at) FROM subscription.renewal"
                         + " WHERE status = 'READY' AND split_part(queue_key, ':', 1) = ANY (?::text[])",
                 OffsetDateTime.class,
                 (Object) accounts.stream().map(UUID::toString).toArray(String[]::new)).toInstant();
@@ -147,7 +147,7 @@ class AT03CalendarEdgesIT extends AbstractProviderIntegrationTest {
             assertThat(invoices).extracting(InvoiceView::periodStart).doesNotHaveDuplicates();
             invoices.forEach(i -> assertThat(FakeProvider.chargeCount(i.paymentReference())).isEqualTo(1));
         }
-        long finishedRowsLeft = jdbc.queryForObject("SELECT count(*) FROM invoicing.billing_schedule WHERE status = 'DONE'"
+        long finishedRowsLeft = jdbc.queryForObject("SELECT count(*) FROM subscription.renewal WHERE status = 'DONE'"
                 + " AND split_part(queue_key, ':', 1) = ANY (?::text[])", Long.class,
                 (Object) both.stream().map(UUID::toString).toArray(String[]::new));
         System.out.printf("AT-3: %d clock jumps, %d New York and %d Santiago invoices, %d finished billing rows"

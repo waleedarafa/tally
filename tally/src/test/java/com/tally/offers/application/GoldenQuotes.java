@@ -47,7 +47,7 @@ final class GoldenQuotes {
 
     /** O3: the same subscription, period and offer version give the same quote, every time. */
     PriceQuote quoteTwice(UUID account, String offer, Period period) {
-        QuoteRequest request = new QuoteRequest(SUBSCRIPTION, account, offer, period);
+        QuoteRequest request = new QuoteRequest(SUBSCRIPTION, account, offer, 1, period);
         PriceQuote first = pricing.quote(request);
         PriceQuote second = pricing.quote(request);
         assertThat(second).isEqualTo(first);

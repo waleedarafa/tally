@@ -41,7 +41,7 @@ class OffersApiIT extends AbstractIntegrationTest {
     void quotesEverySeededOfferAtItsFirstRunPrice(String offer, String currency, long minorUnits) {
         UUID subscription = UUID.randomUUID();
 
-        PriceQuote quote = pricing.quote(new QuoteRequest(subscription, account(currency), offer, FIRST));
+        PriceQuote quote = pricing.quote(new QuoteRequest(subscription, account(currency), offer, 1, FIRST));
 
         assertThat(quote.total()).isEqualTo(Money.of(minorUnits, currency));
         assertThat(quote.lines()).containsExactly(
@@ -56,11 +56,11 @@ class OffersApiIT extends AbstractIntegrationTest {
 
     @Test
     void refusesUnknownOffersCurrenciesAndAccounts() {
-        assertThatThrownBy(() -> pricing.quote(new QuoteRequest(UUID.randomUUID(), account("USD"), "GOLD", FIRST)))
+        assertThatThrownBy(() -> pricing.quote(new QuoteRequest(UUID.randomUUID(), account("USD"), "GOLD", 1, FIRST)))
                 .isInstanceOf(UnknownPlanException.class);
-        assertThatThrownBy(() -> pricing.quote(new QuoteRequest(UUID.randomUUID(), account("EUR"), "BASIC", FIRST)))
+        assertThatThrownBy(() -> pricing.quote(new QuoteRequest(UUID.randomUUID(), account("EUR"), "BASIC", 1, FIRST)))
                 .isInstanceOf(UnknownPlanException.class);
-        assertThatThrownBy(() -> pricing.quote(new QuoteRequest(UUID.randomUUID(), UUID.randomUUID(), "BASIC", FIRST)))
+        assertThatThrownBy(() -> pricing.quote(new QuoteRequest(UUID.randomUUID(), UUID.randomUUID(), "BASIC", 1, FIRST)))
                 .isInstanceOf(UnknownAccountException.class);
     }
 

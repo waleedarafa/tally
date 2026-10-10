@@ -15,6 +15,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -54,6 +55,10 @@ public class Invoice {
     @Column(name = "period_end", nullable = false)
     private LocalDate periodEnd;
 
+    /** The subscription's period this invoice bills (I2). Null only for an invoice issued before Slice 1R PR-5. */
+    @Column(name = "period_number")
+    private Integer periodNumber;
+
     @Column(name = "payment_reference", nullable = false)
     private String paymentReference;
 
@@ -92,12 +97,14 @@ public class Invoice {
     }
 
     /**
-     * Issues an invoice from a quote's amounts (design.md §7: takes amounts, never an offer). The amount is
-     * the sum of the lines, never rounded again (ADR-017).
+     * Issues the invoice for one period of a subscription, from a quote's amounts (design.md §7: takes
+     * amounts, never an offer). The amount is the sum of the lines, never rounded again (ADR-017). I2: the
+     * ID is derived from the subscription and period number, so there is one invoice per period. An
+     * invoice whose total is zero is paid when issued: there is nothing to collect.
      */
-    public static Invoice issue(UUID accountId, UUID subscriptionId, String planId, List<InvoiceLine> lines,
-            PricingReason quoteReason, LocalDate periodStart, LocalDate periodEnd, Instant billedFor,
-            Instant now) {
+    public static Invoice issue(UUID accountId, UUID subscriptionId, String planId, int periodNumber,
+            List<InvoiceLine> lines, PricingReason quoteReason, LocalDate periodStart, LocalDate periodEnd,
+            Instant billedFor, Instant now) {
         if (lines.isEmpty()) {
             throw new IllegalArgumentException("An invoice has at least one line");
         }
@@ -106,7 +113,8 @@ public class Invoice {
         i.lines = new ArrayList<>(lines);
         i.offerVersion = quoteReason.offerVersion();
         i.quoteReason = quoteReason;
-        i.id = UUID.randomUUID();
+        i.id = idOf(subscriptionId, periodNumber);
+        i.periodNumber = periodNumber;
         i.accountId = accountId;
         i.subscriptionId = subscriptionId;
         i.planId = planId;
@@ -119,7 +127,17 @@ public class Invoice {
         i.paymentReference = "INV-" + i.id;
         i.issuedAt = now;
         i.billedFor = billedFor;
+        if (amount.minorUnits() == 0) {
+            i.status = InvoiceStatus.PAID;
+            i.paidAt = now;
+        }
         return i;
+    }
+
+    /** I2: invoice ID = subscription + period number, as a name-based UUID. */
+    public static UUID idOf(UUID subscriptionId, int periodNumber) {
+        return UUID.nameUUIDFromBytes(("invoice:" + subscriptionId + ":" + periodNumber)
+                .getBytes(StandardCharsets.UTF_8));
     }
 
     /**
@@ -170,6 +188,14 @@ public class Invoice {
 
     public Integer offerVersion() {
         return offerVersion;
+    }
+
+    public Integer periodNumber() {
+        return periodNumber;
+    }
+
+    public Instant paidAt() {
+        return paidAt;
     }
 
     public PricingReason quoteReason() {

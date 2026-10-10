@@ -107,7 +107,8 @@ class FirstInvoiceIT extends AbstractProviderIntegrationTest {
 
         // The same fact delivered again, as a resubmission would (FR-022).
         SubscriptionChanged again = new SubscriptionChanged(UUID.randomUUID(), subscription.startedAt(), account,
-                subscription.id(), "BASIC", 1, SubscriptionChangeType.STARTED);
+                subscription.id(), "BASIC", 1, SubscriptionChangeType.STARTED, subscription.offerVersion(), 1,
+                invoice.periodStart(), invoice.periodEnd());
         transactions.executeWithoutResult(tx -> events.publishEvent(again));
         // A late failure for the paid invoice changes nothing either.
         transactions.executeWithoutResult(tx -> events.publishEvent(new PaymentFailed(UUID.randomUUID(),

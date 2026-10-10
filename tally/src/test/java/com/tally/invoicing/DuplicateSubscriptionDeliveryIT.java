@@ -8,6 +8,7 @@ import com.tally.account.AccountApi;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionChanged;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.UUID;
@@ -42,8 +43,9 @@ class DuplicateSubscriptionDeliveryIT extends AbstractIntegrationTest {
      * (a resubmission re-runs the same row) never produces.
      */
     SubscriptionChanged started(UUID account, UUID subscription) {
+        LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneId.of("UTC"));
         return new SubscriptionChanged(UUID.randomUUID(), clock.instant(), account, subscription, "BASIC", 1,
-                SubscriptionChangeType.STARTED);
+                SubscriptionChangeType.STARTED, 1, 1, today, today.plusMonths(1));
     }
 
     long count(String sql, Object... args) {
@@ -61,12 +63,10 @@ class DuplicateSubscriptionDeliveryIT extends AbstractIntegrationTest {
                 "%" + subscription + "%")).as("failed deliveries").isZero();
         assertThat(count("SELECT count(*) FROM event_publication WHERE serialized_event LIKE ?"
                 + " AND completion_date IS NULL", "%" + subscription + "%")).as("incomplete deliveries").isZero();
-        assertThat(count("SELECT count(*) FROM invoicing.subscription_billing WHERE subscription_id = ?", subscription))
-                .as("billing records").isEqualTo(1);
-        assertThat(count("SELECT count(*) FROM invoicing.invoice WHERE subscription_id = ?", subscription))
-                .as("first invoices").isEqualTo(1);
-        assertThat(count("SELECT count(*) FROM invoicing.billing_schedule WHERE queue_key LIKE ?", account + ":%"))
-                .as("scheduled renewals").isEqualTo(1);
+        // I2: the invoice ID is the subscription and period, so a duplicate adds nothing. Renewals are
+        // Subscription's since Slice 1R PR-5; Invoicing schedules nothing.
+        assertThat(count("SELECT count(*) FROM invoicing.invoice WHERE subscription_id = ? AND period_number = 1",
+                subscription)).as("first invoices").isEqualTo(1);
     }
 
     @Test
