@@ -152,10 +152,14 @@ public class PaymentAttempt {
         return a;
     }
 
-    /** The next try for the same request, after this one failed technically. */
+    /**
+     * The next try for the same request, with the next number and its own key: after a technical failure,
+     * or after a decline when Collections asks (Slice 1R PR-8).
+     */
     public PaymentAttempt retry(Instant now) {
-        if (state != AttemptState.TECHNICAL_FAILURE) {
-            throw new IllegalStateException("Attempt " + id + " is " + state + ": only a technical failure is retried");
+        if (state != AttemptState.TECHNICAL_FAILURE && state != AttemptState.DECLINED) {
+            throw new IllegalStateException("Attempt " + id + " is " + state
+                    + ": only a technical failure or a decline is retried");
         }
         PaymentAttempt next = requested(requestId, reference, accountId, amount(), paymentToken, now);
         next.number = number + 1;

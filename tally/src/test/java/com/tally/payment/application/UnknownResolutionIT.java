@@ -122,6 +122,29 @@ class UnknownResolutionIT extends AbstractReconcilingTest {
         assertThat(meters.get("tally.payment.unknown_past_key_window").gauge().value()).isGreaterThanOrEqualTo(1);
     }
 
+    /**
+     * (a) A decline found by reference decides only a first attempt: a retry's lookup also shows the decline
+     * of the attempt before it. Attempt 2 learns its own outcome by repeating with its own key.
+     */
+    @Test
+    void anEarlierAttemptsDeclineDoesNotDecideALaterAttempt() {
+        reference = "RES-" + UUID.randomUUID();
+        String token = FakeProvider.token();
+        FakeProvider.mode("DECLINE_HARD(100)");
+        FakeProvider.charge(token, 999, "USD", reference, reference + ":1");
+        FakeProvider.mode("NORMAL");
+        UUID second = UUID.randomUUID();
+        var now = clock.instant().atOffset(ZoneOffset.UTC);
+        jdbc.update("INSERT INTO payment.payment_attempt (id, reference, number, account_id, amount_minor, currency,"
+                + " payment_token, state, created_at, updated_at, sent_at, idempotency_key)"
+                + " VALUES (?, ?, 2, ?, 999, 'USD', ?, 'UNKNOWN', ?, ?, ?, ?)",
+                second, reference, UUID.randomUUID(), token, now, now, now.minusMinutes(10), reference + ":2");
+
+        check(second);
+
+        assertThat(stateOf(second)).isEqualTo("SUCCEEDED");
+    }
+
     /** (b) The repeat is refused (503): no answer yet, so the attempt stays UNKNOWN and is checked again later. */
     @Test
     void aRefusedRepeatLeavesTheAttemptUnknownForALaterCheck() {

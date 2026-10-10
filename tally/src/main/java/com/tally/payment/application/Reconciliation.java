@@ -2,8 +2,6 @@ package com.tally.payment.application;
 
 import com.tally.payment.AttemptState;
 import com.tally.payment.FailureReason;
-import com.tally.payment.PaymentFailed;
-import com.tally.payment.PaymentSucceeded;
 import com.tally.payment.domain.PaymentAttempt;
 import com.tally.payment.domain.PaymentAttempts;
 import com.tally.payment.domain.PaymentGateway;
@@ -17,10 +15,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -36,7 +32,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       a repeat with the attempt's key; (c) past it, never a repeat (proposed ADR-026). An UNKNOWN
  *       attempt is never retried as a new attempt: it is the same charge, resolved or left for a person.</li>
  * </ul>
- * Every correction increments {@code tally.payment.outcome_corrected{from,to}}. A periodic job: runs
+ * Every correction goes through {@link Corrections}. A periodic job: runs
  * on one instance at a time and reports its health (FR-023).
  */
 @Component
@@ -45,23 +41,18 @@ class Reconciliation implements PeriodicJob {
     private static final Logger log = LoggerFactory.getLogger(Reconciliation.class);
 
     private final PaymentAttempts attempts;
-    private final CollectionRequestSettlement requests;
+    private final Corrections corrections;
     private final PaymentGateway gateway;
-    private final ApplicationEventPublisher events;
     private final TransactionTemplate transactions;
-    private final MeterRegistry meters;
     private final PaymentProperties properties;
     private final Clock clock;
 
-    Reconciliation(PaymentAttempts attempts, CollectionRequestSettlement requests, PaymentGateway gateway,
-            ApplicationEventPublisher events, TransactionTemplate transactions, MeterRegistry meters,
-            PaymentProperties properties, Clock clock) {
+    Reconciliation(PaymentAttempts attempts, Corrections corrections, PaymentGateway gateway,
+            TransactionTemplate transactions, MeterRegistry meters, PaymentProperties properties, Clock clock) {
         this.attempts = attempts;
-        this.requests = requests;
+        this.corrections = corrections;
         this.gateway = gateway;
-        this.events = events;
         this.transactions = transactions;
-        this.meters = meters;
         this.properties = properties;
         this.clock = clock;
         Gauge.builder("tally.payment.unknown_past_key_window", attempts,
@@ -100,7 +91,7 @@ class Reconciliation implements PeriodicJob {
                 PaymentAttempt attempt = attempts.find(stale.id()).orElseThrow();
                 if (attempt.state() == AttemptState.SENT) {
                     attempt.stale(clock.instant());
-                    corrected(AttemptState.SENT, AttemptState.UNKNOWN, attempt);
+                    corrections.corrected(AttemptState.SENT, AttemptState.UNKNOWN, attempt);
                 }
             });
         }
@@ -112,8 +103,8 @@ class Reconciliation implements PeriodicJob {
     /**
      * Resolves one attempt, in the order of proposed ADR-026, with no transaction open during any call to
      * the provider (FR-005): (a) look the reference up; a charge found decides, and a decline found decides
-     * an UNKNOWN attempt. (b) An UNKNOWN attempt with nothing found, whose key is inside the repeat window:
-     * repeat its charge with the same key and stored parameters; the replay or fresh outcome decides, and
+     * an UNKNOWN first attempt. (b) An UNKNOWN attempt with nothing found, whose key is inside the repeat
+     * window: repeat its charge with the same key and stored parameters; the replay or fresh outcome decides, and
      * no answer (a refusal, a 409, a timeout) leaves it UNKNOWN for a later check. (c) Past the window:
      * never repeat; it stays UNKNOWN, counted in {@code tally.payment.unknown_past_key_window}.
      */
@@ -136,10 +127,12 @@ class Reconciliation implements PeriodicJob {
                 .map(r -> ((PaymentGateway.Declined) r).reason()).findFirst();
 
         if (charged.isPresent()) {
-            transactions.executeWithoutResult(tx -> resolvedCharged(attempts.find(due.id()).orElseThrow(),
+            transactions.executeWithoutResult(tx -> corrections.charged(attempts.find(due.id()).orElseThrow(),
                     charged.get()));
-        } else if (due.state() == AttemptState.UNKNOWN && declined.isPresent()) {
-            transactions.executeWithoutResult(tx -> resolvedDeclined(attempts.find(due.id()).orElseThrow(),
+        } else if (due.state() == AttemptState.UNKNOWN && due.number() == 1 && declined.isPresent()) {
+            // Only the first attempt: a later one's lookup also shows its predecessors' declines. A later
+            // attempt learns its own outcome by repeating with its key, below.
+            transactions.executeWithoutResult(tx -> corrections.declined(attempts.find(due.id()).orElseThrow(),
                     declined.get()));
         } else if (due.state() == AttemptState.UNKNOWN
                 && due.mayRepeatKey(properties.provider().keyRepeatWindow(), clock.instant())) {
@@ -170,26 +163,10 @@ class Reconciliation implements PeriodicJob {
                 return;
             }
             switch (result) {
-                case PaymentGateway.Charged c -> resolvedCharged(attempt, c.chargeId());
-                case PaymentGateway.Declined d -> resolvedDeclined(attempt, d.reason());
+                case PaymentGateway.Charged c -> corrections.charged(attempt, c.chargeId());
+                case PaymentGateway.Declined d -> corrections.declined(attempt, d.reason());
             }
         });
-    }
-
-    private void resolvedCharged(PaymentAttempt attempt, String chargeId) {
-        AttemptState was = attempt.resolvedCharged(chargeId, clock.instant());
-        corrected(was, AttemptState.SUCCEEDED, attempt);
-        Long sequence = requests.settle(attempt);
-        events.publishEvent(new PaymentSucceeded(UUID.randomUUID(), clock.instant(), attempt.accountId(),
-                attempt.reference(), attempt.amount(), chargeId, sequence));
-    }
-
-    private void resolvedDeclined(PaymentAttempt attempt, FailureReason reason) {
-        attempt.resolvedDeclined(reason, clock.instant());
-        corrected(AttemptState.UNKNOWN, AttemptState.DECLINED, attempt);
-        Long sequence = requests.settle(attempt);
-        events.publishEvent(new PaymentFailed(UUID.randomUUID(), clock.instant(), attempt.accountId(),
-                attempt.reference(), attempt.amount(), reason, sequence));
     }
 
     private void checkedWithoutChange(PaymentAttempt due) {
@@ -197,8 +174,4 @@ class Reconciliation implements PeriodicJob {
                 .checkedWithoutChange(clock.instant()));
     }
 
-    private void corrected(AttemptState from, AttemptState to, PaymentAttempt attempt) {
-        log.warn("Reconciliation corrected {} from {} to {}", attempt.reference(), from, to);
-        meters.counter("tally.payment.outcome_corrected", "from", from.name(), "to", to.name()).increment();
-    }
 }
