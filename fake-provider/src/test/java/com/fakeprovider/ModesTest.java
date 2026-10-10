@@ -19,6 +19,16 @@ class ModesTest {
         assertThat(m.outage()).isFalse();
     }
 
+    /** CONTRACT.md Q-B: a lookup that lags behind the charges. */
+    @Test
+    void lookupLagCombinesAndNormalClearsIt() {
+        Modes m = Modes.parse(List.of("LOOKUP_LAG", "LIE"));
+
+        assertThat(m.lookupLag()).isTrue();
+        assertThat(m.lie()).isTrue();
+        assertThat(Modes.parse(List.of("LOOKUP_LAG", "NORMAL")).lookupLag()).isFalse();
+    }
+
     @Test
     void normalResets() {
         assertThat(Modes.parse(List.of("OUTAGE", "NORMAL"))).isEqualTo(Modes.NORMAL);

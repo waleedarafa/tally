@@ -31,10 +31,10 @@ public record PaymentProperties(
      *                           attempt back to the queue
      * @param rateLimitTargetPercent the share of the provider's limit Tally aims for, leaving headroom
      *                           for two instances' calls landing in one provider second (report R6)
-     * @param lookupConsistent   whether the provider's lookup by reference shows a charge as soon as it is
-     *                           made (CONTRACT.md A11, Q-B). Only then may "not found" mean no charge.
-     *                           False unless the provider is known to be consistent.
-     * @param lookupDelay        the provider's stated delay before a charge appears in its lookup
+     * @param keyRepeatWindow    how long after an attempt is sent its charge may be repeated with its key
+     *                           to learn its outcome: the provider's key retention (24 hours, CONTRACT.md
+     *                           A22) minus a margin. Past it, an UNKNOWN attempt is never repeated
+     *                           (proposed ADR-026 c).
      */
     public record Provider(
             @DefaultValue("http://localhost:8081") String baseUrl,
@@ -43,8 +43,7 @@ public record PaymentProperties(
             @DefaultValue("100") int rateLimitPerSecond,
             @DefaultValue("2s") Duration rateLimitWait,
             @DefaultValue("95") int rateLimitTargetPercent,
-            @DefaultValue("false") boolean lookupConsistent,
-            @DefaultValue("0s") Duration lookupDelay) {
+            @DefaultValue("20h") Duration keyRepeatWindow) {
 
         /** The longest a provider call can take: past it, a SENT attempt with no result is stale (ADR-018). */
         public Duration callTimeout() {

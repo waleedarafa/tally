@@ -79,8 +79,13 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
 
+    /**
+     * The lookup finds nothing, and the attempt's key is inside the window: reconciliation repeats the
+     * charge with the same key (proposed ADR-026 b). The first request never executed, so the repeat
+     * charges now, once, and resolves the same attempt: no new attempt is made.
+     */
     @Test
-    void theCallNeverReachedTheProviderSoTheAttemptIsATechnicalFailureAndTheRetryChargesOnce() {
+    void theCallNeverReachedTheProviderSoTheRepeatWithItsKeyChargesOnce() {
         String reference = "AT15-" + UUID.randomUUID();
         UUID attempt = crashedWhileSending(reference, FakeProvider.token());
 
@@ -89,9 +94,11 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
 
         await().atMost(Duration.ofSeconds(15)).until(() ->
                 payments.status(reference).map(s -> s.state() == AttemptState.SUCCEEDED).orElse(false));
-        System.out.println("AT-15 crash before the call: first attempt " + stateOf(attempt) + ", charges "
+        System.out.println("AT-15 crash before the call: attempt " + stateOf(attempt) + ", charges "
                 + FakeProvider.chargeCount(reference));
-        assertThat(stateOf(attempt)).isEqualTo("TECHNICAL_FAILURE");
+        assertThat(stateOf(attempt)).isEqualTo("SUCCEEDED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment.payment_attempt WHERE reference = ?",
+                Long.class, reference)).as("no new attempt").isEqualTo(1);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
 }

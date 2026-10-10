@@ -108,6 +108,9 @@ class ProviderController {
     /** The recorded truth for a reference. */
     @GetMapping("/charges")
     List<Charge> charges(@RequestParam String reference) {
+        if (modes.get().lookupLag()) {
+            return List.of();
+        }
         return ledger.chargesFor(reference);
     }
 

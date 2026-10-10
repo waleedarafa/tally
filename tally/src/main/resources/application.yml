@@ -27,10 +27,3 @@ management:
       exposure:
         # Queue and job health (FR-023) is read from /actuator/metrics.
         include: health,metrics
-tally:
-  payment:
-    provider:
-      # The fake provider's lookup by reference is consistent: a charge shows the moment it is made
-      # (fake-provider/CONTRACT.md A11). Only then may reconciliation read "not found" as no charge
-      # (proposed ADR-026). A real provider's search may lag: check Q-B before setting this to true.
-      lookup-consistent: true

@@ -26,6 +26,9 @@ public interface PaymentAttempts {
 
     long countIn(AttemptState state);
 
+    /** UNKNOWN attempts sent before {@code cutoff}: past the key window, waiting for a person (ADR-026 c). */
+    long countUnknownSentBefore(Instant cutoff);
+
     /** When the longest-waiting REQUESTED attempt was made; empty if none waits to be sent. */
     Optional<Instant> oldestWaitingToBeSent();
 

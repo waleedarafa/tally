@@ -33,8 +33,7 @@ class PaymentAttemptTransitionsTest {
                     Event.STALE, AttemptState.UNKNOWN),
             AttemptState.UNKNOWN, Map.of(
                     Event.RESOLVED_CHARGED, AttemptState.SUCCEEDED,
-                    Event.RESOLVED_DECLINED, AttemptState.DECLINED,
-                    Event.RESOLVED_NO_CHARGE, AttemptState.TECHNICAL_FAILURE),
+                    Event.RESOLVED_DECLINED, AttemptState.DECLINED),
             AttemptState.DECLINED, Map.of(
                     Event.RESOLVED_CHARGED, AttemptState.SUCCEEDED));
 

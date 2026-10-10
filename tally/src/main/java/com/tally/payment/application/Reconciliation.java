@@ -7,8 +7,10 @@ import com.tally.payment.PaymentSucceeded;
 import com.tally.payment.domain.PaymentAttempt;
 import com.tally.payment.domain.PaymentAttempts;
 import com.tally.payment.domain.PaymentGateway;
+import com.tally.payment.domain.PaymentGateway.ChargeResult;
 import com.tally.payment.domain.PaymentGateway.RecordedCharge;
 import com.tally.platform.PeriodicJob;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
@@ -30,11 +32,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <ul>
  *   <li>First, the stale rule: a SENT attempt older than the call timeout has no worker left to record
  *       its result, so it becomes UNKNOWN (ADR-018; AT-15).</li>
- *   <li>A charge found for the reference decides: SUCCEEDED.</li>
- *   <li>A decline found decides an UNKNOWN attempt: DECLINED.</li>
- *   <li>Nothing found means no charge only when the provider's lookup is consistent and the attempt was
- *       sent longer ago than the call timeout plus the provider's stated delay: TECHNICAL_FAILURE, no
- *       event, and a new attempt. Otherwise the attempt stays UNKNOWN (CONTRACT.md A11, Q-B).</li>
+ *   <li>Then each attempt due, by {@link #check}: (a) the lookup by reference; (b) within the key window,
+ *       a repeat with the attempt's key; (c) past it, never a repeat (proposed ADR-026). An UNKNOWN
+ *       attempt is never retried as a new attempt: it is the same charge, resolved or left for a person.</li>
  * </ul>
  * Every correction increments {@code tally.payment.outcome_corrected{from,to}}. A periodic job: runs
  * on one instance at a time and reports its health (FR-023).
@@ -46,7 +46,6 @@ class Reconciliation implements PeriodicJob {
 
     private final PaymentAttempts attempts;
     private final CollectionRequestSettlement requests;
-    private final CollectionWorker worker;
     private final PaymentGateway gateway;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate transactions;
@@ -54,19 +53,22 @@ class Reconciliation implements PeriodicJob {
     private final PaymentProperties properties;
     private final Clock clock;
 
-    Reconciliation(PaymentAttempts attempts, CollectionRequestSettlement requests, CollectionWorker worker,
-            PaymentGateway gateway,
+    Reconciliation(PaymentAttempts attempts, CollectionRequestSettlement requests, PaymentGateway gateway,
             ApplicationEventPublisher events, TransactionTemplate transactions, MeterRegistry meters,
             PaymentProperties properties, Clock clock) {
         this.attempts = attempts;
         this.requests = requests;
-        this.worker = worker;
         this.gateway = gateway;
         this.events = events;
         this.transactions = transactions;
         this.meters = meters;
         this.properties = properties;
         this.clock = clock;
+        Gauge.builder("tally.payment.unknown_past_key_window", attempts,
+                        a -> a.countUnknownSentBefore(clock.instant().minus(properties.provider().keyRepeatWindow())))
+                .description("UNKNOWN attempts past the key window: never repeated, they wait for settlement"
+                        + " reconciliation and a person (proposed ADR-026 c)")
+                .strongReference(true).register(meters);
     }
 
     @Override
@@ -107,7 +109,14 @@ class Reconciliation implements PeriodicJob {
         }
     }
 
-    /** Asks the provider about one attempt, with no transaction open, then records what it learned. */
+    /**
+     * Resolves one attempt, in the order of proposed ADR-026, with no transaction open during any call to
+     * the provider (FR-005): (a) look the reference up; a charge found decides, and a decline found decides
+     * an UNKNOWN attempt. (b) An UNKNOWN attempt with nothing found, whose key is inside the repeat window:
+     * repeat its charge with the same key and stored parameters; the replay or fresh outcome decides, and
+     * no answer (a refusal, a 409, a timeout) leaves it UNKNOWN for a later check. (c) Past the window:
+     * never repeat; it stays UNKNOWN, counted in {@code tally.payment.unknown_past_key_window}.
+     */
     void check(PaymentAttempt due) {
         List<RecordedCharge> truth;
         try {
@@ -115,14 +124,9 @@ class Reconciliation implements PeriodicJob {
         } catch (RuntimeException e) {
             // The provider cannot answer now: check again later.
             log.warn("Reconciliation of {} could not reach the provider", due.reference(), e);
-            transactions.executeWithoutResult(tx -> attempts.find(due.id()).orElseThrow()
-                    .checkedWithoutChange(clock.instant()));
+            checkedWithoutChange(due);
             return;
         }
-        transactions.executeWithoutResult(tx -> reconcile(attempts.find(due.id()).orElseThrow(), truth));
-    }
-
-    private void reconcile(PaymentAttempt attempt, List<RecordedCharge> truth) {
         Optional<String> charged = truth.stream()
                 .filter(c -> c.result() instanceof PaymentGateway.Charged)
                 .map(RecordedCharge::chargeId).findFirst();
@@ -132,29 +136,65 @@ class Reconciliation implements PeriodicJob {
                 .map(r -> ((PaymentGateway.Declined) r).reason()).findFirst();
 
         if (charged.isPresent()) {
-            AttemptState was = attempt.resolvedCharged(charged.get(), clock.instant());
-            corrected(was, AttemptState.SUCCEEDED, attempt);
-            Long sequence = requests.settle(attempt);
-            events.publishEvent(new PaymentSucceeded(UUID.randomUUID(), clock.instant(), attempt.accountId(),
-                    attempt.reference(), attempt.amount(), charged.get(), sequence));
-        } else if (attempt.state() == AttemptState.UNKNOWN && declined.isPresent()) {
-            attempt.resolvedDeclined(declined.get(), clock.instant());
-            corrected(AttemptState.UNKNOWN, AttemptState.DECLINED, attempt);
-            Long sequence = requests.settle(attempt);
-            events.publishEvent(new PaymentFailed(UUID.randomUUID(), clock.instant(), attempt.accountId(),
-                    attempt.reference(), attempt.amount(), declined.get(), sequence));
-        } else if (attempt.state() == AttemptState.UNKNOWN && attempt.noChargeIsCertain(
-                properties.provider().lookupConsistent(),
-                properties.provider().callTimeout().plus(properties.provider().lookupDelay()), clock.instant())) {
-            // Never charged: a technical failure, no event; the request is tried again (ADR-013).
-            attempt.resolvedNoCharge(clock.instant());
-            corrected(AttemptState.UNKNOWN, AttemptState.TECHNICAL_FAILURE, attempt);
-            requests.settle(attempt);
-            worker.retry(attempt, clock.instant());
+            transactions.executeWithoutResult(tx -> resolvedCharged(attempts.find(due.id()).orElseThrow(),
+                    charged.get()));
+        } else if (due.state() == AttemptState.UNKNOWN && declined.isPresent()) {
+            transactions.executeWithoutResult(tx -> resolvedDeclined(attempts.find(due.id()).orElseThrow(),
+                    declined.get()));
+        } else if (due.state() == AttemptState.UNKNOWN
+                && due.mayRepeatKey(properties.provider().keyRepeatWindow(), clock.instant())) {
+            repeat(due);
         } else {
-            attempt.checkedWithoutChange(clock.instant());
-            requests.settle(attempt);
+            if (due.state() == AttemptState.UNKNOWN) {
+                log.error("Attempt {} for {} is UNKNOWN past the key window: never repeated; settlement"
+                        + " reconciliation decides (proposed ADR-026 c)", due.id(), due.reference());
+            }
+            checkedWithoutChange(due);
         }
+    }
+
+    /** (b) The repeat is the lookup by key (CONTRACT.md A23): the same key, the same parameters. */
+    private void repeat(PaymentAttempt due) {
+        ChargeResult result;
+        try {
+            result = gateway.charge(due.paymentToken(), due.amount(), due.reference(), due.idempotencyKey());
+        } catch (RuntimeException e) {
+            log.warn("Repeat of attempt {} for {} by key got no answer; checked again later", due.id(),
+                    due.reference(), e);
+            checkedWithoutChange(due);
+            return;
+        }
+        transactions.executeWithoutResult(tx -> {
+            PaymentAttempt attempt = attempts.find(due.id()).orElseThrow();
+            if (attempt.state() != AttemptState.UNKNOWN) {
+                return;
+            }
+            switch (result) {
+                case PaymentGateway.Charged c -> resolvedCharged(attempt, c.chargeId());
+                case PaymentGateway.Declined d -> resolvedDeclined(attempt, d.reason());
+            }
+        });
+    }
+
+    private void resolvedCharged(PaymentAttempt attempt, String chargeId) {
+        AttemptState was = attempt.resolvedCharged(chargeId, clock.instant());
+        corrected(was, AttemptState.SUCCEEDED, attempt);
+        Long sequence = requests.settle(attempt);
+        events.publishEvent(new PaymentSucceeded(UUID.randomUUID(), clock.instant(), attempt.accountId(),
+                attempt.reference(), attempt.amount(), chargeId, sequence));
+    }
+
+    private void resolvedDeclined(PaymentAttempt attempt, FailureReason reason) {
+        attempt.resolvedDeclined(reason, clock.instant());
+        corrected(AttemptState.UNKNOWN, AttemptState.DECLINED, attempt);
+        Long sequence = requests.settle(attempt);
+        events.publishEvent(new PaymentFailed(UUID.randomUUID(), clock.instant(), attempt.accountId(),
+                attempt.reference(), attempt.amount(), reason, sequence));
+    }
+
+    private void checkedWithoutChange(PaymentAttempt due) {
+        transactions.executeWithoutResult(tx -> attempts.find(due.id()).orElseThrow()
+                .checkedWithoutChange(clock.instant()));
     }
 
     private void corrected(AttemptState from, AttemptState to, PaymentAttempt attempt) {
