@@ -44,6 +44,11 @@ interface JpaPaymentAttempts extends JpaRepository<PaymentAttempt, UUID>, Paymen
     }
 
     @Override
+    default Optional<Instant> oldestWaitingToBeSent() {
+        return Optional.ofNullable(findOldestCreatedAtInState(AttemptState.REQUESTED));
+    }
+
+    @Override
     default Optional<PaymentAttempt> latestFor(String reference) {
         return findFirstByReferenceOrderByNumberDesc(reference);
     }
@@ -58,6 +63,9 @@ interface JpaPaymentAttempts extends JpaRepository<PaymentAttempt, UUID>, Paymen
     List<PaymentAttempt> findByStateAndSentAtBefore(AttemptState state, Instant cutoff);
 
     long countByState(AttemptState state);
+
+    @Query("SELECT min(a.createdAt) FROM PaymentAttempt a WHERE a.state = :state")
+    Instant findOldestCreatedAtInState(AttemptState state);
 
     Optional<PaymentAttempt> findFirstByReferenceOrderByNumberDesc(String reference);
 

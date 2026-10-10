@@ -103,18 +103,23 @@ class Reconciliation implements PeriodicJob {
             });
         }
         for (PaymentAttempt due : attempts.dueForReconciliation(clock.instant(), 100)) {
-            List<RecordedCharge> truth;
-            try {
-                truth = gateway.chargesFor(due.reference());
-            } catch (RuntimeException e) {
-                // The provider cannot answer now: check again later.
-                log.warn("Reconciliation of {} could not reach the provider", due.reference(), e);
-                transactions.executeWithoutResult(tx -> attempts.find(due.id()).orElseThrow()
-                        .checkedWithoutChange(clock.instant()));
-                continue;
-            }
-            transactions.executeWithoutResult(tx -> reconcile(attempts.find(due.id()).orElseThrow(), truth));
+            check(due);
         }
+    }
+
+    /** Asks the provider about one attempt, with no transaction open, then records what it learned. */
+    void check(PaymentAttempt due) {
+        List<RecordedCharge> truth;
+        try {
+            truth = gateway.chargesFor(due.reference());
+        } catch (RuntimeException e) {
+            // The provider cannot answer now: check again later.
+            log.warn("Reconciliation of {} could not reach the provider", due.reference(), e);
+            transactions.executeWithoutResult(tx -> attempts.find(due.id()).orElseThrow()
+                    .checkedWithoutChange(clock.instant()));
+            return;
+        }
+        transactions.executeWithoutResult(tx -> reconcile(attempts.find(due.id()).orElseThrow(), truth));
     }
 
     private void reconcile(PaymentAttempt attempt, List<RecordedCharge> truth) {
@@ -136,7 +141,9 @@ class Reconciliation implements PeriodicJob {
             corrected(AttemptState.UNKNOWN, AttemptState.DECLINED, attempt);
             events.publishEvent(new PaymentFailed(UUID.randomUUID(), clock.instant(), attempt.accountId(),
                     attempt.reference(), attempt.amount(), declined.get()));
-        } else if (attempt.state() == AttemptState.UNKNOWN && noChargeIsCertain(attempt)) {
+        } else if (attempt.state() == AttemptState.UNKNOWN && attempt.noChargeIsCertain(
+                properties.provider().lookupConsistent(),
+                properties.provider().callTimeout().plus(properties.provider().lookupDelay()), clock.instant())) {
             // Never charged: a technical failure, no event; the request is tried again (ADR-013).
             attempt.resolvedNoCharge(clock.instant());
             corrected(AttemptState.UNKNOWN, AttemptState.TECHNICAL_FAILURE, attempt);
@@ -147,18 +154,6 @@ class Reconciliation implements PeriodicJob {
             attempt.checkedWithoutChange(clock.instant());
         }
         requests.settle(attempt);
-    }
-
-    /**
-     * "Not found" means no charge only from a consistent lookup, and only once the charge would show:
-     * sent longer ago than the call timeout plus the provider's stated delay. A lagging search read as
-     * "no charge" would allow a second charge (CONTRACT.md A11, Q-B).
-     */
-    private boolean noChargeIsCertain(PaymentAttempt attempt) {
-        PaymentProperties.Provider provider = properties.provider();
-        Instant visibleBy = attempt.sentAt().orElse(Instant.MIN)
-                .plus(provider.callTimeout()).plus(provider.lookupDelay());
-        return provider.lookupConsistent() && !visibleBy.isAfter(clock.instant());
     }
 
     private void corrected(AttemptState from, AttemptState to, PaymentAttempt attempt) {

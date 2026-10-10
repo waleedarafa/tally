@@ -26,6 +26,9 @@ public interface PaymentAttempts {
 
     long countIn(AttemptState state);
 
+    /** When the longest-waiting REQUESTED attempt was made; empty if none waits to be sent. */
+    Optional<Instant> oldestWaitingToBeSent();
+
     /** The attempt with the highest number for the reference. */
     Optional<PaymentAttempt> latestFor(String reference);
 

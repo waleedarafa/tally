@@ -9,6 +9,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumMap;
 import java.util.Map;
@@ -50,7 +51,6 @@ public class PaymentAttempt {
 
     static {
         on(AttemptState.REQUESTED, Event.SEND, AttemptState.SENT);
-        on(AttemptState.REQUESTED, Event.STALE, AttemptState.UNKNOWN);
         on(AttemptState.SENT, Event.CHARGED, AttemptState.SUCCEEDED);
         on(AttemptState.SENT, Event.DECLINED, AttemptState.DECLINED);
         on(AttemptState.SENT, Event.PROVIDER_ERROR, AttemptState.TECHNICAL_FAILURE);
@@ -156,6 +156,29 @@ public class PaymentAttempt {
         return next;
     }
 
+    /**
+     * Commits the attempt as sent (REQUESTED to SENT). The worker claims through an atomic update with the
+     * same effect ({@link PaymentAttempts#markSent}); this is the aggregate's form of that transition.
+     */
+    public void sent(Instant now) {
+        move(Event.SEND, now);
+        this.sentAt = now;
+    }
+
+    /**
+     * Proposed ADR-026: whether a lookup that found nothing proves there was no charge. Only from a
+     * consistent lookup, and only once a charge would show: sent at least {@code visibleAfter} (the call
+     * timeout plus the provider's stated delay) before {@code now}. An attempt with no recorded send time
+     * is from before Slice 1R PR-6 and counts as long sent. A lagging search read as "no charge" would
+     * allow a second charge (CONTRACT.md A11, Q-B).
+     */
+    public boolean noChargeIsCertain(boolean lookupConsistent, Duration visibleAfter, Instant now) {
+        if (!lookupConsistent) {
+            return false;
+        }
+        return sentAt == null || !sentAt.plus(visibleAfter).isAfter(now);
+    }
+
     public void succeeded(String chargeId, Instant now) {
         move(Event.CHARGED, now);
         this.chargeId = chargeId;
@@ -179,7 +202,11 @@ public class PaymentAttempt {
         this.reconcileAt = ReconciliationSchedule.first(now);
     }
 
-    /** Sent longer ago than the call timeout, with no result recorded: its worker died (ADR-018). */
+    /**
+     * Sent longer ago than the call timeout, with no result recorded: its worker died (ADR-018). Only a
+     * SENT attempt: the provider is called only after SENT commits, so a REQUESTED attempt of any age was
+     * never sent (proposed ADR-026).
+     */
     public void stale(Instant now) {
         move(Event.STALE, now);
         this.reconcileAt = now;

@@ -19,6 +19,10 @@ import org.junit.jupiter.api.Test;
  * <p>The crash is reproduced in the database, as AT-7 does: the collection request and its attempt
  * committed as SENT, the call made or not, then the instance gone; its queue item came back through the
  * reaper. A live instance must neither send the attempt again nor leave it SENT.
+ *
+ * <p>Every test context that polls shares the reconciliation job and these rows, each on its own clock,
+ * so any of them may make the attempt stale and resolve it. The assertions read the rows and the
+ * provider, never this context's counters.
  */
 class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
 
@@ -57,7 +61,6 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
 
     @Test
     void theProviderChargedBeforeTheCrashSoTheAttemptResolvesAsSucceededAndIsNeverSentAgain() {
-        double staleBefore = corrected("SENT", "UNKNOWN");
         String reference = "AT15-" + UUID.randomUUID();
         String token = FakeProvider.token();
         UUID attempt = crashedWhileSending(reference, token);
@@ -65,14 +68,12 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
         FakeProvider.charge(token, 999, "USD", reference);
 
         awaitItemDone(attempt);
-        assertThat(stateOf(attempt)).as("not sent again, not yet resolved").isEqualTo("SENT");
+        assertThat(FakeProvider.requestCount(reference)).as("not sent again").isEqualTo(1);
 
         timePasses();
         await().atMost(Duration.ofSeconds(10)).until(() -> "SUCCEEDED".equals(stateOf(attempt)));
         System.out.println("AT-15 charged before crash: " + stateOf(attempt) + ", provider requests "
                 + FakeProvider.requestCount(reference) + ", charges " + FakeProvider.chargeCount(reference));
-        assertThat(corrected("SENT", "UNKNOWN")).isEqualTo(staleBefore + 1);
-        assertThat(corrected("UNKNOWN", "SUCCEEDED")).isPositive();
         assertThat(payments.status(reference).orElseThrow().state()).isEqualTo(AttemptState.SUCCEEDED);
         assertThat(FakeProvider.requestCount(reference)).as("never sent again").isEqualTo(1);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);

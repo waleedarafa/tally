@@ -100,7 +100,7 @@ Each lives as an enum and a transition table inside its aggregate. One table-dri
 | SENT | provider declined | DECLINED (final; Invoicing then Collections) |
 | SENT | provider error or refused before charging | TECHNICAL_FAILURE (retry after back-off; no event) |
 | SENT | timeout | UNKNOWN |
-| REQUESTED or SENT | older than the call timeout | UNKNOWN |
+| SENT | older than the call timeout | UNKNOWN (a REQUESTED attempt was never sent; proposed ADR-026) |
 | UNKNOWN | resolver: charged / declined / no charge (from a consistent source only) | SUCCEEDED / DECLINED / TECHNICAL_FAILURE |
 
 Payment allows a new attempt only while no attempt is REQUESTED, SENT or UNKNOWN, and never after SUCCEEDED.

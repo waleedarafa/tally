@@ -7,6 +7,7 @@ import com.tally.payment.AttemptState;
 import com.tally.payment.FailureReason;
 import com.tally.payment.domain.PaymentAttempt.Event;
 import com.tally.shared.Money;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,8 +24,7 @@ class PaymentAttemptTransitionsTest {
 
     static final Map<AttemptState, Map<Event, AttemptState>> EXPECTED = Map.of(
             AttemptState.REQUESTED, Map.of(
-                    Event.SEND, AttemptState.SENT,
-                    Event.STALE, AttemptState.UNKNOWN),
+                    Event.SEND, AttemptState.SENT),
             AttemptState.SENT, Map.of(
                     Event.CHARGED, AttemptState.SUCCEEDED,
                     Event.DECLINED, AttemptState.DECLINED,
@@ -73,6 +73,18 @@ class PaymentAttemptTransitionsTest {
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("REQUESTED: DECLINED is not allowed");
         assertThatThrownBy(() -> requested.retry(Instant.parse("2026-01-15T10:00:01Z")))
                 .isInstanceOf(IllegalStateException.class);
+        assertThat(requested.state()).isEqualTo(AttemptState.REQUESTED);
+    }
+
+    /** Proposed ADR-026: a REQUESTED attempt was never sent, so no age makes it UNKNOWN. */
+    @Test
+    void aRequestedAttemptOfAnyAgeIsNeverMadeUnknown() {
+        Instant made = Instant.parse("2026-01-15T10:00:00Z");
+        PaymentAttempt requested = PaymentAttempt.requested(UUID.randomUUID(), "REF", UUID.randomUUID(),
+                Money.of(999, "USD"), "tok", made);
+
+        assertThatThrownBy(() -> requested.stale(made.plus(Duration.ofDays(3650))))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("REQUESTED: STALE is not allowed");
         assertThat(requested.state()).isEqualTo(AttemptState.REQUESTED);
     }
 }

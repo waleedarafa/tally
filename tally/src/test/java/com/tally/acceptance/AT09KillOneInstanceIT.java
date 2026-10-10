@@ -91,8 +91,13 @@ class AT09KillOneInstanceIT {
         // Exactly one next billing date scheduled per account.
         assertThat(count(jdbc, "SELECT count(*) FROM subscription.renewal WHERE queue_key LIKE ?", "%:" + nextDate))
                 .isEqualTo(ACCOUNTS);
-        // Exactly one payment attempt per invoice; nothing left claimed.
-        assertThat(count(jdbc, "SELECT count(*) FROM payment.payment_attempt")).isEqualTo(ACCOUNTS);
+        // One payment attempt per invoice, plus one retry per technical failure: an attempt A committed as
+        // sent but never delivered goes stale, and a consistent lookup proves no charge (proposed ADR-026).
+        // Nothing left claimed.
+        long technicalFailures = count(jdbc,
+                "SELECT count(*) FROM payment.payment_attempt WHERE state = 'TECHNICAL_FAILURE'");
+        assertThat(count(jdbc, "SELECT count(*) FROM payment.payment_attempt"))
+                .isEqualTo(ACCOUNTS + technicalFailures);
         assertThat(count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE reference NOT IN"
                 + " (SELECT payment_reference FROM invoicing.invoice)")).isZero();
         assertThat(count(jdbc, "SELECT count(*) FROM subscription.renewal WHERE status = 'IN_PROCESSING'")).isZero();
@@ -105,9 +110,9 @@ class AT09KillOneInstanceIT {
         long unknown = count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE state = 'UNKNOWN'");
         long succeeded = count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE state = 'SUCCEEDED'");
         System.out.printf("AT-9: %d accounts, A killed at %d invoices holding %d renewal and %d collection claims;"
-                        + " B redid %d renewals; %d attempts SUCCEEDED, %d UNKNOWN (in flight on A, left to"
-                        + " reconciliation); %d s%n",
-                ACCOUNTS, invoicesAtKill, claimedByA, collectionsClaimedByA, renewalsRedone, succeeded, unknown,
-                elapsed.toSeconds());
+                        + " B redid %d renewals; %d attempts SUCCEEDED, %d TECHNICAL_FAILURE and retried, %d UNKNOWN"
+                        + " (in flight on A, left to reconciliation); %d s%n",
+                ACCOUNTS, invoicesAtKill, claimedByA, collectionsClaimedByA, renewalsRedone, succeeded,
+                technicalFailures, unknown, elapsed.toSeconds());
     }
 }

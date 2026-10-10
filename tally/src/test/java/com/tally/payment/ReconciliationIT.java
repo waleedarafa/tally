@@ -9,7 +9,6 @@ import com.tally.support.FakeProvider;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -71,53 +70,6 @@ class ReconciliationIT extends AbstractReconcilingTest {
         awaitState(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
         assertThat(corrected("DECLINED", "SUCCEEDED")).isEqualTo(before + 1);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
-    }
-
-    /** Inserts an UNKNOWN attempt, sent at {@code sentAt}, due a check now. Returns its ID. */
-    UUID unknownAttempt(String reference, Instant sentAt) {
-        UUID id = UUID.randomUUID();
-        var now = clock.instant().atOffset(ZoneOffset.UTC);
-        jdbc.update("INSERT INTO payment.payment_attempt (id, reference, account_id, amount_minor, currency,"
-                + " payment_token, state, created_at, updated_at, sent_at, reconcile_at)"
-                + " VALUES (?, ?, ?, 999, 'USD', ?, 'UNKNOWN', ?, ?, ?, ?)",
-                id, reference, UUID.randomUUID(), FakeProvider.token(), now, now, sentAt.atOffset(ZoneOffset.UTC), now);
-        return id;
-    }
-
-    String stateOf(UUID attempt) {
-        return jdbc.queryForObject("SELECT state FROM payment.payment_attempt WHERE id = ?", String.class, attempt);
-    }
-
-    /**
-     * Proposed ADR-026: the fake's lookup is consistent, and the attempt was sent long enough ago for a
-     * charge to show. "Not found" is then no charge: a technical failure, no event, and a new attempt.
-     */
-    @Test
-    void anUnknownAttemptTheProviderNeverChargedIsATechnicalFailureAndIsTriedAgain() {
-        double before = corrected("UNKNOWN", "TECHNICAL_FAILURE");
-        String reference = "REC-" + UUID.randomUUID();
-        UUID unknown = unknownAttempt(reference, clock.instant().minus(Duration.ofMinutes(10)));
-
-        await().atMost(Duration.ofSeconds(10)).until(() -> "TECHNICAL_FAILURE".equals(stateOf(unknown)));
-        assertThat(corrected("UNKNOWN", "TECHNICAL_FAILURE")).isEqualTo(before + 1);
-        assertThat(jdbc.queryForObject("SELECT failure_reason FROM payment.payment_attempt WHERE id = ?", String.class,
-                unknown)).as("no decline recorded").isNull();
-        // The retry, a new attempt, charges once.
-        awaitState(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment.payment_attempt WHERE reference = ?",
-                Long.class, reference)).isEqualTo(2);
-        assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
-    }
-
-    /** A charge sent too recently to show in the lookup is not "no charge": the attempt stays UNKNOWN. */
-    @Test
-    void anUnknownAttemptSentTooRecentlyStaysUnknown() {
-        String reference = "REC-" + UUID.randomUUID();
-        UUID unknown = unknownAttempt(reference, clock.instant());
-
-        await().atMost(Duration.ofSeconds(10)).until(() -> checks(reference) == 1);
-        assertThat(stateOf(unknown)).isEqualTo("UNKNOWN");
-        assertThat(FakeProvider.requestCount(reference)).isZero();
     }
 
     @Test
