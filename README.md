@@ -21,7 +21,7 @@ One top-level package per module under `com.tally`, with dependencies declared i
 
 | Module | Owns |
 |---|---|
-| `shared` | `Money` (minor units plus ISO currency) and `DomainEvent` |
+| `shared` | `Money` (minor units plus ISO currency), `Ratio` and `DomainEvent`, nothing else (F4) |
 | `platform` | Durable queues, periodic jobs, retention, the event-listener executor and health metrics. No business logic (FR-027) |
 | `account` | Accounts, their currency, time zone and payment token |
 | `catalog` | Plans and prices |

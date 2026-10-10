@@ -1,5 +1,6 @@
 /**
- * Shared kernel: {@code Money} and the event envelope. Kept tiny (FR-014).
+ * Shared kernel: {@code Money}, {@code Ratio} and the event marker {@code DomainEvent}, and nothing else
+ * (R5, ADR-017). The list is pinned by F4, {@code architecture.SharedKernelTest}.
  */
 @ApplicationModule(displayName = "Shared kernel", allowedDependencies = {})
 package com.tally.shared;
