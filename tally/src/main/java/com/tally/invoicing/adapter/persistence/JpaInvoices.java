@@ -19,7 +19,7 @@ interface JpaInvoices extends JpaRepository<Invoice, UUID>, Invoices {
         boolean inserted = insertRow(invoice.id(), invoice.accountId(), invoice.subscriptionId(), invoice.planId(),
                 invoice.status().name(), invoice.amount().minorUnits(), invoice.amount().currency().getCurrencyCode(),
                 invoice.periodStart(), invoice.periodEnd(), invoice.paymentReference(), invoice.issuedAt(),
-                invoice.billedFor(), invoice.offerVersion(), invoice.quoteReason()) == 1;
+                invoice.billedFor(), invoice.offerVersion(), new PricingReasonJson().convertToDatabaseColumn(invoice.quoteReason())) == 1;
         if (inserted) {
             // Same transaction as the invoice row: both commit, or neither does.
             List<InvoiceLine> lines = invoice.lines();
@@ -38,7 +38,7 @@ interface JpaInvoices extends JpaRepository<Invoice, UUID>, Invoices {
                                            offer_version, quote_reason)
             VALUES (:id, :accountId, :subscriptionId, :planId, :status, :amountMinor, :currency,
                     :periodStart, :periodEnd, :paymentReference, :issuedAt, :billedFor,
-                    :offerVersion, :quoteReason)
+                    :offerVersion, CAST(:quoteReason AS jsonb))
             ON CONFLICT ON CONSTRAINT invoice_one_per_account_and_period DO NOTHING
             """)
     int insertRow(UUID id, UUID accountId, UUID subscriptionId, String planId, String status, long amountMinor,

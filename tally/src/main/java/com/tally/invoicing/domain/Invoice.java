@@ -1,6 +1,7 @@
 package com.tally.invoicing.domain;
 
 import com.tally.invoicing.InvoiceStatus;
+import com.tally.invoicing.PricingReason;
 import com.tally.shared.Money;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -76,8 +77,9 @@ public class Invoice {
     @Column(name = "offer_version")
     private Integer offerVersion;
 
-    @Column(name = "quote_reason")
-    private String quoteReason;
+    /** Written once, by the insert that issues the invoice (jsonb); never updated. */
+    @Column(name = "quote_reason", columnDefinition = "jsonb", insertable = false, updatable = false)
+    private PricingReason quoteReason;
 
     /**
      * Optimistic lock. A listener may run twice at the same time (Spike A): without it, two concurrent
@@ -94,7 +96,7 @@ public class Invoice {
      * the sum of the lines, never rounded again (ADR-017).
      */
     public static Invoice issue(UUID accountId, UUID subscriptionId, String planId, List<InvoiceLine> lines,
-            int offerVersion, String quoteReason, LocalDate periodStart, LocalDate periodEnd, Instant billedFor,
+            PricingReason quoteReason, LocalDate periodStart, LocalDate periodEnd, Instant billedFor,
             Instant now) {
         if (lines.isEmpty()) {
             throw new IllegalArgumentException("An invoice has at least one line");
@@ -102,7 +104,7 @@ public class Invoice {
         Money amount = lines.stream().map(InvoiceLine::amount).reduce(Money::plus).orElseThrow();
         Invoice i = new Invoice();
         i.lines = new ArrayList<>(lines);
-        i.offerVersion = offerVersion;
+        i.offerVersion = quoteReason.offerVersion();
         i.quoteReason = quoteReason;
         i.id = UUID.randomUUID();
         i.accountId = accountId;
@@ -170,7 +172,7 @@ public class Invoice {
         return offerVersion;
     }
 
-    public String quoteReason() {
+    public PricingReason quoteReason() {
         return quoteReason;
     }
 

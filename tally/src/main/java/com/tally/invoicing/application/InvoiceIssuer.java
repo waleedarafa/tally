@@ -1,5 +1,6 @@
 package com.tally.invoicing.application;
 
+import com.tally.invoicing.PricingReason;
 import com.tally.invoicing.domain.InvoiceLine;
 import com.tally.offers.Period;
 import com.tally.offers.PriceQuote;
@@ -47,7 +48,9 @@ class InvoiceIssuer {
                 new Period(periodNumber, periodStart, periodEnd)));
         Invoice invoice = Invoice.issue(accountId, subscriptionId, planId,
                 quote.lines().stream().map(line -> InvoiceLine.of(line.description(), line.amount())).toList(),
-                quote.offerVersion(), quote.reason().summary(), periodStart, periodEnd, billedFor, clock.instant());
+                new PricingReason(quote.reason().offerId(), quote.reason().offerVersion(), quote.reason().kind(),
+                        quote.reason().flags()),
+                periodStart, periodEnd, billedFor, clock.instant());
         if (!invoices.insertIfAbsent(invoice)) {
             return Optional.empty();
         }
