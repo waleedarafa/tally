@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -31,6 +32,7 @@ class ProviderController {
     }
 
     private final Ledger ledger;
+    private final IdempotencyKeys keys;
     private final AtomicReference<Modes> modes = new AtomicReference<>(Modes.NORMAL);
     private final AtomicLong windowSecond = new AtomicLong();
     private final AtomicLong totalRequests = new AtomicLong();
@@ -38,9 +40,11 @@ class ProviderController {
     private final AtomicLong unavailable = new AtomicLong();
     private final AtomicLong charged = new AtomicLong();
     private final AtomicLong windowCount = new AtomicLong();
+    private final AtomicLong replayed = new AtomicLong();
 
-    ProviderController(Ledger ledger) {
+    ProviderController(Ledger ledger, IdempotencyKeys keys) {
         this.ledger = ledger;
+        this.keys = keys;
     }
 
     /** Simulates the hosted card form: the card stays with the provider, Tally gets a token (FR-015). */
@@ -49,8 +53,14 @@ class ProviderController {
         return Map.of("token", ledger.issueToken());
     }
 
+    /**
+     * Charges a token. With an {@code Idempotency-Key} (A22), the first response is saved once the charge
+     * has executed and replayed for every repeat; the outage and the rate limit stand in front of that
+     * layer, so their refusals are not saved. Without a key, every request that passes them charges (A8).
+     */
     @PostMapping("/charges")
-    ResponseEntity<ChargeResponse> charge(@RequestBody ChargeRequest request) throws InterruptedException {
+    ResponseEntity<?> charge(@RequestBody ChargeRequest request,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key) throws InterruptedException {
         ledger.requested(request.reference());
         totalRequests.incrementAndGet();
         Modes m = modes.get();
@@ -62,16 +72,37 @@ class ProviderController {
             rateLimited.incrementAndGet();
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "1").build();
         }
+        if (key != null) {
+            switch (keys.begin(key, request)) {
+                case IdempotencyKeys.Replay replay -> {
+                    replayed.incrementAndGet();
+                    return ResponseEntity.ok(replay.response());
+                }
+                case IdempotencyKeys.Conflict conflict -> {
+                    return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "idempotency_conflict"));
+                }
+                case IdempotencyKeys.Mismatch mismatch -> {
+                    return ResponseEntity.badRequest().body(Map.of("error", "idempotency_error"));
+                }
+                case IdempotencyKeys.Execute execute -> { }
+            }
+        }
         Charge charge = ledger.charge(request.token(), request.amount(), request.currency(), request.reference(), m);
         charged.incrementAndGet();
-        if (m.timeoutAfterCharge()) {
-            Thread.sleep(TIMEOUT_AFTER_CHARGE_MILLIS);
-        }
+        Charge.Outcome reported = m.lie() ? opposite(charge.outcome()) : charge.outcome();
+        ChargeResponse response = new ChargeResponse(charge.chargeId(), charge.reference(), reported);
         if (m.slowMillis() > 0) {
+            // Still executing: a repeat with the same key meanwhile is a conflict.
             Thread.sleep(m.slowMillis());
         }
-        Charge.Outcome reported = m.lie() ? opposite(charge.outcome()) : charge.outcome();
-        return ResponseEntity.ok(new ChargeResponse(charge.chargeId(), charge.reference(), reported));
+        if (key != null) {
+            keys.save(key, request, response);
+        }
+        if (m.timeoutAfterCharge()) {
+            // Executed and saved; only the answer is late, as when the network loses it.
+            Thread.sleep(TIMEOUT_AFTER_CHARGE_MILLIS);
+        }
+        return ResponseEntity.ok(response);
     }
 
     /** The recorded truth for a reference. */
@@ -85,6 +116,12 @@ class ProviderController {
         Modes parsed = Modes.parse(request.modes() == null ? List.of() : request.modes());
         modes.set(parsed);
         return parsed;
+    }
+
+    /** Test-only: as if the retention period (24 h) had passed for every idempotency key. */
+    @PostMapping("/admin/idempotency-keys/prune")
+    void pruneIdempotencyKeys() {
+        keys.pruneAll();
     }
 
     @GetMapping("/admin/mode")
@@ -108,7 +145,7 @@ class ProviderController {
     @GetMapping("/admin/stats")
     Map<String, Long> stats() {
         return Map.of("requests", totalRequests.get(), "rateLimited", rateLimited.get(),
-                "unavailable", unavailable.get(), "charged", charged.get());
+                "unavailable", unavailable.get(), "charged", charged.get(), "replayed", replayed.get());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

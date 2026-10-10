@@ -78,11 +78,11 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **If a real provider differs:** `Retry-After` may be an HTTP date (Tally then falls back to 1 s), or missing. A provider may also rate-limit by returning a decline code instead of a 429.
 - **Check:** Stripe's rate limiters run before the request executes (Q-A). Still to confirm for the chosen provider: the `Retry-After` format.
 
-**A8. The provider does not deduplicate: the same reference sent twice is charged twice.** (critical)
-- **Fake:** every `POST /charges` that passes the outage and rate checks records a new charge, whatever the reference.
+**A8. Without an idempotency key, the provider does not deduplicate: the same reference sent twice is charged twice.** (critical)
+- **Fake:** every `POST /charges` without an `Idempotency-Key` that passes the outage and rate checks records a new charge, whatever the reference. With a key, see A22.
 - **Tally relies on it in:** nothing; Tally protects itself instead. One attempt per reference (`PaymentService.requestCollection`), an `UNKNOWN` outcome is never retried (rule 9), and `/admin/charges/count` proves no double charge in AT-4, AT-5 and AT-9.
-- **If a real provider differs:** a provider with idempotency keys is better, not worse. Slice 2 plans to use them, which would make A6 and A7 safe to retry.
-- **Check:** does the provider support idempotency keys? For how long does it remember them, and what does a replay return?
+- **If a real provider differs:** a provider with idempotency keys is better, not worse (A22).
+- **Check:** answered for Stripe (A22): keys exist, are kept 24 hours, and a repeat replays the first response.
 
 **A9. A refused connection or a connect timeout means the request never arrived.**
 - **Fake:** this is a property of TCP, not of the fake. AT-4 stops the fake.
@@ -166,7 +166,38 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **If a real provider differs:** real declines cluster: by card, by issuer, by time of day. A renewal run concentrated on the 1st of the month may hit issuer limits.
 - **Check:** ask for decline rates by issuer, and time of day, for recurring charges.
 
-## 6. Things the fake does not model at all
+## 6. Idempotency keys (Slice 1R, spike S-2)
+
+Modelled on Stripe's API v1 (sources at the end). Tests: `IdempotencyKeysTest`.
+
+**A22. With an `Idempotency-Key` header, the provider saves the first response once the charge has executed, and replays it for every repeat within 24 hours, declines included.** (critical)
+- **Fake:**
+  - A repeat with the same key and the same parameters returns the saved status and body, and records no charge. `/admin/stats` counts it as `replayed`.
+  - The same key with other parameters: `400 {"error":"idempotency_error"}`, nothing charged.
+  - A repeat while the first request still executes: `409`, not saved.
+  - The outage (`503`) and the rate limit (`429`) stand in front of the idempotency layer: their refusals are not saved, so the same key may charge later.
+  - After 24 hours a key is forgotten, and reusing it charges again. Tests simulate this with `POST /admin/idempotency-keys/prune`.
+- **Tally relies on it in:**
+  - nothing yet: Tally sends no key today.
+  - Slice 1R PR-8: each attempt sends its own key, the reference plus the attempt number. It never reuses an earlier attempt's key, because the provider would replay that attempt's decline (`aDeclineIsReplayedForTheSameKeyAndANewKeyChargesAgain`; AT-16).
+  - the resolver of unknown attempts (A23).
+- **If a real provider differs:**
+  - Stripe's API v1 matches, with one difference: Stripe also saves and replays a `500`. The fake's `503` is not saved, because it models a gateway in front of the provider (A6).
+  - Stripe's API v2 retries a failed request instead of replaying it, and keeps keys for 30 days.
+  - A provider without keys: only A8 holds, and Tally's one-open-attempt rule is the only guard.
+- **Check:** the header name, the retention period, which responses are saved, and how parameters are compared.
+
+**A23. The outcome of a request is learnt by key: repeating it with the same key and the same parameters returns the saved response without charging again.** (critical)
+- **Fake:** as A22. There is no endpoint that looks a charge up by key; the repeat is the lookup (`afterATimeoutTheSameKeyReturnsTheRecordedChargeWithoutChargingAgain`).
+- **Tally relies on it in:** the design's "unknowns are resolved by key" (ADR-004, ADR-013, ADR-018). Today's resolver uses the lookup by reference (A11).
+- **If a real provider differs:** Stripe has no lookup by idempotency key either. A repeat is a status query only while the key is kept, and has three edges:
+  - if the first request never executed, the repeat charges now. Still at most once, but the resolver never sees "no such charge"; it sees a new outcome;
+  - after 24 hours the key is gone, and a repeat is a new charge, even if the first one charged: a double charge. The resolver must stop using the key before the retention ends, and fall back to the lookup by reference (A11);
+  - while the first request still executes, a repeat gets `409`: no answer yet, ask again later.
+  - In every case the repeat must carry exactly the first request's parameters, so an attempt must store them.
+- **Check:** confirm that no lookup by key exists, and the retention period.
+
+## 7. Things the fake does not model at all
 
 None of the following exist in the fake, so no test covers them. Each needs a decision before production.
 - **Webhooks**, or any asynchronous notification.
@@ -174,7 +205,7 @@ None of the following exist in the fake, so no test covers them. Each needs a de
 - **Disputes and chargebacks**: money taken back weeks later, which invoicing and entitlement must react to.
 - **Partial approvals**: an amount lower than requested.
 - **Currency conversion** by the provider.
-- **Duplicate-charge protection** on the provider's side (see A8).
+- **Key retention in real time**: the fake keeps keys for 24 hours of its own wall clock; tests prune them instead of waiting (A22).
 - **Provider-side retries** (for example "smart retries"), which would conflict with Tally's dunning.
 - **Persistence**: the fake loses everything on restart, so a test cannot restart the provider mid-run.
 - **Clock**: the fake stamps charges with its own wall clock (`Instant.now()`), not Tally's test clock. Tally never reads that timestamp, and must not start to without a provider-side clock contract.
@@ -183,6 +214,8 @@ None of the following exist in the fake, so no test covers them. Each needs a de
 - Stripe, Advanced error handling: https://docs.stripe.com/error-low-level
 - Stripe, Errors: https://docs.stripe.com/api/errors
 - Stripe, The Setup Intents API: https://docs.stripe.com/payments/setup-intents.md
+- Stripe, Idempotent requests: https://docs.stripe.com/api/idempotent_requests
+- Stripe, API v2 overview (idempotency in v2): https://docs.stripe.com/api-v2-overview
 
 ## Test-only endpoints
 
@@ -191,3 +224,4 @@ These belong to the fake, not to any real provider. Tally's production code must
 - `GET /admin/charges/count`
 - `GET /admin/requests/count`
 - `GET /admin/stats`
+- `POST /admin/idempotency-keys/prune`
