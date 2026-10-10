@@ -26,7 +26,7 @@ Before adding any other dependency, or if unsure which version is compatible wit
 8. **Every background job reports health:** last success time and waiting work (FR-023).
 9. **Payments.** Payment outcomes are succeeded, declined, technical failure or unknown. Only a decline starts Collections. Unknown is resolved by key, never retried. A requested or sent attempt older than the timeout is unknown (ADR-013, ADR-018).
 10. **Money** is `shared.Money`: amount in minor units (`long`) plus ISO currency. No `double` anywhere near money. `Money.times(Ratio)` is the only place rounding happens: half up. Use `allocate` to split (ADR-017).
-11. **Duplicate protection lives in business tables.** A queue key is never the only guard: queue rows are deleted after the retention period (FR-037).
+11. **Duplicate protection lives in business tables.** A queue key is never the only guard: queue rows are deleted after the retention period (FR-037). A duplicate guard names the fact it guards: name the constraint, and treat any other failure as a failure, never as a duplicate.
 12. **The fake provider is a model of a real one.** Any new behaviour that depends on how a provider acts must be listed in `fake-provider/CONTRACT.md`.
 13. **Idempotency over REST.** Every request that changes state over REST requires an `Idempotency-Key` (ADR-019).
 14. **Inside layout.** Inside `offers`, `subscription`, `invoicing` and `payment`, the domain package imports no Spring and no adapter; `jakarta.persistence` annotations are allowed (Design Record §10 C). Port methods use business names (`dueForReconciliation(now, limit)`, `issuedBetween(from, to)`, `add(subscription)`). Spring Data names stay in `adapter.persistence`, behind a default method, as `JpaInvoices.insertIfAbsent` does.
