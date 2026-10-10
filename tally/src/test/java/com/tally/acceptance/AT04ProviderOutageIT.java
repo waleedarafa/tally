@@ -144,6 +144,9 @@ class AT04ProviderOutageIT extends AbstractProviderIntegrationTest {
                 assertThat(FakeProvider.chargeCount(invoice.paymentReference())).isEqualTo(1);
             }
         }
+        // Technical failures publish nothing: no Collections case opens (ADR-013; Slice 1R brief).
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM collections.collection_case WHERE account_id = ANY(?)",
+                Long.class, (Object) everyone.toArray(UUID[]::new))).isZero();
         System.out.printf("AT-4: %d provider requests for %d renewals and 1 checkout during the outage%n",
                 requestsWhileOpen, ACCOUNTS);
     }
