@@ -1,7 +1,7 @@
 package com.tally.subscription.application;
 
-import com.tally.offers.BillingPeriod;
-import com.tally.offers.CatalogApi;
+import com.tally.offers.Offers;
+import com.tally.offers.UnknownPlanException;
 import com.tally.subscription.AlreadySubscribedException;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionChangeType;
@@ -25,15 +25,15 @@ class SubscriptionService implements SubscriptionApi {
 
     private final Subscriptions subscriptions;
     private final SubscriptionChanges changes;
-    private final CatalogApi catalog;
+    private final Offers offers;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
     SubscriptionService(Subscriptions subscriptions, SubscriptionChanges changes,
-            CatalogApi catalog, ApplicationEventPublisher events, Clock clock) {
+            Offers offers, ApplicationEventPublisher events, Clock clock) {
         this.subscriptions = subscriptions;
         this.changes = changes;
-        this.catalog = catalog;
+        this.offers = offers;
         this.events = events;
         this.clock = clock;
     }
@@ -41,8 +41,10 @@ class SubscriptionService implements SubscriptionApi {
     @Override
     @Transactional
     public SubscriptionView subscribe(UUID accountId, String planId) {
-        // Checks the account exists and the plan can be sold in its currency.
-        catalog.quote(accountId, planId, BillingPeriod.MONTHLY);
+        // Checks the account exists (UnknownAccountException) and the offer can be sold in its currency.
+        if (!offers.isOffered(planId, accountId)) {
+            throw new UnknownPlanException(planId, accountId);
+        }
         if (subscriptions.existsByAccountId(accountId)) {
             throw new AlreadySubscribedException(accountId);
         }

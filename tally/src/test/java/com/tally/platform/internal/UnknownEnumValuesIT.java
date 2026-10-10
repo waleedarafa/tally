@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.AbstractIntegrationTest;
-import com.tally.offers.BillingPeriod;
 import com.tally.invoicing.InvoiceStatus;
 import com.tally.payment.AttemptState;
 import com.tally.payment.FailureReason;
@@ -42,7 +41,6 @@ class UnknownEnumValuesIT extends AbstractIntegrationTest {
     @Test
     void unknownValuesOfEveryCrossModuleEnumReadAsUnknown() {
         String unknown = "\"A_VALUE_FROM_A_NEWER_RELEASE\"";
-        assertThat(json.readValue(unknown, BillingPeriod.class)).isEqualTo(BillingPeriod.UNKNOWN);
         assertThat(json.readValue(unknown, InvoiceStatus.class)).isEqualTo(InvoiceStatus.UNKNOWN);
         assertThat(json.readValue(unknown, AttemptState.class)).isEqualTo(AttemptState.UNKNOWN);
         assertThat(json.readValue(unknown, FailureReason.class)).isEqualTo(FailureReason.UNKNOWN);

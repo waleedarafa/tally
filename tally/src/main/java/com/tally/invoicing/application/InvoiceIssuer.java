@@ -1,7 +1,10 @@
 package com.tally.invoicing.application;
 
-import com.tally.offers.BillingPeriod;
-import com.tally.offers.CatalogApi;
+import com.tally.invoicing.domain.InvoiceLine;
+import com.tally.offers.Period;
+import com.tally.offers.PriceQuote;
+import com.tally.offers.Pricing;
+import com.tally.offers.QuoteRequest;
 import com.tally.invoicing.InvoiceIssued;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.Invoices;
@@ -20,29 +23,31 @@ import org.springframework.transaction.annotation.Transactional;
 class InvoiceIssuer {
 
     private final Invoices invoices;
-    private final CatalogApi catalog;
+    private final Pricing pricing;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    InvoiceIssuer(Invoices invoices, CatalogApi catalog, ApplicationEventPublisher events, Clock clock) {
+    InvoiceIssuer(Invoices invoices, Pricing pricing, ApplicationEventPublisher events, Clock clock) {
         this.invoices = invoices;
-        this.catalog = catalog;
+        this.pricing = pricing;
         this.events = events;
         this.clock = clock;
     }
 
     /**
-     * Issues the invoice for {@code [periodStart, periodEnd)}, due at {@code billedFor}, priced at
-     * today's list price. Empty if the account already has an invoice for that billing date. The
+     * Issues the invoice for period {@code periodNumber}, {@code [periodStart, periodEnd)}, due at
+     * {@code billedFor}, with the lines of the offer's PriceQuote (I3; Invoicing applies no offer rule, R2). Empty if the account already has an invoice for that billing date. The
      * insert is atomic on the unique constraint (account, period start), so a concurrent duplicate
      * waits, then issues nothing and does not fail (FR-028).
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    Optional<Invoice> issue(UUID accountId, UUID subscriptionId, String planId, LocalDate periodStart,
-            LocalDate periodEnd, Instant billedFor) {
-        var price = catalog.quote(accountId, planId, BillingPeriod.MONTHLY).price();
-        Invoice invoice = Invoice.issue(accountId, subscriptionId, planId, price, periodStart, periodEnd, billedFor,
-                clock.instant());
+    Optional<Invoice> issue(UUID accountId, UUID subscriptionId, String planId, int periodNumber,
+            LocalDate periodStart, LocalDate periodEnd, Instant billedFor) {
+        PriceQuote quote = pricing.quote(new QuoteRequest(subscriptionId, accountId, planId,
+                new Period(periodNumber, periodStart, periodEnd)));
+        Invoice invoice = Invoice.issue(accountId, subscriptionId, planId,
+                quote.lines().stream().map(line -> InvoiceLine.of(line.description(), line.amount())).toList(),
+                quote.offerVersion(), quote.reason().summary(), periodStart, periodEnd, billedFor, clock.instant());
         if (!invoices.insertIfAbsent(invoice)) {
             return Optional.empty();
         }
