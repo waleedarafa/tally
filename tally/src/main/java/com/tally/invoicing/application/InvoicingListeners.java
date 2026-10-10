@@ -5,9 +5,9 @@ import com.tally.account.AccountView;
 import com.tally.invoicing.InvoiceIssued;
 import com.tally.invoicing.InvoicePaid;
 import com.tally.invoicing.domain.Invoice;
-import com.tally.invoicing.domain.InvoiceRepository;
+import com.tally.invoicing.domain.Invoices;
 import com.tally.invoicing.domain.SubscriptionBilling;
-import com.tally.invoicing.domain.SubscriptionBillingRepository;
+import com.tally.invoicing.domain.SubscriptionBillings;
 import com.tally.payment.FailureReason;
 import com.tally.payment.PaymentApi;
 import com.tally.payment.PaymentFailed;
@@ -32,8 +32,8 @@ class InvoicingListeners {
 
     private static final Logger log = LoggerFactory.getLogger(InvoicingListeners.class);
 
-    private final InvoiceRepository invoices;
-    private final SubscriptionBillingRepository subscriptions;
+    private final Invoices invoices;
+    private final SubscriptionBillings subscriptions;
     private final InvoiceIssuer issuer;
     private final BillingSchedule schedule;
     private final AccountApi accounts;
@@ -41,7 +41,7 @@ class InvoicingListeners {
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    InvoicingListeners(InvoiceRepository invoices, SubscriptionBillingRepository subscriptions, InvoiceIssuer issuer,
+    InvoicingListeners(Invoices invoices, SubscriptionBillings subscriptions, InvoiceIssuer issuer,
             BillingSchedule schedule, AccountApi accounts, PaymentApi payments, ApplicationEventPublisher events,
             Clock clock) {
         this.invoices = invoices;

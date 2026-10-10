@@ -2,7 +2,7 @@ package com.tally.invoicing.application;
 
 import com.tally.invoicing.InvoiceStatus;
 import com.tally.invoicing.domain.Invoice;
-import com.tally.invoicing.domain.InvoiceRepository;
+import com.tally.invoicing.domain.Invoices;
 import com.tally.payment.PaymentApi;
 import com.tally.platform.InvariantCheck;
 import com.tally.shared.Money;
@@ -41,11 +41,11 @@ class InvoicedVersusCollected implements InvariantCheck {
 
     private static final Logger log = LoggerFactory.getLogger(InvoicedVersusCollected.class);
 
-    private final InvoiceRepository invoices;
+    private final Invoices invoices;
     private final PaymentApi payments;
     private final Clock clock;
 
-    InvoicedVersusCollected(InvoiceRepository invoices, PaymentApi payments, Clock clock) {
+    InvoicedVersusCollected(Invoices invoices, PaymentApi payments, Clock clock) {
         this.invoices = invoices;
         this.payments = payments;
         this.clock = clock;

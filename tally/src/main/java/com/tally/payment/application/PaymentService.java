@@ -3,9 +3,9 @@ package com.tally.payment.application;
 import com.tally.payment.AttemptState;
 import com.tally.payment.PaymentApi;
 import com.tally.payment.PaymentStatus;
-import com.tally.payment.domain.CollectionRequestRepository;
+import com.tally.payment.domain.CollectionRequests;
 import com.tally.payment.domain.PaymentAttempt;
-import com.tally.payment.domain.PaymentAttemptRepository;
+import com.tally.payment.domain.PaymentAttempts;
 import com.tally.shared.Money;
 import java.time.Clock;
 import java.util.Collection;
@@ -23,12 +23,12 @@ class PaymentService implements PaymentApi {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
 
-    private final CollectionRequestRepository requests;
-    private final PaymentAttemptRepository attempts;
+    private final CollectionRequests requests;
+    private final PaymentAttempts attempts;
     private final CollectionQueue queue;
     private final Clock clock;
 
-    PaymentService(CollectionRequestRepository requests, PaymentAttemptRepository attempts, CollectionQueue queue,
+    PaymentService(CollectionRequests requests, PaymentAttempts attempts, CollectionQueue queue,
             Clock clock) {
         this.requests = requests;
         this.attempts = attempts;

@@ -1,6 +1,6 @@
 package com.tally.payment.application;
 
-import com.tally.payment.domain.CollectionRequestRepository;
+import com.tally.payment.domain.CollectionRequests;
 import com.tally.payment.domain.PaymentAttempt;
 import java.time.Clock;
 import org.springframework.stereotype.Component;
@@ -10,12 +10,12 @@ import org.springframework.stereotype.Component;
  * transaction that changes the attempt: the request and its attempts are one aggregate.
  */
 @Component
-class CollectionRequests {
+class CollectionRequestSettlement {
 
-    private final CollectionRequestRepository requests;
+    private final CollectionRequests requests;
     private final Clock clock;
 
-    CollectionRequests(CollectionRequestRepository requests, Clock clock) {
+    CollectionRequestSettlement(CollectionRequests requests, Clock clock) {
         this.requests = requests;
         this.clock = clock;
     }

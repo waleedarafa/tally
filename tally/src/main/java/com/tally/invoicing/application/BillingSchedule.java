@@ -3,7 +3,7 @@ package com.tally.invoicing.application;
 import com.tally.account.AccountApi;
 import com.tally.invoicing.domain.BillingCalendar;
 import com.tally.invoicing.domain.SubscriptionBilling;
-import com.tally.invoicing.domain.SubscriptionBillingRepository;
+import com.tally.invoicing.domain.SubscriptionBillings;
 import com.tally.platform.DurableQueue;
 import com.tally.platform.DurableQueues;
 import com.tally.platform.Outcome;
@@ -37,12 +37,12 @@ class BillingSchedule implements QueueHandler {
             "invoicing.invoice_one_per_account_and_period").asMoneyQueue();
 
     private final DurableQueue queue;
-    private final SubscriptionBillingRepository subscriptions;
+    private final SubscriptionBillings subscriptions;
     private final AccountApi accounts;
     private final InvoiceIssuer issuer;
     private final TransactionTemplate transactions;
 
-    BillingSchedule(DurableQueues queues, BillingProperties properties, SubscriptionBillingRepository subscriptions,
+    BillingSchedule(DurableQueues queues, BillingProperties properties, SubscriptionBillings subscriptions,
             AccountApi accounts, InvoiceIssuer issuer, TransactionTemplate transactions) {
         this.subscriptions = subscriptions;
         this.accounts = accounts;

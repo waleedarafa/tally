@@ -10,8 +10,8 @@ import com.tally.subscription.SubscriptionView;
 import com.tally.subscription.TimelineEntry;
 import com.tally.subscription.domain.Subscription;
 import com.tally.subscription.domain.SubscriptionChange;
-import com.tally.subscription.domain.SubscriptionChangeRepository;
-import com.tally.subscription.domain.SubscriptionRepository;
+import com.tally.subscription.domain.SubscriptionChanges;
+import com.tally.subscription.domain.Subscriptions;
 import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
@@ -23,13 +23,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 class SubscriptionService implements SubscriptionApi {
 
-    private final SubscriptionRepository subscriptions;
-    private final SubscriptionChangeRepository changes;
+    private final Subscriptions subscriptions;
+    private final SubscriptionChanges changes;
     private final CatalogApi catalog;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    SubscriptionService(SubscriptionRepository subscriptions, SubscriptionChangeRepository changes,
+    SubscriptionService(Subscriptions subscriptions, SubscriptionChanges changes,
             CatalogApi catalog, ApplicationEventPublisher events, Clock clock) {
         this.subscriptions = subscriptions;
         this.changes = changes;

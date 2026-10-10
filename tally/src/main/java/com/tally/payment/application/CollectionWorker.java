@@ -4,7 +4,7 @@ import com.tally.payment.AttemptState;
 import com.tally.payment.PaymentFailed;
 import com.tally.payment.PaymentSucceeded;
 import com.tally.payment.domain.PaymentAttempt;
-import com.tally.payment.domain.PaymentAttemptRepository;
+import com.tally.payment.domain.PaymentAttempts;
 import com.tally.payment.domain.PaymentGateway;
 import com.tally.payment.domain.PaymentGateway.ChargeResult;
 import com.tally.payment.domain.PaymentGateway.NotChargedException;
@@ -30,14 +30,14 @@ class CollectionWorker implements QueueHandler {
 
     private static final Logger log = LoggerFactory.getLogger(CollectionWorker.class);
 
-    private final PaymentAttemptRepository attempts;
-    private final CollectionRequests requests;
+    private final PaymentAttempts attempts;
+    private final CollectionRequestSettlement requests;
     private final ProviderIsolation provider;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate transactions;
     private final Clock clock;
 
-    CollectionWorker(PaymentAttemptRepository attempts, CollectionRequests requests, ProviderIsolation provider,
+    CollectionWorker(PaymentAttempts attempts, CollectionRequestSettlement requests, ProviderIsolation provider,
             ApplicationEventPublisher events, TransactionTemplate transactions, Clock clock) {
         this.attempts = attempts;
         this.requests = requests;

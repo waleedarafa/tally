@@ -1,21 +1,18 @@
-package com.tally.invoicing.domain;
+package com.tally.invoicing.adapter.persistence;
 
+import com.tally.invoicing.domain.Invoice;
+import com.tally.invoicing.domain.Invoices;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
-public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
+/** Spring Data implements {@link Invoices}. */
+interface JpaInvoices extends JpaRepository<Invoice, UUID>, Invoices {
 
-    /**
-     * Inserts {@code invoice} unless the account already has one for its billing date (D1), atomically:
-     * a concurrent caller waits for the first insert to commit, then inserts nothing (FR-028).
-     * Returns whether this call inserted it.
-     */
+    @Override
     default boolean insertIfAbsent(Invoice invoice) {
         return insertRow(invoice.id(), invoice.accountId(), invoice.subscriptionId(), invoice.planId(),
                 invoice.status().name(), invoice.amount().minorUnits(), invoice.amount().currency().getCurrencyCode(),
@@ -34,12 +31,4 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     int insertRow(UUID id, UUID accountId, UUID subscriptionId, String planId, String status, long amountMinor,
             String currency, LocalDate periodStart, LocalDate periodEnd, String paymentReference, Instant issuedAt,
             Instant billedFor);
-
-    Optional<Invoice> findByPaymentReference(String paymentReference);
-
-    List<Invoice> findByAccountIdOrderByPeriodStart(UUID accountId);
-
-    List<Invoice> findBySubscriptionIdOrderByPeriodStart(UUID subscriptionId);
-
-    List<Invoice> findByIssuedAtGreaterThanEqualAndIssuedAtLessThan(Instant from, Instant to);
 }

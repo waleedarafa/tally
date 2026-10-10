@@ -1,18 +1,17 @@
-package com.tally.payment.domain;
+package com.tally.payment.adapter.persistence;
 
+import com.tally.payment.domain.CollectionRequest;
+import com.tally.payment.domain.CollectionRequests;
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
-public interface CollectionRequestRepository extends JpaRepository<CollectionRequest, UUID> {
+/** Spring Data implements {@link CollectionRequests}. */
+interface JpaCollectionRequests extends JpaRepository<CollectionRequest, UUID>, CollectionRequests {
 
-    /**
-     * FR-041: creates the request for {@code reference} unless one exists, atomically. A concurrent
-     * caller waits for the first insert to commit, then inserts nothing. Returns 1 if this call created it.
-     */
+    @Override
     @Modifying
     @Query(nativeQuery = true, value = """
             INSERT INTO payment.collection_request
@@ -22,6 +21,4 @@ public interface CollectionRequestRepository extends JpaRepository<CollectionReq
             """)
     int insertIfAbsent(UUID id, String reference, UUID accountId, long amountMinor, String currency,
             String paymentToken, Instant now);
-
-    Optional<CollectionRequest> findByReference(String reference);
 }
