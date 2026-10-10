@@ -1,5 +1,6 @@
 package com.tally.invoicing.application;
 
+import com.tally.invoicing.InvoiceLineView;
 import com.tally.invoicing.InvoiceView;
 import com.tally.invoicing.InvoicingApi;
 import com.tally.invoicing.domain.Invoice;
@@ -33,6 +34,8 @@ class InvoicingService implements InvoicingApi {
 
     static InvoiceView view(Invoice i) {
         return new InvoiceView(i.id(), i.accountId(), i.subscriptionId(), i.status(), i.amount(), i.periodStart(),
-                i.periodEnd(), i.paymentReference(), i.issuedAt(), i.billedFor());
+                i.periodEnd(), i.paymentReference(), i.issuedAt(), i.billedFor(),
+                i.lines().stream().map(l -> new InvoiceLineView(l.description(), l.amount())).toList(),
+                i.offerVersion(), i.quoteReason());
     }
 }

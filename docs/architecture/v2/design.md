@@ -72,9 +72,13 @@ Named interfaces: `account` exposes a read API to every module that lists it, an
 | `collections` | `Collections.caseFor(accountId)` | none |
 
 ```java
-public record PriceQuote(SubscriptionId subscription, OfferId offer, int offerVersion,
+public record PriceQuote(UUID subscriptionId, String offerId, int offerVersion,
                          Period period, List<PriceLine> lines, Money total, QuoteReason reason) {}
+public record Period(int number, LocalDate start, LocalDate end) {}       // [start, end)
+public record PriceLine(String description, Money amount) {}            // a credit is negative
+public record QuoteReason(String offerId, int offerVersion, String kind, Map<String, Boolean> flags) {}
 ```
+*(Real names since Slice 1R PR-4: identifiers are `UUID` and `String`, not value types.)*
 
 **Envelope:** every event carries event ID, occurrence time, account ID and the aggregate version as a sequence number.
 **Evolution:** add fields only; never rename or move an event class; every shared enum has `UNKNOWN`, which unknown input maps to.

@@ -11,7 +11,9 @@ import com.tally.platform.QueueDefinition;
 import com.tally.platform.QueueHandler;
 import com.tally.platform.QueueItem;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,8 +78,11 @@ class BillingSchedule implements QueueHandler {
         SubscriptionBilling subscription = subscriptions.findById(subscriptionId).orElseThrow();
         ZoneId zone = accounts.get(subscription.accountId()).orElseThrow().timeZone();
         LocalDate periodEnd = subscription.calendar().nextBillingDate(billingDate);
-        issuer.issue(subscription.accountId(), subscriptionId, subscription.planId(), billingDate, periodEnd,
-                BillingCalendar.billingTime(billingDate, zone));
+        // One period per month from the start; until Slice 1R PR-5 moves period numbers into Subscription.
+        int periodNumber = (int) ChronoUnit.MONTHS.between(
+                YearMonth.from(subscription.startedOn()), YearMonth.from(billingDate)) + 1;
+        issuer.issue(subscription.accountId(), subscriptionId, subscription.planId(), periodNumber, billingDate,
+                periodEnd, BillingCalendar.billingTime(billingDate, zone));
         schedule(subscription.accountId(), subscriptionId, periodEnd, zone);
     }
 }

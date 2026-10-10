@@ -72,7 +72,7 @@ class InvoicingListeners {
         SubscriptionBilling billing = subscriptions.findById(changed.subscriptionId()).orElseThrow();
         LocalDate periodEnd = billing.calendar().nextBillingDate(startedOn);
         // The first invoice is due when the subscription starts.
-        issuer.issue(changed.accountId(), changed.subscriptionId(), changed.planId(), startedOn, periodEnd,
+        issuer.issue(changed.accountId(), changed.subscriptionId(), changed.planId(), 1, startedOn, periodEnd,
                 changed.occurredAt());
         schedule.schedule(changed.accountId(), changed.subscriptionId(), periodEnd, account.timeZone());
     }

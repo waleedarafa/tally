@@ -2,15 +2,22 @@ package com.tally.invoicing.domain;
 
 import com.tally.invoicing.InvoiceStatus;
 import com.tally.shared.Money;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /** An invoice for one billing period. Refers to the account and subscription by identifier only. */
@@ -59,6 +66,19 @@ public class Invoice {
     @Column(name = "paid_at")
     private Instant paidAt;
 
+    /** The PriceQuote's lines (I3); the amount is their sum. Empty for an invoice issued before Slice 1R PR-4. */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(schema = "invoicing", name = "invoice_line", joinColumns = @JoinColumn(name = "invoice_id"))
+    @OrderColumn(name = "line_number")
+    private List<InvoiceLine> lines = new ArrayList<>();
+
+    /** The offer version the quote priced, and the quote's reason (D7). Null before Slice 1R PR-4. */
+    @Column(name = "offer_version")
+    private Integer offerVersion;
+
+    @Column(name = "quote_reason")
+    private String quoteReason;
+
     /**
      * Optimistic lock. A listener may run twice at the same time (Spike A): without it, two concurrent
      * deliveries of one PaymentSucceeded could both mark the invoice paid and both publish InvoicePaid.
@@ -69,9 +89,21 @@ public class Invoice {
     protected Invoice() {
     }
 
-    public static Invoice issue(UUID accountId, UUID subscriptionId, String planId, Money amount,
-            LocalDate periodStart, LocalDate periodEnd, Instant billedFor, Instant now) {
+    /**
+     * Issues an invoice from a quote's amounts (design.md §7: takes amounts, never an offer). The amount is
+     * the sum of the lines, never rounded again (ADR-017).
+     */
+    public static Invoice issue(UUID accountId, UUID subscriptionId, String planId, List<InvoiceLine> lines,
+            int offerVersion, String quoteReason, LocalDate periodStart, LocalDate periodEnd, Instant billedFor,
+            Instant now) {
+        if (lines.isEmpty()) {
+            throw new IllegalArgumentException("An invoice has at least one line");
+        }
+        Money amount = lines.stream().map(InvoiceLine::amount).reduce(Money::plus).orElseThrow();
         Invoice i = new Invoice();
+        i.lines = new ArrayList<>(lines);
+        i.offerVersion = offerVersion;
+        i.quoteReason = quoteReason;
         i.id = UUID.randomUUID();
         i.accountId = accountId;
         i.subscriptionId = subscriptionId;
@@ -128,6 +160,18 @@ public class Invoice {
 
     public InvoiceStatus status() {
         return status;
+    }
+
+    public List<InvoiceLine> lines() {
+        return List.copyOf(lines);
+    }
+
+    public Integer offerVersion() {
+        return offerVersion;
+    }
+
+    public String quoteReason() {
+        return quoteReason;
     }
 
     public Money amount() {
