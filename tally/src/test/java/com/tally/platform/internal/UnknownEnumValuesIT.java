@@ -42,7 +42,7 @@ class UnknownEnumValuesIT extends AbstractIntegrationTest {
     void unknownValuesOfEveryCrossModuleEnumReadAsUnknown() {
         String unknown = "\"A_VALUE_FROM_A_NEWER_RELEASE\"";
         assertThat(json.readValue(unknown, InvoiceStatus.class)).isEqualTo(InvoiceStatus.UNKNOWN);
-        assertThat(json.readValue(unknown, AttemptState.class)).isEqualTo(AttemptState.UNKNOWN);
+        assertThat(json.readValue(unknown, AttemptState.class)).isEqualTo(AttemptState.UNRECOGNISED);
         assertThat(json.readValue(unknown, FailureReason.class)).isEqualTo(FailureReason.UNKNOWN);
         assertThat(json.readValue(unknown, SubscriptionChangeType.class)).isEqualTo(SubscriptionChangeType.UNKNOWN);
     }

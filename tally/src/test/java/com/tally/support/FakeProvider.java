@@ -66,6 +66,16 @@ public final class FakeProvider {
                 .body(new ParameterizedTypeReference<Map<String, Long>>() { });
     }
 
+    /**
+     * Charges the provider directly, as a Tally worker's call would: for tests that leave Tally as a crash
+     * during that call would (AT-15). Returns the provider's answer.
+     */
+    public static Map<String, Object> charge(String token, long amountMinor, String currency, String reference) {
+        return http().post().uri("/charges")
+                .body(Map.of("token", token, "amount", amountMinor, "currency", currency, "reference", reference))
+                .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { });
+    }
+
     /** How many charges the provider recorded for a reference. */
     public static int chargeCount(String reference) {
         return http().get().uri("/admin/charges/count?reference={r}", reference).retrieve()

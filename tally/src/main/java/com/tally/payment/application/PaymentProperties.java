@@ -28,6 +28,10 @@ public record PaymentProperties(
      *                           attempt back to the queue
      * @param rateLimitTargetPercent the share of the provider's limit Tally aims for, leaving headroom
      *                           for two instances' calls landing in one provider second (report R6)
+     * @param lookupConsistent   whether the provider's lookup by reference shows a charge as soon as it is
+     *                           made (CONTRACT.md A11, Q-B). Only then may "not found" mean no charge.
+     *                           False unless the provider is known to be consistent.
+     * @param lookupDelay        the provider's stated delay before a charge appears in its lookup
      */
     public record Provider(
             @DefaultValue("http://localhost:8081") String baseUrl,
@@ -35,7 +39,14 @@ public record PaymentProperties(
             @DefaultValue("5s") Duration readTimeout,
             @DefaultValue("100") int rateLimitPerSecond,
             @DefaultValue("2s") Duration rateLimitWait,
-            @DefaultValue("95") int rateLimitTargetPercent) {
+            @DefaultValue("95") int rateLimitTargetPercent,
+            @DefaultValue("false") boolean lookupConsistent,
+            @DefaultValue("0s") Duration lookupDelay) {
+
+        /** The longest a provider call can take: past it, a SENT attempt with no result is stale (ADR-018). */
+        public Duration callTimeout() {
+            return connectTimeout.plus(readTimeout);
+        }
     }
 
     /**

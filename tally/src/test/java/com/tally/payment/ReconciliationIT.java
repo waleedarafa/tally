@@ -60,41 +60,72 @@ class ReconciliationIT extends AbstractReconcilingTest {
 
     @Test
     void aChargeReportedAsDeclinedIsCorrectedToSucceeded() {
-        double before = corrected("FAILED", "SUCCEEDED");
+        double before = corrected("DECLINED", "SUCCEEDED");
         FakeProvider.mode("LIE");
         String reference = collect();
 
-        awaitState(reference, AttemptState.FAILED, Duration.ofSeconds(10));
+        awaitState(reference, AttemptState.DECLINED, Duration.ofSeconds(10));
         FakeProvider.mode("NORMAL");
 
         clock.advance(Duration.ofMinutes(5));
         awaitState(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
-        assertThat(corrected("FAILED", "SUCCEEDED")).isEqualTo(before + 1);
+        assertThat(corrected("DECLINED", "SUCCEEDED")).isEqualTo(before + 1);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
 
-    @Test
-    void anUnknownAttemptTheProviderNeverChargedResolvesAsNotCharged() {
-        double before = corrected("UNKNOWN", "FAILED");
-        String reference = "REC-" + UUID.randomUUID();
+    /** Inserts an UNKNOWN attempt, sent at {@code sentAt}, due a check now. Returns its ID. */
+    UUID unknownAttempt(String reference, Instant sentAt) {
+        UUID id = UUID.randomUUID();
         var now = clock.instant().atOffset(ZoneOffset.UTC);
         jdbc.update("INSERT INTO payment.payment_attempt (id, reference, account_id, amount_minor, currency,"
-                + " payment_token, state, created_at, updated_at, reconcile_at)"
-                + " VALUES (?, ?, ?, 999, 'USD', 'tok', 'UNKNOWN', ?, ?, ?)",
-                UUID.randomUUID(), reference, UUID.randomUUID(), now, now, now.plusMinutes(5));
+                + " payment_token, state, created_at, updated_at, sent_at, reconcile_at)"
+                + " VALUES (?, ?, ?, 999, 'USD', ?, 'UNKNOWN', ?, ?, ?, ?)",
+                id, reference, UUID.randomUUID(), FakeProvider.token(), now, now, sentAt.atOffset(ZoneOffset.UTC), now);
+        return id;
+    }
 
-        clock.advance(Duration.ofMinutes(5));
-        awaitState(reference, AttemptState.FAILED, Duration.ofSeconds(10));
-        assertThat(payments.status(reference).orElseThrow().failureReason()).contains(FailureReason.SOFT);
-        assertThat(corrected("UNKNOWN", "FAILED")).isEqualTo(before + 1);
+    String stateOf(UUID attempt) {
+        return jdbc.queryForObject("SELECT state FROM payment.payment_attempt WHERE id = ?", String.class, attempt);
+    }
+
+    /**
+     * Proposed ADR-026: the fake's lookup is consistent, and the attempt was sent long enough ago for a
+     * charge to show. "Not found" is then no charge: a technical failure, no event, and a new attempt.
+     */
+    @Test
+    void anUnknownAttemptTheProviderNeverChargedIsATechnicalFailureAndIsTriedAgain() {
+        double before = corrected("UNKNOWN", "TECHNICAL_FAILURE");
+        String reference = "REC-" + UUID.randomUUID();
+        UUID unknown = unknownAttempt(reference, clock.instant().minus(Duration.ofMinutes(10)));
+
+        await().atMost(Duration.ofSeconds(10)).until(() -> "TECHNICAL_FAILURE".equals(stateOf(unknown)));
+        assertThat(corrected("UNKNOWN", "TECHNICAL_FAILURE")).isEqualTo(before + 1);
+        assertThat(jdbc.queryForObject("SELECT failure_reason FROM payment.payment_attempt WHERE id = ?", String.class,
+                unknown)).as("no decline recorded").isNull();
+        // The retry, a new attempt, charges once.
+        awaitState(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment.payment_attempt WHERE reference = ?",
+                Long.class, reference)).isEqualTo(2);
+        assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
+    }
+
+    /** A charge sent too recently to show in the lookup is not "no charge": the attempt stays UNKNOWN. */
+    @Test
+    void anUnknownAttemptSentTooRecentlyStaysUnknown() {
+        String reference = "REC-" + UUID.randomUUID();
+        UUID unknown = unknownAttempt(reference, clock.instant());
+
+        await().atMost(Duration.ofSeconds(10)).until(() -> checks(reference) == 1);
+        assertThat(stateOf(unknown)).isEqualTo("UNKNOWN");
+        assertThat(FakeProvider.requestCount(reference)).isZero();
     }
 
     @Test
     void aGenuineDeclineIsRecheckedWithBackoffForFortyEightHoursOnly() {
-        double before = corrected("FAILED", "SUCCEEDED");
+        double before = corrected("DECLINED", "SUCCEEDED");
         FakeProvider.mode("DECLINE_HARD(100)");
         String reference = collect();
-        awaitState(reference, AttemptState.FAILED, Duration.ofSeconds(10));
+        awaitState(reference, AttemptState.DECLINED, Duration.ofSeconds(10));
         FakeProvider.mode("NORMAL");
         Instant failedAt = clock.instant();
         assertThat(reconcileAt(reference)).isEqualTo(failedAt.plus(Duration.ofMinutes(5)));
@@ -113,8 +144,8 @@ class ReconciliationIT extends AbstractReconcilingTest {
         await().atMost(Duration.ofSeconds(10)).until(() -> checks(reference) == 3);
         assertThat(reconcileAt(reference)).isNull();
 
-        assertThat(payments.status(reference).orElseThrow().state()).isEqualTo(AttemptState.FAILED);
-        assertThat(corrected("FAILED", "SUCCEEDED")).isEqualTo(before);
+        assertThat(payments.status(reference).orElseThrow().state()).isEqualTo(AttemptState.DECLINED);
+        assertThat(corrected("DECLINED", "SUCCEEDED")).isEqualTo(before);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
 }

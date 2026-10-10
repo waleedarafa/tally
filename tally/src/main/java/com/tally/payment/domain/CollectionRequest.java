@@ -8,13 +8,14 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.UUID;
 
 /**
  * FR-041: an invoice is collected through one collection request, one per reference, never
  * deleted. It is the aggregate root; its {@link PaymentAttempt}s are the tries. Created only by
- * {@link CollectionRequests#insertIfAbsent}, an atomic insert-or-nothing.
+ * {@link CollectionRequests#addIfAbsent}, an atomic insert-or-nothing.
  */
 @Entity
 @Table(schema = "payment", name = "collection_request")
@@ -48,6 +49,11 @@ public class CollectionRequest {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** The Payment aggregate's version: the sequence its events will carry (ADR-016, Slice 1R PR-7). */
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     protected CollectionRequest() {
     }
 
@@ -55,7 +61,8 @@ public class CollectionRequest {
     public void settle(AttemptState attempt, Instant now) {
         CollectionOutcome next = switch (attempt) {
             case SUCCEEDED -> CollectionOutcome.SUCCEEDED;
-            case FAILED -> CollectionOutcome.FAILED;
+            case DECLINED -> CollectionOutcome.FAILED;
+            // REQUESTED, SENT, UNKNOWN, or a technical failure whose retry is queued.
             default -> CollectionOutcome.OPEN;
         };
         if (next != outcome) {

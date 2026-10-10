@@ -25,14 +25,14 @@ class AT06LyingProviderIT extends AbstractReconcilingTest {
 
     @Test
     void aChargeReportedAsDeclinedIsCorrectedAndTheInvoicePaid() {
-        double correctedBefore = corrected("FAILED", "SUCCEEDED");
+        double correctedBefore = corrected("DECLINED", "SUCCEEDED");
         FakeProvider.mode("LIE");
         UUID account = subscribedAccount();
         InvoiceView invoice = firstInvoice(account);
         String reference = invoice.paymentReference();
 
-        // Tally believes the answer: FAILED (HARD), invoice PAYMENT_FAILED.
-        awaitAttempt(reference, AttemptState.FAILED, Duration.ofSeconds(10));
+        // Tally believes the answer: DECLINED (HARD), invoice PAYMENT_FAILED.
+        awaitAttempt(reference, AttemptState.DECLINED, Duration.ofSeconds(10));
         FakeProvider.mode("NORMAL");
         assertThat(payments.status(reference).orElseThrow().failureReason()).contains(FailureReason.HARD);
         await().atMost(Duration.ofSeconds(10))
@@ -44,7 +44,7 @@ class AT06LyingProviderIT extends AbstractReconcilingTest {
         await().atMost(Duration.ofSeconds(10))
                 .until(() -> invoicing.invoicesFor(account).getFirst().status() == InvoiceStatus.PAID);
 
-        assertThat(corrected("FAILED", "SUCCEEDED")).isEqualTo(correctedBefore + 1);
+        assertThat(corrected("DECLINED", "SUCCEEDED")).isEqualTo(correctedBefore + 1);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
 }

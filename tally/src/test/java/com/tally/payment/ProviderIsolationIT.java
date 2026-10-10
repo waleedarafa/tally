@@ -66,8 +66,17 @@ class ProviderIsolationIT extends AbstractProviderIntegrationTest {
         List<String> during = collect(4);
 
         await().atMost(Duration.ofSeconds(10)).until(() -> breakerState() == 1);
-        // A 503 means nothing was charged: the attempts go back to the queue, not to UNKNOWN.
-        await().atMost(Duration.ofSeconds(10)).until(() -> all(during, AttemptState.PENDING));
+        // A 503 means nothing was charged: each 503 makes its attempt a technical failure, not UNKNOWN, and
+        // its retry a new REQUESTED attempt (ADR-013). An attempt the open breaker held back was never sent:
+        // it is still REQUESTED. So every reference's latest attempt is REQUESTED, with one technical
+        // failure per 503 the provider answered.
+        await().atMost(Duration.ofSeconds(10)).until(() -> all(during, AttemptState.REQUESTED));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment.payment_attempt"
+                + " WHERE state = 'TECHNICAL_FAILURE' AND reference = ANY (?::text[])", Integer.class,
+                (Object) during.toArray(String[]::new))).isEqualTo(requests(during)).isPositive();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment.payment_attempt"
+                + " WHERE state = 'UNKNOWN' AND reference = ANY (?::text[])", Integer.class,
+                (Object) during.toArray(String[]::new))).isZero();
 
         // While the breaker is open, new work is not even claimed.
         List<String> whileOpen = collect(3);
@@ -92,13 +101,13 @@ class ProviderIsolationIT extends AbstractProviderIntegrationTest {
     }
 
     @Test
-    void aRateLimitedCallReturnsToTheQueueAndIsChargedOnceLater() {
+    void aRateLimitedCallIsRetriedAsANewAttemptAndChargedOnceLater() {
         // The provider allows 2 calls a second; this instance allows itself 5.
         FakeProvider.mode("RATE_LIMIT(2)");
         List<String> references = collect(10);
 
         await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(300)).until(() -> {
-            clock.advance(Duration.ofSeconds(1)); // Lets returned attempts fall due again.
+            clock.advance(Duration.ofSeconds(1)); // Lets retries and held-back attempts fall due.
             return all(references, AttemptState.SUCCEEDED);
         });
 

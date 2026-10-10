@@ -78,7 +78,7 @@ class AT09KillOneInstanceIT {
                 count(jdbc, "SELECT count(*) FROM subscription.renewal WHERE queue_key LIKE ? AND status = 'DONE'",
                         "%:" + billingDate) == ACCOUNTS
                         && count(jdbc, "SELECT count(DISTINCT reference) FROM payment.payment_attempt") == ACCOUNTS
-                        && count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE state IN ('PENDING', 'IN_FLIGHT')") == 0);
+                        && count(jdbc, "SELECT count(*) FROM payment.payment_attempt WHERE state IN ('REQUESTED', 'SENT')") == 0);
         Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
 
         // Exactly one invoice per account and billing date, for every account.
