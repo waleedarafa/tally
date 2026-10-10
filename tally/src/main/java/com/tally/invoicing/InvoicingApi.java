@@ -11,4 +11,13 @@ public interface InvoicingApi {
 
     /** The subscription's invoices, oldest first. */
     List<InvoiceView> invoicesForSubscription(UUID subscriptionId);
+
+    /**
+     * Collections' retry {@code retry} (1 on day 3) of an invoice whose payment was declined: asks Payment
+     * to collect its reference again (design.md §4; Payment looks the reference up first, proposed
+     * ADR-026). Does nothing unless the invoice's payment failed. A retry asked for twice is made once.
+     *
+     * <p>Calls the provider through Payment, so it must not be called inside a transaction (rule 6).
+     */
+    void requestPaymentAgain(UUID invoiceId, int retry);
 }

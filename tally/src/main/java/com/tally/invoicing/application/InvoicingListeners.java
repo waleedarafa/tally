@@ -4,6 +4,7 @@ import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
 import com.tally.invoicing.InvoiceIssued;
 import com.tally.invoicing.InvoicePaid;
+import com.tally.invoicing.InvoicePaymentDeclined;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.Invoices;
 import com.tally.payment.FailureReason;
@@ -103,8 +104,14 @@ class InvoicingListeners {
         if (failed.reason() == FailureReason.UNKNOWN) {
             return;
         }
-        invoices.forPaymentReference(failed.reference())
-                .ifPresentOrElse(Invoice::paymentFailed, () -> unknownReference(failed.reference()));
+        invoices.forPaymentReference(failed.reference()).ifPresentOrElse(invoice -> {
+            if (invoice.paymentFailed()) {
+                invoices.update(invoice);
+                events.publishEvent(new InvoicePaymentDeclined(UUID.randomUUID(), clock.instant(),
+                        invoice.accountId(), invoice.id(), invoice.paymentReference(), invoice.amount(),
+                        invoice.version()));
+            }
+        }, () -> unknownReference(failed.reference()));
     }
 
     /** Payment is shared by design: a reference may not be an invoice of ours (FR-014). */
