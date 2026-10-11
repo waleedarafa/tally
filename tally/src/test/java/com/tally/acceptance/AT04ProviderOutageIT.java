@@ -72,6 +72,11 @@ class AT04ProviderOutageIT extends AbstractProviderIntegrationTest {
         tally = RestClient.create("http://localhost:" + port);
     }
 
+    long attemptsIn(List<String> references, String state) {
+        return jdbc.queryForObject("SELECT count(*) FROM payment.payment_attempt WHERE reference = ANY(?)"
+                + " AND state = ?", Long.class, (Object) references.toArray(String[]::new), state);
+    }
+
     double breakerState() {
         return meters.get("tally.payment.breaker.state").gauge().value();
     }
@@ -129,6 +134,9 @@ class AT04ProviderOutageIT extends AbstractProviderIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM payment.collection_queue WHERE status = 'IN_PROCESSING'",
                 Integer.class)).isZero();
         assertThat(FakeProvider.chargeCount(references.getLast())).isZero();
+        // The outage's refusals are technical failures, never declines (ADR-013): no bank said no.
+        assertThat(attemptsIn(references, "TECHNICAL_FAILURE")).as("technical failures").isPositive();
+        assertThat(attemptsIn(references, "DECLINED")).as("declines").isZero();
 
         // The provider recovers. Time passes: the breaker's 30 s wait, then trial calls, then all the rest.
         FakeProvider.mode("NORMAL");

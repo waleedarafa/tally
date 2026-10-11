@@ -1,0 +1,12 @@
+# Every Tally event listener, by the identity Spring Modulith stores with each pending publication:
+# class.method(parameter types) (CLAUDE.md rule 7). A listener is never renamed or moved while it may have
+# incomplete publications. To move one: add the new listener and its line, deploy, wait until the old one has
+# no incomplete publications, then remove the old listener and its line. To add a listener: add its line in the
+# same commit.
+com.tally.access.application.AccessService.on(com.tally.subscription.SubscriptionChanged)
+com.tally.collections.application.CollectionsService.on(com.tally.invoicing.InvoicePaid)
+com.tally.collections.application.CollectionsService.on(com.tally.invoicing.InvoicePaymentDeclined)
+com.tally.invoicing.application.InvoicingListeners.on(com.tally.invoicing.InvoiceIssued)
+com.tally.invoicing.application.InvoicingListeners.on(com.tally.payment.PaymentFailed)
+com.tally.invoicing.application.InvoicingListeners.on(com.tally.payment.PaymentSucceeded)
+com.tally.invoicing.application.InvoicingListeners.on(com.tally.subscription.SubscriptionChanged)

@@ -39,7 +39,8 @@ import org.springframework.scheduling.annotation.Schedules;
 /**
  * ArchUnit fitness functions from slice 1, build step 2. Each rule names the record it guards.
  * Every rule fails if it matches no classes ({@code allowEmptyShould} is off), so a rule whose
- * subject has been renamed or moved away cannot pass silently.
+ * subject has been renamed or moved away cannot pass silently. FF-8 ({@code domainDoesNotDependOnAdapters}) was
+ * retired at the Slice 1R close-out: F9 and F11 cover every domain package between them.
  */
 class ArchitectureRulesTest {
 
@@ -118,21 +119,6 @@ class ArchitectureRulesTest {
                 .that().resideInAPackage("com.tally.payment..")
                 .should().dependOnClassesThat().resideInAPackage("com.tally.invoicing..")
                 .because("payment knows nothing about invoices (FR-014)");
-
-        rule.check(CLASSES);
-    }
-
-    /** FR-003: the domain does not depend on adapters, nor on web technology. */
-    @Test
-    void domainDoesNotDependOnAdapters() {
-        ArchRule rule = noClasses()
-                .that().resideInAPackage("com.tally.*.domain..")
-                .should().dependOnClassesThat().resideInAnyPackage(
-                        "com.tally.*.adapter..",
-                        "org.springframework.web..",
-                        "org.springframework.http..",
-                        "jakarta.servlet..")
-                .because("domain packages do not depend on web or adapter packages (FR-003)");
 
         rule.check(CLASSES);
     }
