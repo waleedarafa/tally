@@ -141,5 +141,5 @@ Clock (all with dates), `CardProvider` (payment), `TaxRates` (invoicing), `Invoi
 | `GET /v1/accounts/{id}/invoices` | invoices with amounts | |
 | `GET /v1/access/{subscriberId}` | canWatch, reason, asOf, sequence | served by Access |
 
-Errors: `application/problem+json` (RFC 9457). Types: `offer-not-available`, `already-subscribed`, `account-blocked`, `idempotency-key-reused`.
-Idempotency keys are stored before acting, with the response, for 24 hours. Versions live in the path; changes are additive; a break is `/v2`.
+Errors: `application/problem+json` (RFC 9457). Types: `offer-not-available`, `already-subscribed`, `account-blocked`, `idempotency-key-reused`, `request-in-progress` (409, with `Retry-After`: the same request is still being handled; added in Slice 1R PR-9b).
+Idempotency keys are claimed before acting; the response is stored in the same transaction as the change, and both are kept for 24 hours. Keys are scoped by account until callers are authenticated. Versions live in the path; changes are additive; a break is `/v2`.

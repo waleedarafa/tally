@@ -3,11 +3,87 @@ info:
   title: Tally REST API
   version: "1"
   description: >
-    The REST contract, v1 (design.md §8; ADR-019). Written before the code (OpenAPI first). Versions live in
-    the path; changes are additive; a break is /v2. Every request that changes state requires an
-    Idempotency-Key (CLAUDE.md rule 13). Slice 1R builds sign-up only; the other requests in design.md §8
-    come in later slices.
+    The REST contract, v1 (design.md §8; ADR-019). Written before the code (OpenAPI first) and checked against
+    it: the contract tests validate every request and response below (com.tally.contract). Versions live in the
+    path; changes are additive; a break is /v2. Every request that changes state requires an Idempotency-Key
+    (CLAUDE.md rule 13), handled by the platform's shared mechanism.
 paths:
+  /v1/accounts:
+    post:
+      operationId: openAccount
+      summary: Opens an account.
+      description: >
+        The Idempotency-Key is claimed before acting; the response is stored in the same transaction as the new
+        account, and both are kept for 24 hours. No account exists before this request, so until callers are
+        authenticated every key of this endpoint shares one scope: two clients choosing the same key value share it.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenAccountRequest"
+      responses:
+        "201":
+          description: The account was opened.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/RequestInProgress"
+        "422":
+          $ref: "#/components/responses/KeyReused"
+  /v1/accounts/{id}:
+    get:
+      operationId: getAccount
+      summary: Reads an account.
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "404":
+          description: No such account. No body.
+  /v1/accounts/{id}/access:
+    get:
+      operationId: getAccess
+      summary: Whether the account may watch (until Slice 2, beside GET /v1/access/{subscriberId}).
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: The account's access.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Access"
+  /v1/payments/{reference}/status:
+    get:
+      operationId: getPaymentStatus
+      summary: The latest payment attempt for a reference, read from Payment (FR-019).
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The latest attempt.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentStatus"
+        "404":
+          description: No payment was requested for this reference. No body.
   /v1/subscriptions:
     post:
       operationId: signUp
@@ -18,20 +94,10 @@ paths:
         within the promised seconds (ADR-014: 99% within 5 seconds; the app shows "activating").
         The Idempotency-Key is claimed before acting; the response is stored in the same transaction as the
         sign-up, and both are kept for 24 hours: a repeat with the same key and the same body returns the stored
-        response, error responses included.
+        response, error responses included. Keys are scoped by account (the body's accountId) until callers are
+        authenticated; then they will be scoped by caller.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: >
-            A key the client makes for this sign-up, such as a UUID. Kept for 24 hours. Keys are scoped by
-            account (the body's accountId) until callers are authenticated; then they will be scoped by caller.
-            A key still held by a request that has not answered within 60 seconds is taken over by the next
-            request with it: that request died, and its sign-up rolled back with its response.
-          schema:
-            type: string
-            minLength: 1
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -46,11 +112,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SignUpResponse"
         "400":
-          description: The Idempotency-Key header is missing, or the body is not a sign-up.
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Problem"
+          $ref: "#/components/responses/BadRequest"
         "404":
           description: No such account.
           content:
@@ -61,7 +123,12 @@ paths:
           description: >
             `already-subscribed`: the account already has a subscription.
             `account-blocked`: the account's standing is BLOCKED.
-            Or (`about:blank`) a request with this Idempotency-Key is still being processed: try again shortly.
+            `request-in-progress`: a request with this Idempotency-Key is still being handled; see Retry-After.
+          headers:
+            Retry-After:
+              description: With request-in-progress only, the seconds until the first request's timeout ends.
+              schema:
+                type: integer
           content:
             application/problem+json:
               schema:
@@ -75,7 +142,98 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >
+        A key the client makes for this request, such as a UUID. Kept for 24 hours. A key still held by a request
+        that has not answered within 60 seconds is taken over by the next request with it: that request died, and
+        its change rolled back with its response.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    AccountId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: The Idempotency-Key header is missing, or the body is not valid for this request.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    RequestInProgress:
+      description: "`request-in-progress`: a request with this Idempotency-Key is still being handled."
+      headers:
+        Retry-After:
+          description: The seconds until the first request's timeout ends.
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    KeyReused:
+      description: "`idempotency-key-reused`: the key was used for a different request."
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
   schemas:
+    OpenAccountRequest:
+      type: object
+      required: [currency, timeZone]
+      properties:
+        currency:
+          type: string
+          description: ISO 4217, for example AED.
+        timeZone:
+          type: string
+          description: IANA time zone, for example Asia/Dubai.
+    Account:
+      type: object
+      required: [id, currency, timeZone]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+        timeZone:
+          type: string
+    Access:
+      type: object
+      required: [accountId, hasAccess]
+      additionalProperties: false
+      properties:
+        accountId:
+          type: string
+          format: uuid
+        hasAccess:
+          type: boolean
+    PaymentStatus:
+      type: object
+      required: [reference, state, failureReason]
+      additionalProperties: false
+      properties:
+        reference:
+          type: string
+        state:
+          type: string
+          description: >
+            REQUESTED, SENT, SUCCEEDED, DECLINED, TECHNICAL_FAILURE or UNKNOWN. Extensible: clients must accept
+            values not listed.
+        failureReason:
+          type: [string, "null"]
+          description: For a decline, SOFT or HARD; null otherwise. Extensible.
     SignUpRequest:
       type: object
       required: [accountId, planId, paymentToken]
@@ -92,6 +250,7 @@ components:
     SignUpResponse:
       type: object
       required: [subscriptionId, status, accessWithinSeconds]
+      additionalProperties: false
       properties:
         subscriptionId:
           type: string
@@ -116,7 +275,8 @@ components:
           format: uri-reference
           description: >
             /problems/offer-not-available, /problems/already-subscribed, /problems/account-blocked,
-            /problems/idempotency-key-reused (design.md §8), or about:blank for errors without a code of their own.
+            /problems/idempotency-key-reused, /problems/request-in-progress (design.md §8), or about:blank for errors
+            without a code of their own.
         title:
           type: string
         status:
