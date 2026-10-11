@@ -26,8 +26,9 @@ class RequestedAttemptIT extends AbstractReconcilingTest {
         // No queue item: no worker sends it, so it waits REQUESTED for as long as the test needs.
         var madeAt = clock.instant().minus(Duration.ofDays(365)).atOffset(ZoneOffset.UTC);
         jdbc.update("INSERT INTO payment.payment_attempt (id, reference, account_id, amount_minor, currency,"
-                + " payment_token, state, created_at, updated_at) VALUES (?, ?, ?, 999, 'USD', ?, 'REQUESTED', ?, ?)",
-                attempt, reference, UUID.randomUUID(), FakeProvider.token(), madeAt, madeAt);
+                + " payment_token, state, created_at, updated_at, idempotency_key)"
+                + " VALUES (?, ?, ?, 999, 'USD', ?, 'REQUESTED', ?, ?, ?)",
+                attempt, reference, UUID.randomUUID(), FakeProvider.token(), madeAt, madeAt, reference + ":1");
         try {
             reconciliation.run();
 

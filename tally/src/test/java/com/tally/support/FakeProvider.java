@@ -76,6 +76,19 @@ public final class FakeProvider {
                 .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { });
     }
 
+    /** As {@link #charge}, with an {@code Idempotency-Key} (CONTRACT.md A22). */
+    public static Map<String, Object> charge(String token, long amountMinor, String currency, String reference,
+            String key) {
+        return http().post().uri("/charges").header("Idempotency-Key", key)
+                .body(Map.of("token", token, "amount", amountMinor, "currency", currency, "reference", reference))
+                .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { });
+    }
+
+    /** Test-only: as if the provider's key retention (24 hours) had passed for every key (A22). */
+    public static void pruneIdempotencyKeys() {
+        http().post().uri("/admin/idempotency-keys/prune").retrieve().toBodilessEntity();
+    }
+
     /** How many charges the provider recorded for a reference. */
     public static int chargeCount(String reference) {
         return http().get().uri("/admin/charges/count?reference={r}", reference).retrieve()

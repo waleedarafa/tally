@@ -9,9 +9,9 @@ import java.util.regex.Pattern;
  * {@code ["SLOW(200)", "LIE"]}. {@code NORMAL}, or an empty list, resets everything.
  */
 record Modes(long slowMillis, boolean timeoutAfterCharge, boolean outage, int rateLimitPerSecond,
-        int declineSoftPercent, int declineHardPercent, boolean lie) {
+        int declineSoftPercent, int declineHardPercent, boolean lie, boolean lookupLag) {
 
-    static final Modes NORMAL = new Modes(0, false, false, 0, 0, 0, false);
+    static final Modes NORMAL = new Modes(0, false, false, 0, 0, 0, false, false);
 
     private static final Pattern MODE = Pattern.compile("([A-Z_]+)(?:\\((\\d+)\\))?");
 
@@ -27,19 +27,22 @@ record Modes(long slowMillis, boolean timeoutAfterCharge, boolean outage, int ra
             m = switch (name) {
                 case "NORMAL" -> NORMAL;
                 case "SLOW" -> new Modes(required(name, value), m.timeoutAfterCharge, m.outage, m.rateLimitPerSecond,
-                        m.declineSoftPercent, m.declineHardPercent, m.lie);
+                        m.declineSoftPercent, m.declineHardPercent, m.lie, m.lookupLag);
                 case "TIMEOUT_AFTER_CHARGE" -> new Modes(m.slowMillis, true, m.outage, m.rateLimitPerSecond,
-                        m.declineSoftPercent, m.declineHardPercent, m.lie);
+                        m.declineSoftPercent, m.declineHardPercent, m.lie, m.lookupLag);
                 case "OUTAGE" -> new Modes(m.slowMillis, m.timeoutAfterCharge, true, m.rateLimitPerSecond,
-                        m.declineSoftPercent, m.declineHardPercent, m.lie);
+                        m.declineSoftPercent, m.declineHardPercent, m.lie, m.lookupLag);
                 case "RATE_LIMIT" -> new Modes(m.slowMillis, m.timeoutAfterCharge, m.outage, required(name, value),
-                        m.declineSoftPercent, m.declineHardPercent, m.lie);
+                        m.declineSoftPercent, m.declineHardPercent, m.lie, m.lookupLag);
                 case "DECLINE_SOFT" -> new Modes(m.slowMillis, m.timeoutAfterCharge, m.outage, m.rateLimitPerSecond,
-                        percent(name, value), m.declineHardPercent, m.lie);
+                        percent(name, value), m.declineHardPercent, m.lie, m.lookupLag);
                 case "DECLINE_HARD" -> new Modes(m.slowMillis, m.timeoutAfterCharge, m.outage, m.rateLimitPerSecond,
-                        m.declineSoftPercent, percent(name, value), m.lie);
+                        m.declineSoftPercent, percent(name, value), m.lie, m.lookupLag);
                 case "LIE" -> new Modes(m.slowMillis, m.timeoutAfterCharge, m.outage, m.rateLimitPerSecond,
-                        m.declineSoftPercent, m.declineHardPercent, true);
+                        m.declineSoftPercent, m.declineHardPercent, true, m.lookupLag);
+                // The lookup by reference lags (CONTRACT.md Q-B): it shows no charge, however recent or old.
+                case "LOOKUP_LAG" -> new Modes(m.slowMillis, m.timeoutAfterCharge, m.outage, m.rateLimitPerSecond,
+                        m.declineSoftPercent, m.declineHardPercent, m.lie, true);
                 default -> throw new IllegalArgumentException("Unknown mode " + text);
             };
         }

@@ -44,6 +44,11 @@ interface JpaPaymentAttempts extends JpaRepository<PaymentAttempt, UUID>, Paymen
     }
 
     @Override
+    default long countUnknownSentBefore(Instant cutoff) {
+        return countByStateAndSentAtBefore(AttemptState.UNKNOWN, cutoff);
+    }
+
+    @Override
     default Optional<Instant> oldestWaitingToBeSent() {
         return Optional.ofNullable(findOldestCreatedAtInState(AttemptState.REQUESTED));
     }
@@ -63,6 +68,8 @@ interface JpaPaymentAttempts extends JpaRepository<PaymentAttempt, UUID>, Paymen
     List<PaymentAttempt> findByStateAndSentAtBefore(AttemptState state, Instant cutoff);
 
     long countByState(AttemptState state);
+
+    long countByStateAndSentAtBefore(AttemptState state, Instant cutoff);
 
     @Query("SELECT min(a.createdAt) FROM PaymentAttempt a WHERE a.state = :state")
     Instant findOldestCreatedAtInState(AttemptState state);

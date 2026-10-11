@@ -22,10 +22,16 @@ import org.springframework.stereotype.Component;
 @Component
 class EventHealth {
 
+    /** Linked from the description of every event gauge an alert reads. */
+    static final String RUNBOOK = "docs/runbooks/unreadable-event-publication.md";
+
     EventHealth(JdbcTemplate jdbc, Clock clock, MeterRegistry meters) {
         Gauge.builder("tally.events.incomplete", jdbc, EventHealth::incomplete)
+                .description("Publications whose listener has not completed, readable or not. Runbook: " + RUNBOOK)
                 .strongReference(true).register(meters);
         Gauge.builder("tally.events.oldest_incomplete_age_seconds", jdbc, j -> oldestAgeSeconds(j, clock))
+                .description("Age of the oldest incomplete publication; alert above 15 minutes (FR-022)."
+                        + " Runbook: " + RUNBOOK)
                 .baseUnit("seconds").strongReference(true).register(meters);
     }
 

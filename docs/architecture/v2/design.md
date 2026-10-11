@@ -66,8 +66,8 @@ Named interfaces: `account` exposes a read API to every module that lists it, an
 |---|---|---|
 | `offers` | `Pricing.quote(QuoteRequest) → PriceQuote`; `Offers.isOffered(offerId, accountId)`, `Offers.currentVersion(offerId, accountId)` | `OfferVersionPublished` |
 | `subscription` | `SubscriptionApi.subscribe(accountId, offerId)` (the design's `Subscriptions.start`), `changePlan`, `cancel(id, requestedAt)`, `cancelForWriteOff` | `SubscriptionChanged` with types: started, plan changed, period renewed, renewal reversed, cancelled. Since Slice 1R PR-5 it carries the offer version and the current period (number, start, end) |
-| `invoicing` | `Invoicing.requestPaymentAgain(invoiceId)`, `invoicesFor(accountId)` | `InvoiceIssued`, `InvoicePaymentDeclined`, `InvoicePaid`, `CreditNoteIssued` |
-| `payment` | `PaymentApi.requestCollection(reference, accountId, amount, paymentToken)` (the design's `Payments.collect`), `status(reference)` | `PaymentSucceeded`, `PaymentFailed` with reason declined; technical failures publish nothing |
+| `invoicing` | `InvoicingApi.requestPaymentAgain(invoiceId, retry)` (the retry number makes a repeated call harmless), `invoicesFor(accountId)` | `InvoiceIssued`, `InvoicePaymentDeclined`, `InvoicePaid`, `CreditNoteIssued` |
+| `payment` | `PaymentApi.requestCollection(reference, accountId, amount, paymentToken)` (the design's `Payments.collect`), `collectAgain(reference, retry)` (Collections' retry of a declined reference, via Invoicing; looks the reference up first, proposed ADR-026), `status(reference)` | `PaymentSucceeded`, `PaymentFailed` with reason declined; technical failures publish nothing |
 | `account` | `Accounts.get(id)`; `AccountStanding.set(id, standing, cause)` | `StandingChanged` |
 | `collections` | `Collections.caseFor(accountId)` | none |
 
@@ -101,7 +101,7 @@ Each lives as an enum and a transition table inside its aggregate. One table-dri
 | SENT | provider error or refused before charging | TECHNICAL_FAILURE (retry after back-off; no event) |
 | SENT | timeout | UNKNOWN |
 | SENT | older than the call timeout | UNKNOWN (a REQUESTED attempt was never sent; proposed ADR-026) |
-| UNKNOWN | resolver: charged / declined / no charge (from a consistent source only) | SUCCEEDED / DECLINED / TECHNICAL_FAILURE |
+| UNKNOWN | resolver (proposed ADR-026): a charge or decline found by reference, or the outcome of a repeat with the attempt's key while the key is kept | SUCCEEDED / DECLINED; otherwise stays UNKNOWN (never a new attempt) |
 
 Payment allows a new attempt only while no attempt is REQUESTED, SENT or UNKNOWN, and never after SUCCEEDED.
 

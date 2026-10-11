@@ -1,7 +1,10 @@
 package com.tally.account.domain;
 
+import com.tally.account.Standing;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
@@ -29,6 +32,14 @@ public class Account {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    /** Set only by Collections (F3). */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Standing standing = Standing.GOOD;
+
+    @Column(name = "standing_cause")
+    private String standingCause;
+
     protected Account() {
     }
 
@@ -53,6 +64,18 @@ public class Account {
 
     public Optional<String> paymentToken() {
         return Optional.ofNullable(paymentToken);
+    }
+
+    public Standing standing() {
+        return standing;
+    }
+
+    public void setStanding(Standing standing, String cause) {
+        if (standing == null || standing == Standing.UNKNOWN) {
+            throw new IllegalArgumentException("A standing is GOOD, OVERDUE or BLOCKED: " + standing);
+        }
+        this.standing = standing;
+        this.standingCause = cause;
     }
 
     public void recordPaymentToken(String token) {

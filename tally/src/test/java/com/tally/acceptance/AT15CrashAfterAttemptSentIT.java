@@ -36,9 +36,9 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
                 + " payment_token, outcome, created_at, updated_at) VALUES (?, ?, ?, 999, 'USD', ?, 'OPEN', ?, ?)",
                 request, reference, account, token, now, now);
         jdbc.update("INSERT INTO payment.payment_attempt (id, request_id, reference, account_id, amount_minor,"
-                + " currency, payment_token, state, created_at, updated_at, sent_at)"
-                + " VALUES (?, ?, ?, ?, 999, 'USD', ?, 'SENT', ?, ?, ?)",
-                attempt, request, reference, account, token, now, now, now);
+                + " currency, payment_token, state, created_at, updated_at, sent_at, idempotency_key)"
+                + " VALUES (?, ?, ?, ?, 999, 'USD', ?, 'SENT', ?, ?, ?, ?)",
+                attempt, request, reference, account, token, now, now, now, reference + ":1");
         // The reaper hands the item back: another worker picks it up.
         jdbc.update("INSERT INTO payment.collection_queue (queue_key, due_at, payload, status, attempts, created_at)"
                 + " VALUES (?, ?, '', 'READY', 1, ?)", attempt.toString(), now, now);
@@ -65,7 +65,7 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
         String token = FakeProvider.token();
         UUID attempt = crashedWhileSending(reference, token);
         // The call reached the provider and charged; its answer died with the instance.
-        FakeProvider.charge(token, 999, "USD", reference);
+        FakeProvider.charge(token, 999, "USD", reference, reference + ":1");
 
         awaitItemDone(attempt);
         assertThat(FakeProvider.requestCount(reference)).as("not sent again").isEqualTo(1);
@@ -79,8 +79,13 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
 
+    /**
+     * The lookup finds nothing, and the attempt's key is inside the window: reconciliation repeats the
+     * charge with the same key (proposed ADR-026 b). The first request never executed, so the repeat
+     * charges now, once, and resolves the same attempt: no new attempt is made.
+     */
     @Test
-    void theCallNeverReachedTheProviderSoTheAttemptIsATechnicalFailureAndTheRetryChargesOnce() {
+    void theCallNeverReachedTheProviderSoTheRepeatWithItsKeyChargesOnce() {
         String reference = "AT15-" + UUID.randomUUID();
         UUID attempt = crashedWhileSending(reference, FakeProvider.token());
 
@@ -89,9 +94,11 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
 
         await().atMost(Duration.ofSeconds(15)).until(() ->
                 payments.status(reference).map(s -> s.state() == AttemptState.SUCCEEDED).orElse(false));
-        System.out.println("AT-15 crash before the call: first attempt " + stateOf(attempt) + ", charges "
+        System.out.println("AT-15 crash before the call: attempt " + stateOf(attempt) + ", charges "
                 + FakeProvider.chargeCount(reference));
-        assertThat(stateOf(attempt)).isEqualTo("TECHNICAL_FAILURE");
+        assertThat(stateOf(attempt)).isEqualTo("SUCCEEDED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment.payment_attempt WHERE reference = ?",
+                Long.class, reference)).as("no new attempt").isEqualTo(1);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
 }

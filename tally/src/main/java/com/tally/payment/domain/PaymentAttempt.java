@@ -40,10 +40,8 @@ public class PaymentAttempt {
         STALE,
         /** The provider's record shows a charge. */
         RESOLVED_CHARGED,
-        /** The provider's record shows a decline. */
-        RESOLVED_DECLINED,
-        /** A consistent lookup, old enough, shows no charge (proposed ADR-026). */
-        RESOLVED_NO_CHARGE
+        /** The provider's record, or a repeat with the attempt's key, shows a decline. */
+        RESOLVED_DECLINED
     }
 
     /** The transition table (design.md §5). Anything absent is refused. */
@@ -58,7 +56,6 @@ public class PaymentAttempt {
         on(AttemptState.SENT, Event.STALE, AttemptState.UNKNOWN);
         on(AttemptState.UNKNOWN, Event.RESOLVED_CHARGED, AttemptState.SUCCEEDED);
         on(AttemptState.UNKNOWN, Event.RESOLVED_DECLINED, AttemptState.DECLINED);
-        on(AttemptState.UNKNOWN, Event.RESOLVED_NO_CHARGE, AttemptState.TECHNICAL_FAILURE);
         // Kept from the first run (FR-018, AT-6): a provider can report a decline for a charge that went
         // through; the recorded truth corrects it. Not in design.md §5's table.
         on(AttemptState.DECLINED, Event.RESOLVED_CHARGED, AttemptState.SUCCEEDED);
@@ -86,6 +83,14 @@ public class PaymentAttempt {
     /** 1 for a request's first attempt; each retry adds one. Unique per reference. */
     @Column(nullable = false)
     private int number;
+
+    /**
+     * The provider key this attempt's charge is sent with: the reference plus the attempt number, so a
+     * retry never reuses an earlier attempt's key, whose decline the provider would replay (CONTRACT.md
+     * A22). Stored with the charge's parameters below, which a repeat by key must match exactly (A23).
+     */
+    @Column(name = "idempotency_key", nullable = false)
+    private String idempotencyKey;
 
     @Column(name = "account_id", nullable = false)
     private UUID accountId;
@@ -140,20 +145,30 @@ public class PaymentAttempt {
         a.currency = amount.currency().getCurrencyCode();
         a.paymentToken = paymentToken;
         a.number = 1;
+        a.idempotencyKey = keyOf(reference, a.number);
         a.state = AttemptState.REQUESTED;
         a.createdAt = now;
         a.updatedAt = now;
         return a;
     }
 
-    /** The next try for the same request, after this one failed technically. */
+    /**
+     * The next try for the same request, with the next number and its own key: after a technical failure,
+     * or after a decline when Collections asks (Slice 1R PR-8).
+     */
     public PaymentAttempt retry(Instant now) {
-        if (state != AttemptState.TECHNICAL_FAILURE) {
-            throw new IllegalStateException("Attempt " + id + " is " + state + ": only a technical failure is retried");
+        if (state != AttemptState.TECHNICAL_FAILURE && state != AttemptState.DECLINED) {
+            throw new IllegalStateException("Attempt " + id + " is " + state
+                    + ": only a technical failure or a decline is retried");
         }
         PaymentAttempt next = requested(requestId, reference, accountId, amount(), paymentToken, now);
         next.number = number + 1;
+        next.idempotencyKey = keyOf(reference, next.number);
         return next;
+    }
+
+    static String keyOf(String reference, int number) {
+        return reference + ":" + number;
     }
 
     /**
@@ -166,17 +181,14 @@ public class PaymentAttempt {
     }
 
     /**
-     * Proposed ADR-026: whether a lookup that found nothing proves there was no charge. Only from a
-     * consistent lookup, and only once a charge would show: sent at least {@code visibleAfter} (the call
-     * timeout plus the provider's stated delay) before {@code now}. An attempt with no recorded send time
-     * is from before Slice 1R PR-6 and counts as long sent. A lagging search read as "no charge" would
-     * allow a second charge (CONTRACT.md A11, Q-B).
+     * Proposed ADR-026 (b) and (c): whether this attempt's charge may be repeated with its key, to learn its
+     * outcome. Only while the key is younger than {@code window}, measured from when it was sent (from when
+     * the attempt was made, for one with no send time): the provider's retention minus a margin. Past it,
+     * the provider may have forgotten the key, and a repeat would charge a second time (CONTRACT.md A23).
      */
-    public boolean noChargeIsCertain(boolean lookupConsistent, Duration visibleAfter, Instant now) {
-        if (!lookupConsistent) {
-            return false;
-        }
-        return sentAt == null || !sentAt.plus(visibleAfter).isAfter(now);
+    public boolean mayRepeatKey(Duration window, Instant now) {
+        Instant keyFirstUsed = sentAt != null ? sentAt : createdAt;
+        return keyFirstUsed.plus(window).isAfter(now);
     }
 
     public void succeeded(String chargeId, Instant now) {
@@ -212,7 +224,7 @@ public class PaymentAttempt {
         this.reconcileAt = now;
     }
 
-    /** The provider's record shows a charge. Returns the state it corrected. */
+    /** The provider's record, or a repeat with the attempt's key, shows a charge. Returns the state it corrected. */
     public AttemptState resolvedCharged(String chargeId, Instant now) {
         AttemptState was = state;
         move(Event.RESOLVED_CHARGED, now);
@@ -227,12 +239,6 @@ public class PaymentAttempt {
         this.failureReason = reason;
         this.reconcileChecks = 0;
         this.reconcileAt = ReconciliationSchedule.first(now);
-    }
-
-    /** A consistent lookup, old enough, shows no charge (proposed ADR-026): the request is retried. */
-    public void resolvedNoCharge(Instant now) {
-        move(Event.RESOLVED_NO_CHARGE, now);
-        this.reconcileAt = null;
     }
 
     /** A check that changed nothing: back off (5 minutes, 1 hour, then daily; DECLINED for 48 hours only). */
@@ -266,6 +272,10 @@ public class PaymentAttempt {
 
     public int number() {
         return number;
+    }
+
+    public String idempotencyKey() {
+        return idempotencyKey;
     }
 
     public UUID accountId() {

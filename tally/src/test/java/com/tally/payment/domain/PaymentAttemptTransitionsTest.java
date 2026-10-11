@@ -33,8 +33,7 @@ class PaymentAttemptTransitionsTest {
                     Event.STALE, AttemptState.UNKNOWN),
             AttemptState.UNKNOWN, Map.of(
                     Event.RESOLVED_CHARGED, AttemptState.SUCCEEDED,
-                    Event.RESOLVED_DECLINED, AttemptState.DECLINED,
-                    Event.RESOLVED_NO_CHARGE, AttemptState.TECHNICAL_FAILURE),
+                    Event.RESOLVED_DECLINED, AttemptState.DECLINED),
             AttemptState.DECLINED, Map.of(
                     Event.RESOLVED_CHARGED, AttemptState.SUCCEEDED));
 
@@ -86,5 +85,19 @@ class PaymentAttemptTransitionsTest {
         assertThatThrownBy(() -> requested.stale(made.plus(Duration.ofDays(3650))))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("REQUESTED: STALE is not allowed");
         assertThat(requested.state()).isEqualTo(AttemptState.REQUESTED);
+    }
+
+    /** CONTRACT.md A22: each attempt has its own provider key; a retry never reuses an earlier attempt's. */
+    @Test
+    void eachAttemptHasItsOwnKeyTheReferenceAndItsNumber() {
+        Instant now = Instant.parse("2026-01-15T10:00:00Z");
+        PaymentAttempt first = PaymentAttempt.requested(UUID.randomUUID(), "INV-1", UUID.randomUUID(),
+                Money.of(999, "USD"), "tok", now);
+        first.sent(now);
+        first.technicalFailure(now);
+        PaymentAttempt second = first.retry(now);
+
+        assertThat(first.idempotencyKey()).isEqualTo("INV-1:1");
+        assertThat(second.idempotencyKey()).isEqualTo("INV-1:2");
     }
 }

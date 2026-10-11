@@ -51,6 +51,11 @@ interface JpaInvoices extends JpaRepository<Invoice, UUID>, Invoices {
      * serialises them; the second then meets the committed row on the ID, and adds nothing (rule 7, rule 11).
      */
     @Override
+    default Optional<Invoice> find(UUID invoiceId) {
+        return findById(invoiceId);
+    }
+
+    @Override
     default void update(Invoice invoice) {
         saveAndFlush(invoice);
     }

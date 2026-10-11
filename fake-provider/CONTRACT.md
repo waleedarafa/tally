@@ -22,7 +22,7 @@ Reference provider: Stripe's public documentation (FR-030; `docs/briefs/slice-1-
 **Q-B. How long until a charge appears in a lookup?** (A10, A11)
 - **Answer: open.** The documentation reviewed does not say.
 - Reconciliation's first check at 5 minutes assumes it is less than that. Confirm with the chosen provider before going live.
-- Since Slice 1R PR-6, the answer is a setting, not a hope: `lookup-consistent` (false by default) and `lookup-delay`. Until a real provider's answer is known, it stays false, and an unknown attempt is never resolved as "no charge" (A11).
+- Since Slice 1R PR-8, Tally never reads "not found" as "no charge", so the answer no longer decides a double charge: an unknown attempt with nothing found is repeated with its key while the key is kept, and never repeated after (A11, A23). It still decides how soon a lookup can resolve an attempt.
 
 **Q-C. What does a token need for renewals without the customer present?** (A17; driver D15)
 - **Answer:** card networks distinguish customer-initiated from merchant-initiated charges. Where strong customer authentication applies:
@@ -104,7 +104,8 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **Tally relies on it in:** `HttpPaymentGateway.chargesFor` and `Reconciliation`. Spike B's "resolved in 5 minutes" depends on it.
 - **If a real provider differs:** search by metadata is often backed by an index that lags by seconds to minutes, or is not offered at all, which leaves webhooks or settlement files as the only source.
 - **Check:** open (Q-B). Confirm that a lookup by reference exists, and its consistency delay. If there is none, reconciliation must use webhooks or reports (and FR-018 needs revisiting).
-- **Assumed by Tally since Slice 1R PR-6 (proposed ADR-026):** reconciliation reads "not found" as "no charge" only when the lookup is consistent (`tally.payment.provider.lookup-consistent`, true for this fake only) and the attempt was sent longer ago than the call timeout plus the provider's stated delay (`tally.payment.provider.lookup-delay`). Otherwise the attempt stays UNKNOWN. A real provider's search may lag: treating a lagging "not found" as no charge would make a new attempt, and allow a second charge. `NoChargeRuleTest` pins the rule, including the safe default.
+- **Assumed by Tally since Slice 1R PR-8 (proposed ADR-026):** a charge found decides; "not found" decides nothing. Reconciliation then repeats the attempt's charge with its key (A23) while the key is inside the window, and never after. A lagging search therefore costs time, never a second charge.
+- **Fake:** `LOOKUP_LAG` mode makes the lookup show no charge at all, as a search that lags behind would (`UnknownResolutionIT`).
 
 **A12. The lookup's answer is the truth; a charge response can be wrong.**
 - **Fake:** in `LIE` mode, the response shows the opposite of the recorded outcome, while the lookup shows the recorded one.
@@ -180,8 +181,7 @@ Modelled on Stripe's API v1 (sources at the end). Tests: `IdempotencyKeysTest`.
   - The outage (`503`) and the rate limit (`429`) stand in front of the idempotency layer: their refusals are not saved, so the same key may charge later.
   - After 24 hours a key is forgotten, and reusing it charges again. Tests simulate this with `POST /admin/idempotency-keys/prune`.
 - **Tally relies on it in:**
-  - nothing yet: Tally sends no key today.
-  - Slice 1R PR-8: each attempt sends its own key, the reference plus the attempt number. It never reuses an earlier attempt's key, because the provider would replay that attempt's decline (`aDeclineIsReplayedForTheSameKeyAndANewKeyChargesAgain`; AT-16).
+  - every charge, since Slice 1R PR-8: each attempt sends its own key, the reference plus the attempt number (`reference:number`), stored with the attempt with the token, amount, currency and reference it was sent with (`PaymentCollectionIT.anAttemptSendsItsOwnKeyAndARepeatWithItIsReplayed`). It never reuses an earlier attempt's key, because the provider would replay that attempt's decline (`aDeclineIsReplayedForTheSameKeyAndANewKeyChargesAgain`; AT-16).
   - the resolver of unknown attempts (A23).
 - **If a real provider differs:**
   - Stripe's API v1 matches, with one difference: Stripe also saves and replays a `500`. The fake's `503` is not saved, because it models a gateway in front of the provider (A6).
@@ -191,7 +191,10 @@ Modelled on Stripe's API v1 (sources at the end). Tests: `IdempotencyKeysTest`.
 
 **A23. The outcome of a request is learnt by key: repeating it with the same key and the same parameters returns the saved response without charging again.** (critical)
 - **Fake:** as A22. There is no endpoint that looks a charge up by key; the repeat is the lookup (`afterATimeoutTheSameKeyReturnsTheRecordedChargeWithoutChargingAgain`).
-- **Tally relies on it in:** the design's "unknowns are resolved by key" (ADR-004, ADR-013, ADR-018). Today's resolver uses the lookup by reference (A11).
+- **Tally relies on it in:** `Reconciliation`, since Slice 1R PR-8 (proposed ADR-026), after the lookup by reference (A11) found no charge:
+  - (b) while the attempt's key is younger than `tally.payment.provider.key-repeat-window` (20 hours: the 24-hour retention minus a margin), the charge is repeated with the same key and the stored token, amount, currency and reference. A replay or a fresh outcome decides; a refusal, a `409` or a timeout leaves the attempt UNKNOWN for a later check;
+  - (c) past the window, it is never repeated: it stays UNKNOWN, counted in `tally.payment.unknown_past_key_window`, for settlement reconciliation.
+  - Tests: `UnknownResolutionIT` (a never-executed first request, a lagging lookup, a key past the window with the provider's keys pruned, a refused repeat).
 - **If a real provider differs:** Stripe has no lookup by idempotency key either. A repeat is a status query only while the key is kept, and has three edges:
   - if the first request never executed, the repeat charges now. Still at most once, but the resolver never sees "no such charge"; it sees a new outcome;
   - after 24 hours the key is gone, and a repeat is a new charge, even if the first one charged: a double charge. The resolver must stop using the key before the retention ends, and fall back to the lookup by reference (A11);

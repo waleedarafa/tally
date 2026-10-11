@@ -95,7 +95,8 @@ class CollectionWorker implements QueueHandler {
         PaymentAttempt attempt = attempts.find(attemptId).orElseThrow();
         ChargeResult result;
         try {
-            result = provider.charge(attempt.paymentToken(), attempt.amount(), attempt.reference());
+            result = provider.charge(attempt.paymentToken(), attempt.amount(), attempt.reference(),
+                    attempt.idempotencyKey());
         } catch (NotChargedException e) {
             log.info("Attempt {} for {}: technical failure ({}); retried as a new attempt", attemptId,
                     attempt.reference(), e.why());

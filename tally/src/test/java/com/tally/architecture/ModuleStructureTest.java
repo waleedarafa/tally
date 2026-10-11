@@ -27,6 +27,6 @@ class ModuleStructureTest {
         assertThat(MODULES.stream().map(ApplicationModule::getIdentifier).map(Object::toString))
                 .containsExactlyInAnyOrder(
                         "shared", "platform", "account", "offers",
-                        "subscription", "invoicing", "payment", "entitlement", "checkout");
+                        "subscription", "invoicing", "payment", "collections", "entitlement", "checkout");
     }
 }

@@ -57,6 +57,10 @@ public class CollectionRequest {
     @Column(nullable = false)
     private long version;
 
+    /** The highest retry Collections asked for (0: none). Each retry is made once (Slice 1R PR-8). */
+    @Column(nullable = false)
+    private int retries;
+
     protected CollectionRequest() {
     }
 
@@ -72,6 +76,24 @@ public class CollectionRequest {
             outcome = next;
             updatedAt = now;
         }
+    }
+
+    /**
+     * Records that Collections asked for retry {@code retry}. Returns false, changing nothing, if that
+     * retry, or a later one, was already asked for: a retry asked for twice is made once. Two concurrent
+     * calls are told apart by the optimistic lock on {@code version} (CLAUDE.md rule 7).
+     */
+    public boolean retryRequested(int retry, Instant now) {
+        if (retry <= retries) {
+            return false;
+        }
+        retries = retry;
+        updatedAt = now;
+        return true;
+    }
+
+    public int retries() {
+        return retries;
     }
 
     public long version() {

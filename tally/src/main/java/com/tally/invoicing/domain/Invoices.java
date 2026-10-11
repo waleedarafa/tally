@@ -16,6 +16,8 @@ public interface Invoices {
      */
     boolean addIfAbsent(Invoice invoice);
 
+    Optional<Invoice> find(UUID invoiceId);
+
     Optional<Invoice> forPaymentReference(String paymentReference);
 
     /**

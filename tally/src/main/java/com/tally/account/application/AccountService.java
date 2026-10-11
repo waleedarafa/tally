@@ -1,7 +1,9 @@
 package com.tally.account.application;
 
 import com.tally.account.AccountApi;
+import com.tally.account.AccountStanding;
 import com.tally.account.AccountView;
+import com.tally.account.Standing;
 import com.tally.account.UnknownAccountException;
 import com.tally.account.domain.Account;
 import com.tally.account.domain.AccountRepository;
@@ -14,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-class AccountService implements AccountApi {
+class AccountService implements AccountApi, AccountStanding {
 
     private final AccountRepository accounts;
     private final Clock clock;
@@ -42,6 +44,15 @@ class AccountService implements AccountApi {
         accounts.findById(accountId)
                 .orElseThrow(() -> new UnknownAccountException(accountId))
                 .recordPaymentToken(paymentToken);
+    }
+
+    /** Collections only (F3). Slice 1R adds it; nothing calls it yet. */
+    @Override
+    @Transactional
+    public void set(UUID accountId, Standing standing, String cause) {
+        accounts.findById(accountId)
+                .orElseThrow(() -> new UnknownAccountException(accountId))
+                .setStanding(standing, cause);
     }
 
     private static AccountView view(Account account) {

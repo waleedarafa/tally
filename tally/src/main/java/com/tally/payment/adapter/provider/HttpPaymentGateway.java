@@ -48,10 +48,10 @@ class HttpPaymentGateway implements PaymentGateway {
     }
 
     @Override
-    public ChargeResult charge(String paymentToken, Money amount, String reference) {
+    public ChargeResult charge(String paymentToken, Money amount, String reference, String idempotencyKey) {
         ChargeResponse response;
         try {
-            response = http.post().uri("/charges")
+            response = http.post().uri("/charges").header("Idempotency-Key", idempotencyKey)
                     .body(new ChargeRequest(paymentToken, amount.minorUnits(), amount.currency().getCurrencyCode(),
                             reference))
                     .retrieve()
