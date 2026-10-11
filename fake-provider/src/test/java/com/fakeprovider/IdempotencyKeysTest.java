@@ -9,7 +9,9 @@ import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.web.client.RestClient;
 
@@ -18,10 +20,14 @@ import org.springframework.web.client.RestClient;
  * key, modelled on Stripe's API v1. CONTRACT.md A22 and A23.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(TestClock.Configuration.class)
 class IdempotencyKeysTest {
 
     @LocalServerPort
     int port;
+
+    @Autowired
+    TestClock clock;
 
     RestClient http;
 
@@ -131,6 +137,7 @@ class IdempotencyKeysTest {
         mode("OUTAGE");
         Answer refused = charge(reference, token, 999, reference);
         mode("RATE_LIMIT(1)");
+        clock.nextSecond();
         charge("other-" + reference, token, 999, "other-" + reference);
         Answer limited = charge(reference, token, 999, reference);
         mode("NORMAL");
