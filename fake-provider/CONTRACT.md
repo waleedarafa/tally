@@ -135,7 +135,7 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 
 **A16. A token is created by the provider's hosted form, and the card never reaches Tally** (FR-015).
 - **Fake:** `POST /tokens` returns `tok_<uuid>`, with no card details, standing in for the hosted form.
-- **Tally relies on it in:** `AccountApi.recordPaymentToken` and checkout.
+- **Tally relies on it in:** `AccountApi.recordPaymentToken`, called by sign-up (`POST /v1/subscriptions`).
 - **Check:** confirm that the integration keeps Tally out of PCI DSS scope (SAQ A).
 
 **A17. A token can be charged again and again, with no customer present, and never expires.** (critical for renewals)

@@ -10,6 +10,7 @@ Decision records are cited as `ADR-NNN` for the second design (`docs/architectur
 - `docs/architecture/v2/drivers.md`: the drivers. Numbering differs from the first run.
 - `docs/architecture/v2/design.md`: contexts, invariants, the dependency graph, public APIs and events, state machines, Money, the REST contract.
 - `docs/briefs/slice-N.md`: the scope of the current slice.
+- killbill-wiki (separate repository): how Kill Bill solves the same problems, with path:line citations. Use it to compare, not to copy. Claims marked 'inference' must be verified before relying on them.
 
 ## Stack (FR-039)
 Java 25, Spring Boot 4, Spring Modulith 2, Maven wrapper, PostgreSQL, Flyway, Testcontainers, ArchUnit.
@@ -29,7 +30,7 @@ Before adding any other dependency, or if unsure which version is compatible wit
 11. **Duplicate protection lives in business tables.** A queue key is never the only guard: queue rows are deleted after the retention period (FR-037). A duplicate guard names the fact it guards: name the constraint, and treat any other failure as a failure, never as a duplicate.
 12. **The fake provider is a model of a real one.** Any new behaviour that depends on how a provider acts must be listed in `fake-provider/CONTRACT.md`.
 13. **Idempotency over REST.** Every request that changes state over REST requires an `Idempotency-Key` (ADR-019), handled by the platform's `IdempotentEndpoints`, with one key table per module.
-14. **Inside layout.** Inside `offers`, `subscription`, `invoicing` and `payment`, the domain package imports no Spring and no adapter; `jakarta.persistence` annotations are allowed (Design Record §10 C). Port methods use business names (`dueForReconciliation(now, limit)`, `issuedBetween(from, to)`, `add(subscription)`). Spring Data names stay in `adapter.persistence`, behind a default method, as `JpaInvoices.insertIfAbsent` does.
+14. **Inside layout.** Inside `offers`, `subscription`, `invoicing` and `payment`, the domain package imports no Spring and no adapter; `jakarta.persistence` annotations are allowed (Design Record §10 C). Port methods use business names (`dueForReconciliation(now, limit)`, `issuedBetween(from, to)`, `add(subscription)`). Spring Data names stay in `adapter.persistence`, behind a default method, as `JpaCollectionRequests.addIfAbsent` does over `insertIfAbsent`.
 
 ## How to work
 - `main` is the trunk. Work on a short-lived branch and merge through a pull request (FR-038, ADR-008).
