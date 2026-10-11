@@ -181,7 +181,7 @@ public class PaymentAttempt {
     }
 
     /**
-     * Proposed ADR-026 (b) and (c): whether this attempt's charge may be repeated with its key, to learn its
+     * ADR-026 (b) and (c): whether this attempt's charge may be repeated with its key, to learn its
      * outcome. Only while the key is younger than {@code window}, measured from when it was sent (from when
      * the attempt was made, for one with no send time): the provider's retention minus a margin. Past it,
      * the provider may have forgotten the key, and a repeat would charge a second time (CONTRACT.md A23).
@@ -217,7 +217,7 @@ public class PaymentAttempt {
     /**
      * Sent longer ago than the call timeout, with no result recorded: its worker died (ADR-018). Only a
      * SENT attempt: the provider is called only after SENT commits, so a REQUESTED attempt of any age was
-     * never sent (proposed ADR-026).
+     * never sent (ADR-026).
      */
     public void stale(Instant now) {
         move(Event.STALE, now);

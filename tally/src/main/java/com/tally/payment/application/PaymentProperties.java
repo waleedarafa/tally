@@ -34,7 +34,7 @@ public record PaymentProperties(
      * @param keyRepeatWindow    how long after an attempt is sent its charge may be repeated with its key
      *                           to learn its outcome: the provider's key retention (24 hours, CONTRACT.md
      *                           A22) minus a margin. Past it, an UNKNOWN attempt is never repeated
-     *                           (proposed ADR-026 c).
+     *                           (ADR-026 c).
      */
     public record Provider(
             @DefaultValue("http://localhost:8081") String baseUrl,

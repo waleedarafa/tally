@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Reconciliation (FR-018; ADR-018; proposed ADR-026): asks the provider for the recorded truth of UNKNOWN
+ * Reconciliation (FR-018; ADR-018; ADR-026): asks the provider for the recorded truth of UNKNOWN
  * attempts, and of DECLINED attempts from the last 48 hours, on a backoff of 5 minutes, 1 hour, then
  * daily. It reads with no transaction open (FR-005), then records any correction and publishes the
  * matching event.
@@ -29,7 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>First, the stale rule: a SENT attempt older than the call timeout has no worker left to record
  *       its result, so it becomes UNKNOWN (ADR-018; AT-15).</li>
  *   <li>Then each attempt due, by {@link #check}: (a) the lookup by reference; (b) within the key window,
- *       a repeat with the attempt's key; (c) past it, never a repeat (proposed ADR-026). An UNKNOWN
+ *       a repeat with the attempt's key; (c) past it, never a repeat (ADR-026). An UNKNOWN
  *       attempt is never retried as a new attempt: it is the same charge, resolved or left for a person.</li>
  * </ul>
  * Every correction goes through {@link Corrections}. A periodic job: runs
@@ -58,7 +58,7 @@ class Reconciliation implements PeriodicJob {
         Gauge.builder("tally.payment.unknown_past_key_window", attempts,
                         a -> a.countUnknownSentBefore(clock.instant().minus(properties.provider().keyRepeatWindow())))
                 .description("UNKNOWN attempts past the key window: never repeated, they wait for settlement"
-                        + " reconciliation and a person (proposed ADR-026 c). Runbook:"
+                        + " reconciliation and a person (ADR-026 c). Runbook:"
                         + " docs/runbooks/unknown-payment-past-key-window.md")
                 .strongReference(true).register(meters);
     }
@@ -102,7 +102,7 @@ class Reconciliation implements PeriodicJob {
     }
 
     /**
-     * Resolves one attempt, in the order of proposed ADR-026, with no transaction open during any call to
+     * Resolves one attempt, in the order of ADR-026, with no transaction open during any call to
      * the provider (FR-005): (a) look the reference up; for the latest attempt of the reference, a charge
      * found decides, and a decline found decides an UNKNOWN first attempt. An earlier attempt learns nothing
      * from the lookup, which also shows its successors' charges: a superseded decline stops being checked,
@@ -151,7 +151,7 @@ class Reconciliation implements PeriodicJob {
         } else {
             if (due.state() == AttemptState.UNKNOWN) {
                 log.error("Attempt {} for {} is UNKNOWN past the key window: never repeated; settlement"
-                        + " reconciliation decides (proposed ADR-026 c)", due.id(), due.reference());
+                        + " reconciliation decides (ADR-026 c)", due.id(), due.reference());
             }
             checkedWithoutChange(due);
         }

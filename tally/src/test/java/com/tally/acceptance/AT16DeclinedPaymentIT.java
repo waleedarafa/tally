@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 /**
  * AT-16. Declined payment (ADR-005, design.md §5; Slice 1R builds OPEN, the day-3 retry and close). Pass
  * when: one Collections case opens; on day 3 a new attempt is made for the same reference, with its own key;
- * the payment closes the case. Extended (PR-6 review, proposed ADR-026): a decline the provider reported
+ * the payment closes the case. Extended (PR-6 review, ADR-026): a decline the provider reported
  * for a charge that went through, followed by the day-3 retry, charges once and closes the case.
  *
  * <p>The decline is made with the fake in a decline mode, which is reset as soon as the attempt is
@@ -82,7 +82,7 @@ class AT16DeclinedPaymentIT extends AbstractReconcilingTest {
     /**
      * The provider charged but reported a decline (LIE). The case opens on the decline. On day 3 Payment
      * looks the reference up before retrying, finds the charge, corrects the decline and makes no new
-     * attempt (proposed ADR-026); the invoice is paid and the case closes. Reconciliation's own 48-hour
+     * attempt (ADR-026); the invoice is paid and the case closes. Reconciliation's own 48-hour
      * re-check of the decline may find the charge first: either way, one charge and the case closed.
      */
     @Test

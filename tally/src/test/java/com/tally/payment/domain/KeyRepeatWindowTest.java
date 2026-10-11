@@ -9,7 +9,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
- * Proposed ADR-026 (b) and (c): an UNKNOWN attempt may be repeated with its key only while the key is
+ * ADR-026 (b) and (c): an UNKNOWN attempt may be repeated with its key only while the key is
  * younger than the window, measured from when it was sent. Past it, the provider may have forgotten the
  * key, and a repeat would be a second charge (CONTRACT.md A23).
  */

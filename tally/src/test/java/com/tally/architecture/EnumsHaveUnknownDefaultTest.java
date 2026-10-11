@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
  * crosses a module boundary (a top-level enum in a module's base package, its public API) or is stored in an
  * event (a component of a {@link DomainEvent}) has one constant marked {@link JsonEnumDefaultValue}, which
  * Jackson maps values this version does not know to. It is {@code UNKNOWN}; where UNKNOWN is a real state,
- * it is {@code UNRECOGNISED} instead (proposed ADR-024, amends ADR-016), so an unrecognised value is never
+ * it is {@code UNRECOGNISED} instead (ADR-024, amends ADR-016), so an unrecognised value is never
  * read as that state. The enums with a real UNKNOWN are pinned in {@link #UNKNOWN_IS_A_STATE}.
  */
 class EnumsHaveUnknownDefaultTest {
@@ -59,7 +59,7 @@ class EnumsHaveUnknownDefaultTest {
         }
         assertThat(wrong)
                 .as("Enums whose @JsonEnumDefaultValue is not the one constant UNKNOWN, or UNRECOGNISED where"
-                        + " UNKNOWN is a real state (CLAUDE.md rule 7, proposed ADR-024)")
+                        + " UNKNOWN is a real state (CLAUDE.md rule 7, ADR-024)")
                 .isEmpty();
     }
 

@@ -93,7 +93,7 @@ class AT09KillOneInstanceIT {
                 .isEqualTo(ACCOUNTS);
         // One payment attempt per invoice, plus one new attempt per technical failure (ADR-013). An attempt left
         // SENT by the killed instance goes stale and is resolved by a repeat with its own key, never by a new
-        // attempt (proposed ADR-026 b).
+        // attempt (ADR-026 b).
         // Nothing left claimed.
         long technicalFailures = count(jdbc,
                 "SELECT count(*) FROM payment.payment_attempt WHERE state = 'TECHNICAL_FAILURE'");

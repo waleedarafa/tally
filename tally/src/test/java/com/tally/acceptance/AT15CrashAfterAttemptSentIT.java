@@ -81,7 +81,7 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
 
     /**
      * The lookup finds nothing, and the attempt's key is inside the window: reconciliation repeats the
-     * charge with the same key (proposed ADR-026 b). The first request never executed, so the repeat
+     * charge with the same key (ADR-026 b). The first request never executed, so the repeat
      * charges now, once, and resolves the same attempt: no new attempt is made.
      */
     @Test

@@ -75,7 +75,7 @@ class PaymentAttemptTransitionsTest {
         assertThat(requested.state()).isEqualTo(AttemptState.REQUESTED);
     }
 
-    /** Proposed ADR-026: a REQUESTED attempt was never sent, so no age makes it UNKNOWN. */
+    /** ADR-026: a REQUESTED attempt was never sent, so no age makes it UNKNOWN. */
     @Test
     void aRequestedAttemptOfAnyAgeIsNeverMadeUnknown() {
         Instant made = Instant.parse("2026-01-15T10:00:00Z");

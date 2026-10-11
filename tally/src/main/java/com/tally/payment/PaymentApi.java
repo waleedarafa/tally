@@ -20,7 +20,7 @@ public interface PaymentApi {
 
     /**
      * Collections' retry {@code retry} (1 on day 3) of a declined reference (Slice 1R PR-8). First asks the
-     * provider for the reference (proposed ADR-026): if it shows any charge, no new attempt is made, and
+     * provider for the reference (ADR-026): if it shows any charge, no new attempt is made, and
      * the decline is corrected to SUCCEEDED. Otherwise a new attempt, with its own key, only while none is
      * REQUESTED, SENT or UNKNOWN and none SUCCEEDED. Does nothing for an unknown reference, or if retry
      * {@code retry} was already asked for: a retry asked for twice is made once.
