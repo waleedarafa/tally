@@ -53,7 +53,8 @@ class ReconciliationIT extends AbstractReconcilingTest {
         awaitState(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
         assertThat(FakeProvider.requestCount(reference)).isEqualTo(1);
-        assertThat(corrected("UNKNOWN", "SUCCEEDED")).isEqualTo(before + 1);
+        // At least this one: the counter is per context, and the shared job may correct another test's attempt too.
+        assertThat(corrected("UNKNOWN", "SUCCEEDED")).isGreaterThanOrEqualTo(before + 1);
         assertThat(reconcileAt(reference)).isNull();
     }
 
@@ -68,7 +69,7 @@ class ReconciliationIT extends AbstractReconcilingTest {
 
         clock.advance(Duration.ofMinutes(5));
         awaitState(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
-        assertThat(corrected("DECLINED", "SUCCEEDED")).isEqualTo(before + 1);
+        assertThat(corrected("DECLINED", "SUCCEEDED")).isGreaterThanOrEqualTo(before + 1);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
 
