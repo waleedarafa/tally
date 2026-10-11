@@ -2,9 +2,11 @@ package com.tally.subscription.application;
 
 import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
+import com.tally.account.Standing;
 import com.tally.account.UnknownAccountException;
 import com.tally.offers.Offers;
 import com.tally.offers.UnknownPlanException;
+import com.tally.subscription.AccountBlockedException;
 import com.tally.subscription.AlreadySubscribedException;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionChangeType;
@@ -50,6 +52,9 @@ class SubscriptionService implements SubscriptionApi {
     @Transactional
     public SubscriptionView subscribe(UUID accountId, String planId) {
         AccountView account = accounts.get(accountId).orElseThrow(() -> new UnknownAccountException(accountId));
+        if (account.standing() == Standing.BLOCKED) {
+            throw new AccountBlockedException(accountId);
+        }
         // The offer can be sold in the account's currency, at its current version.
         int offerVersion = offers.currentVersion(planId, accountId)
                 .orElseThrow(() -> new UnknownPlanException(planId, accountId));

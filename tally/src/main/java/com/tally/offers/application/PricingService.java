@@ -52,11 +52,6 @@ class PricingService implements Pricing, Offers {
     }
 
     @Override
-    public boolean isOffered(String offerId, UUID accountId) {
-        return currentVersion(offerId, accountId).isPresent();
-    }
-
-    @Override
     public OptionalInt currentVersion(String offerId, UUID accountId) {
         AccountView account = account(accountId);
         return currentVersion(offerId).filter(v -> v.terms().priceIn(account.currency()).isPresent())

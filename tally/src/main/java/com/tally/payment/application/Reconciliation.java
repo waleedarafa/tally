@@ -58,7 +58,8 @@ class Reconciliation implements PeriodicJob {
         Gauge.builder("tally.payment.unknown_past_key_window", attempts,
                         a -> a.countUnknownSentBefore(clock.instant().minus(properties.provider().keyRepeatWindow())))
                 .description("UNKNOWN attempts past the key window: never repeated, they wait for settlement"
-                        + " reconciliation and a person (proposed ADR-026 c)")
+                        + " reconciliation and a person (proposed ADR-026 c). Runbook:"
+                        + " docs/runbooks/unknown-payment-past-key-window.md")
                 .strongReference(true).register(meters);
     }
 

@@ -21,15 +21,16 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.client.RestClient;
 
 /**
- * AT-1. Checkout, happy path (D3, FR-019). Pass when: invoice PAID, access granted, and the
- * response shows SUCCEEDED within 3 s.
+ * AT-1. Sign-up, happy path, through {@code POST /v1/subscriptions} (ADR-014, ADR-019; changed in Slice 1R
+ * PR-9, which removed checkout). Pass when: the response promises access within 5 seconds, the invoice is
+ * paid, and Access answers yes within 5 seconds.
  *
- * <p>Everything goes through the HTTP API, against the fake provider in its own container, with
- * pollers running on their production settings (1 s poll interval, 3 s checkout wait).
+ * <p>Everything goes through the HTTP API, against the fake provider in its own container, with pollers
+ * running on their production settings (1 s poll interval).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = "tally.platform.polling-enabled=true")
-class AT01CheckoutHappyPathIT extends AbstractProviderIntegrationTest {
+class AT01SignUpHappyPathIT extends AbstractProviderIntegrationTest {
 
     @LocalServerPort
     int port;
@@ -44,47 +45,40 @@ class AT01CheckoutHappyPathIT extends AbstractProviderIntegrationTest {
         tally = RestClient.create("http://localhost:" + port);
     }
 
-    Map<String, Object> post(String path, Map<String, Object> body) {
-        return tally.post().uri(path).body(body).retrieve().body(new ParameterizedTypeReference<>() { });
-    }
-
     Map<String, Object> get(String path, Object... variables) {
         return tally.get().uri(path, variables).retrieve().body(new ParameterizedTypeReference<>() { });
     }
 
     @Test
-    void checkoutSucceedsWithinThreeSecondsThenTheInvoiceIsPaidAndAccessGranted() {
+    void signUpPromisesAccessWithinFiveSecondsThenTheInvoiceIsPaidAndAccessGranted() {
         // The customer's browser gets a token from the provider's hosted card form (FR-015).
         String token = FakeProvider.token();
-        UUID account = UUID.fromString((String) post("/v1/accounts",
-                Map.of("currency", "AED", "timeZone", "Asia/Dubai")).get("id"));
+        UUID account = UUID.fromString((String) tally.post().uri("/v1/accounts")
+                .body(Map.of("currency", "AED", "timeZone", "Asia/Dubai"))
+                .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { }).get("id"));
 
         long started = System.nanoTime();
         ResponseEntity<Map<String, Object>> response = tally.post().uri("/v1/subscriptions")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(Map.of("accountId", account, "planId", "STANDARD", "paymentToken", token))
                 .retrieve().toEntity(new ParameterizedTypeReference<>() { });
-        Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
 
-        // Response shows SUCCEEDED within 3 s.
         assertThat(response.getStatusCode().value()).isEqualTo(201);
-        assertThat(response.getBody()).containsEntry("status", "SUCCEEDED");
-        assertThat(elapsed).isLessThan(Duration.ofSeconds(3));
-        String reference = (String) response.getBody().get("paymentReference");
+        assertThat(response.getBody()).containsEntry("accessWithinSeconds", 5).containsEntry("status", "ACTIVE")
+                .containsKey("subscriptionId");
 
-        // The status endpoint reads the same truth from Payment.
-        assertThat(get("/v1/payments/{reference}/status", reference)).containsEntry("state", "SUCCEEDED");
-
-        // Invoice PAID.
-        await().atMost(Duration.ofSeconds(5)).until(() -> invoicing.invoicesFor(account).stream()
-                .anyMatch(i -> i.status() == InvoiceStatus.PAID && i.paymentReference().equals(reference)));
-
-        // Access granted.
-        await().atMost(Duration.ofSeconds(5))
+        // Access answers yes within 5 seconds of the request (ADR-014).
+        await().atMost(Duration.ofSeconds(5)).pollInterval(Duration.ofMillis(100))
                 .until(() -> Boolean.TRUE.equals(get("/v1/accounts/{id}/access", account).get("hasAccess")));
+        Duration toAccess = Duration.ofNanos(System.nanoTime() - started);
 
-        // Charged exactly once.
+        // Invoice PAID, charged exactly once.
+        await().atMost(Duration.ofSeconds(10)).until(() -> invoicing.invoicesFor(account).stream()
+                .anyMatch(i -> i.status() == InvoiceStatus.PAID));
+        String reference = invoicing.invoicesFor(account).getFirst().paymentReference();
+        assertThat(get("/v1/payments/{reference}/status", reference)).containsEntry("state", "SUCCEEDED");
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
 
-        System.out.printf("AT-1: checkout answered SUCCEEDED in %d ms%n", elapsed.toMillis());
+        System.out.printf("AT-1: sign-up answered; access granted %d ms after the request%n", toAccess.toMillis());
     }
 }

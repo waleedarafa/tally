@@ -33,8 +33,9 @@ import org.springframework.web.client.RestClient;
 
 /**
  * AT-4. Provider outage mid-run (D3, D7). Pass when: the breaker opens; nothing is claimed while it
- * is open; invoices are still created; everything is charged after recovery; checkout returns
- * PROCESSING. The breaker runs on its production settings (opens at 50% of at least 5 calls, 30 s).
+ * is open; invoices are still created; everything is charged after recovery; a sign-up during the
+ * outage still answers at once, with the access promise (ADR-014; checkout's wait is gone since Slice 1R
+ * PR-9). The breaker runs on its production settings (opens at 50% of at least 5 calls, 30 s).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = {
@@ -110,13 +111,14 @@ class AT04ProviderOutageIT extends AbstractProviderIntegrationTest {
         // The breaker opens.
         await().atMost(Duration.ofSeconds(30)).until(() -> breakerState() == 1);
 
-        // Checkout during the outage answers PROCESSING after its 3 s wait.
+        // A sign-up during the outage answers at once: nothing waits for the payment.
         UUID newcomer = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
-        ResponseEntity<Map<String, Object>> checkout = tally.post().uri("/v1/subscriptions")
+        ResponseEntity<Map<String, Object>> signUp = tally.post().uri("/v1/subscriptions")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(Map.of("accountId", newcomer, "planId", "BASIC", "paymentToken", FakeProvider.token()))
                 .retrieve().toEntity(new ParameterizedTypeReference<>() { });
-        assertThat(checkout.getStatusCode().value()).isEqualTo(202);
-        assertThat(checkout.getBody()).containsEntry("status", "PROCESSING");
+        assertThat(signUp.getStatusCode().value()).isEqualTo(201);
+        assertThat(signUp.getBody()).containsEntry("accessWithinSeconds", 5);
 
         // Nothing is claimed while the breaker is open: no request reaches the provider.
         List<String> references = new ArrayList<>(renewalReferences(all));
@@ -147,7 +149,7 @@ class AT04ProviderOutageIT extends AbstractProviderIntegrationTest {
         // Technical failures publish nothing: no Collections case opens (ADR-013; Slice 1R brief).
         assertThat(jdbc.queryForObject("SELECT count(*) FROM collections.collection_case WHERE account_id = ANY(?)",
                 Long.class, (Object) everyone.toArray(UUID[]::new))).isZero();
-        System.out.printf("AT-4: %d provider requests for %d renewals and 1 checkout during the outage%n",
+        System.out.printf("AT-4: %d provider requests for %d renewals and 1 sign-up during the outage%n",
                 requestsWhileOpen, ACCOUNTS);
     }
 }

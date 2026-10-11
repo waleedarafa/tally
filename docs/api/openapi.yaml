@@ -1,0 +1,127 @@
+openapi: 3.1.0
+info:
+  title: Tally REST API
+  version: "1"
+  description: >
+    The REST contract, v1 (design.md §8; ADR-019). Written before the code (OpenAPI first). Versions live in
+    the path; changes are additive; a break is /v2. Every request that changes state requires an
+    Idempotency-Key (CLAUDE.md rule 13). Slice 1R builds sign-up only; the other requests in design.md §8
+    come in later slices.
+paths:
+  /v1/subscriptions:
+    post:
+      operationId: signUp
+      summary: Subscribes an account to a plan (sign-up).
+      description: >
+        Records the payment token the provider's hosted card form returned, then starts the subscription.
+        Answers at once: the first invoice and its payment follow asynchronously, and access is granted
+        within the promised seconds (ADR-014: 99% within 5 seconds; the app shows "activating").
+        The Idempotency-Key is claimed before acting; the response is stored in the same transaction as the
+        sign-up, and both are kept for 24 hours: a repeat with the same key and the same body returns the stored
+        response, error responses included.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >
+            A key the client makes for this sign-up, such as a UUID. Kept for 24 hours. Keys are scoped by
+            account (the body's accountId) until callers are authenticated; then they will be scoped by caller.
+            A key still held by a request that has not answered within 60 seconds is taken over by the next
+            request with it: that request died, and its sign-up rolled back with its response.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignUpRequest"
+      responses:
+        "201":
+          description: The subscription started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignUpResponse"
+        "400":
+          description: The Idempotency-Key header is missing, or the body is not a sign-up.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No such account.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: >
+            `already-subscribed`: the account already has a subscription.
+            `account-blocked`: the account's standing is BLOCKED.
+            Or (`about:blank`) a request with this Idempotency-Key is still being processed: try again shortly.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: >
+            `offer-not-available`: the plan is not offered to this account.
+            `idempotency-key-reused`: the key was used for a different request.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+components:
+  schemas:
+    SignUpRequest:
+      type: object
+      required: [accountId, planId, paymentToken]
+      properties:
+        accountId:
+          type: string
+          format: uuid
+        planId:
+          type: string
+          description: The offer to subscribe to, for example STANDARD.
+        paymentToken:
+          type: string
+          description: The provider's token for the card (FR-015). Card numbers never reach Tally.
+    SignUpResponse:
+      type: object
+      required: [subscriptionId, status, accessWithinSeconds]
+      properties:
+        subscriptionId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          description: >
+            The subscription's state. Extensible (ADR-016, add-only): clients must accept values not listed;
+            TRIAL and others will be added. Slice 1R returns ACTIVE.
+          examples: [ACTIVE]
+        accessWithinSeconds:
+          type: integer
+          description: How soon access is granted (ADR-014). Always 5 in v1.
+          examples: [5]
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: >
+            /problems/offer-not-available, /problems/already-subscribed, /problems/account-blocked,
+            /problems/idempotency-key-reused (design.md §8), or about:blank for errors without a code of their own.
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string

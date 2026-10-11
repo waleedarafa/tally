@@ -1,20 +1,56 @@
-package com.tally.payment;
+package com.tally.payment.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.tally.payment.AttemptState;
+import com.tally.payment.domain.PaymentAttempts;
 import com.tally.shared.Money;
 import com.tally.support.AbstractReconcilingTest;
 import com.tally.support.FakeProvider;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
-/** FR-018: unknown outcomes are reconciled, never retried; recent failures are re-checked. Own context. */
+/**
+ * FR-018: unknown outcomes are reconciled, never retried; recent failures are re-checked.
+ *
+ * <p>The scheduled reconciliation job is stopped for these tests, in every test context at once: its row in
+ * {@code payment.jobs} is shared, and is set due in the year 9999. Each check is then a direct call, so the
+ * attempt's checks, its next check time and this context's correction counters change only when the test
+ * says so (PR #23 review). After each test the job is made due again.
+ */
 class ReconciliationIT extends AbstractReconcilingTest {
 
+    @Autowired
+    Reconciliation reconciliation;
+
+    @Autowired
+    PaymentAttempts attempts;
+
+    /** Runs after the base class makes the job due: waits for any run in progress, then parks the job. */
+    @BeforeEach
+    void stopTheScheduledJob() {
+        await().atMost(Duration.ofSeconds(10)).until(() -> jdbc.update("UPDATE payment.jobs"
+                + " SET due_at = TIMESTAMPTZ '9999-01-01 00:00:00Z' WHERE queue_key = 'payment-reconciliation'"
+                + " AND status = 'READY'") == 1);
+    }
+
+    /**
+     * Makes the shared job due again, so a later test that relies on scheduled reconciliation (AT-5, AT-6,
+     * AT-15) never meets it parked until 9999.
+     */
+    @AfterEach
+    void restartTheScheduledJob() {
+        jdbc.update("UPDATE payment.jobs SET status = 'READY', claim_token = NULL, due_at = ?"
+                + " WHERE queue_key = 'payment-reconciliation'", clock.instant().atOffset(ZoneOffset.UTC));
+    }
 
     String collect() {
         String reference = "REC-" + UUID.randomUUID();
@@ -22,9 +58,13 @@ class ReconciliationIT extends AbstractReconcilingTest {
         return reference;
     }
 
-    AttemptState awaitState(String reference, AttemptState state, Duration atMost) {
+    void awaitState(String reference, AttemptState state, Duration atMost) {
         await().atMost(atMost).until(() -> payments.status(reference).map(s -> s.state() == state).orElse(false));
-        return state;
+    }
+
+    /** One reconciliation check of the reference's attempt, now. */
+    void check(String reference) {
+        reconciliation.check(attempts.latestFor(reference).orElseThrow());
     }
 
     int checks(String reference) {
@@ -50,7 +90,9 @@ class ReconciliationIT extends AbstractReconcilingTest {
         await().during(Duration.ofSeconds(1)).until(() -> FakeProvider.requestCount(reference) == 1);
 
         clock.advance(Duration.ofMinutes(5));
-        awaitState(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
+        check(reference);
+
+        assertThat(payments.status(reference).orElseThrow().state()).isEqualTo(AttemptState.SUCCEEDED);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
         assertThat(FakeProvider.requestCount(reference)).isEqualTo(1);
         assertThat(corrected("UNKNOWN", "SUCCEEDED")).isEqualTo(before + 1);
@@ -67,7 +109,9 @@ class ReconciliationIT extends AbstractReconcilingTest {
         FakeProvider.mode("NORMAL");
 
         clock.advance(Duration.ofMinutes(5));
-        awaitState(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
+        check(reference);
+
+        assertThat(payments.status(reference).orElseThrow().state()).isEqualTo(AttemptState.SUCCEEDED);
         assertThat(corrected("DECLINED", "SUCCEEDED")).isEqualTo(before + 1);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
@@ -84,16 +128,19 @@ class ReconciliationIT extends AbstractReconcilingTest {
 
         // 5 minutes, then 1 hour, then daily.
         clock.advance(Duration.ofMinutes(5));
-        await().atMost(Duration.ofSeconds(10)).until(() -> checks(reference) == 1);
+        check(reference);
+        assertThat(checks(reference)).isEqualTo(1);
         assertThat(reconcileAt(reference)).isEqualTo(clock.instant().plus(Duration.ofHours(1)));
 
         clock.advance(Duration.ofHours(1));
-        await().atMost(Duration.ofSeconds(10)).until(() -> checks(reference) == 2);
+        check(reference);
+        assertThat(checks(reference)).isEqualTo(2);
         assertThat(reconcileAt(reference)).isEqualTo(clock.instant().plus(Duration.ofDays(1)));
 
         // The next daily check would fall beyond 48 hours after the failure: checks stop.
         clock.advance(Duration.ofDays(1));
-        await().atMost(Duration.ofSeconds(10)).until(() -> checks(reference) == 3);
+        check(reference);
+        assertThat(checks(reference)).isEqualTo(3);
         assertThat(reconcileAt(reference)).isNull();
 
         assertThat(payments.status(reference).orElseThrow().state()).isEqualTo(AttemptState.DECLINED);

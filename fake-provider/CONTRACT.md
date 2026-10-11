@@ -201,6 +201,7 @@ Modelled on Stripe's API v1 (sources at the end). Tests: `IdempotencyKeysTest`.
   - while the first request still executes, a repeat gets `409`: no answer yet, ask again later.
   - In every case the repeat must carry exactly the first request's parameters, so an attempt must store them.
 - **Check:** confirm that no lookup by key exists, and the retention period.
+- **Check, for provider selection:** can each charge carry metadata (Tally's attempt number) that the lookup by reference returns? If so, the resolver can match each record to its attempt, and the rule "a decline found decides only the first attempt" (proposed ADR-026) can go.
 
 ## 7. Things the fake does not model at all
 
