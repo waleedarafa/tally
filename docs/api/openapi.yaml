@@ -16,13 +16,18 @@ paths:
         Records the payment token the provider's hosted card form returned, then starts the subscription.
         Answers at once: the first invoice and its payment follow asynchronously, and access is granted
         within the promised seconds (ADR-014: 99% within 5 seconds; the app shows "activating").
-        The Idempotency-Key is stored before acting, with the response, for 24 hours: a repeat with the
-        same key and the same body returns the stored response, error responses included.
+        The Idempotency-Key is claimed before acting; the response is stored in the same transaction as the
+        sign-up, and both are kept for 24 hours: a repeat with the same key and the same body returns the stored
+        response, error responses included.
       parameters:
         - name: Idempotency-Key
           in: header
           required: true
-          description: A key the client makes for this sign-up, such as a UUID. Kept for 24 hours.
+          description: >
+            A key the client makes for this sign-up, such as a UUID. Kept for 24 hours. Keys are scoped by
+            account (the body's accountId) until callers are authenticated; then they will be scoped by caller.
+            A key still held by a request that has not answered within 60 seconds is taken over by the next
+            request with it: that request died, and its sign-up rolled back with its response.
           schema:
             type: string
             minLength: 1
@@ -93,7 +98,9 @@ components:
           format: uuid
         status:
           type: string
-          description: The subscription's state. Slice 1R models ACTIVE only; consumers must accept values they do not know.
+          description: >
+            The subscription's state. Extensible (ADR-016, add-only): clients must accept values not listed;
+            TRIAL and others will be added. Slice 1R returns ACTIVE.
           examples: [ACTIVE]
         accessWithinSeconds:
           type: integer

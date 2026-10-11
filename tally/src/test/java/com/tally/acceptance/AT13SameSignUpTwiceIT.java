@@ -106,18 +106,34 @@ class AT13SameSignUpTwiceIT extends AbstractIntegrationTest {
         assertThat(signUp(key, account, "BASIC").getStatusCode().value()).isEqualTo(201);
     }
 
+    /** Keys are scoped by account until callers are authenticated: one key value, two accounts, two sign-ups. */
     @Test
-    void aKeyReusedForADifferentRequestIsRefusedAndChangesNothing() {
+    void twoAccountsUsingTheSameKeyValueBothSucceed() {
         UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         UUID other = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         String key = UUID.randomUUID().toString();
+
+        ResponseEntity<String> first = signUp(key, account, "BASIC");
+        ResponseEntity<String> second = signUp(key, other, "BASIC");
+
+        assertThat(first.getStatusCode().value()).isEqualTo(201);
+        assertThat(second.getStatusCode().value()).isEqualTo(201);
+        assertThat(second.getBody()).isNotEqualTo(first.getBody());
+        assertThat(subscriptions(account)).isEqualTo(1);
+        assertThat(subscriptions(other)).isEqualTo(1);
+    }
+
+    @Test
+    void aKeyReusedForADifferentRequestIsRefusedAndChangesNothing() {
+        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        String key = UUID.randomUUID().toString();
         signUp(key, account, "BASIC");
 
-        ResponseEntity<String> reused = signUp(key, other, "BASIC");
+        ResponseEntity<String> reused = signUp(key, account, "PREMIUM");
 
         assertThat(reused.getStatusCode().value()).isEqualTo(422);
         assertThat(reused.getHeaders().getContentType().toString()).startsWith("application/problem+json");
         assertThat(reused.getBody()).contains("\"type\":\"/problems/idempotency-key-reused\"");
-        assertThat(subscriptions(other)).isZero();
+        assertThat(subscriptions(account)).as("still the first sign-up only").isEqualTo(1);
     }
 }
