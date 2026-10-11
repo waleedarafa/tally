@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.AbstractIntegrationTest;
+import com.tally.support.SharedJob;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
@@ -50,7 +51,7 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
 
     void runCheck() {
         Instant now = clock.instant();
-        await().atMost(Duration.ofSeconds(10)).until(() -> {
+        SharedJob.invariantCheck(JOB).await(jdbc, clock, Duration.ofSeconds(10), () -> {
             OffsetDateTime at = jdbc.queryForObject("SELECT last_success_at FROM invoicing.jobs WHERE queue_key = ?",
                     OffsetDateTime.class, JOB);
             return at != null && !at.toInstant().isBefore(now);

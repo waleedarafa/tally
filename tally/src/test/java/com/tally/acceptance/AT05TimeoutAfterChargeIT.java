@@ -38,7 +38,7 @@ class AT05TimeoutAfterChargeIT extends AbstractReconcilingTest {
 
         // Reconciliation's first check, 5 minutes later, finds the charge.
         clock.advance(Duration.ofMinutes(5));
-        awaitAttempt(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
+        awaitReconciled(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
         await().atMost(Duration.ofSeconds(10))
                 .until(() -> invoicing.invoicesFor(account).getFirst().status() == InvoiceStatus.PAID);
 

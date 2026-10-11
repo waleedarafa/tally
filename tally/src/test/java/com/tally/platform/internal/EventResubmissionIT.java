@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.AbstractIntegrationTest;
+import com.tally.support.SharedJob;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
@@ -66,7 +67,7 @@ class EventResubmissionIT extends AbstractIntegrationTest {
     void advanceAndRunJob(Duration by) {
         clock.advance(by);
         Instant now = clock.instant();
-        await().atMost(Duration.ofSeconds(10)).until(() -> !jobLastSuccess().isBefore(now));
+        SharedJob.EVENT_RESUBMISSION.await(jdbc, clock, Duration.ofSeconds(10), () -> !jobLastSuccess().isBefore(now));
     }
 
     @Test

@@ -41,6 +41,10 @@ jobs:
       - name: Commit tests
         run: ./mvnw -B -P commit-stage verify
 
+      - name: Print failed tests
+        if: failure()
+        run: python3 .github/scripts/print-failed-tests.py
+
       - name: Keep test reports
         if: failure()
         uses: actions/upload-artifact@v7
@@ -102,6 +106,10 @@ jobs:
 
       - name: Acceptance tests
         run: ./mvnw -B -P acceptance-stage verify
+
+      - name: Print failed tests
+        if: failure()
+        run: python3 .github/scripts/print-failed-tests.py
 
       - name: Keep test reports and instance logs
         if: failure()

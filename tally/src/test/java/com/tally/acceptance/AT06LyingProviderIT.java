@@ -40,7 +40,7 @@ class AT06LyingProviderIT extends AbstractReconcilingTest {
 
         // Reconciliation re-checks recent failures and finds the charge.
         clock.advance(Duration.ofMinutes(5));
-        awaitAttempt(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
+        awaitReconciled(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
         await().atMost(Duration.ofSeconds(10))
                 .until(() -> invoicing.invoicesFor(account).getFirst().status() == InvoiceStatus.PAID);
 
