@@ -1,6 +1,6 @@
-package com.tally.entitlement.adapter.web;
+package com.tally.access.adapter.web;
 
-import com.tally.entitlement.EntitlementApi;
+import com.tally.access.AccessApi;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -12,14 +12,14 @@ class AccessController {
     record AccessResponse(UUID accountId, boolean hasAccess) {
     }
 
-    private final EntitlementApi entitlements;
+    private final AccessApi access;
 
-    AccessController(EntitlementApi entitlements) {
-        this.entitlements = entitlements;
+    AccessController(AccessApi access) {
+        this.access = access;
     }
 
     @GetMapping("/v1/accounts/{id}/access")
     AccessResponse access(@PathVariable UUID id) {
-        return new AccessResponse(id, entitlements.hasAccess(id));
+        return new AccessResponse(id, access.hasAccess(id));
     }
 }

@@ -1,4 +1,4 @@
-package com.tally.entitlement.application;
+package com.tally.access.application;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;

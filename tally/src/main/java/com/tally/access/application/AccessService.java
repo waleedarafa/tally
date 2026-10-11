@@ -1,6 +1,6 @@
-package com.tally.entitlement.application;
+package com.tally.access.application;
 
-import com.tally.entitlement.EntitlementApi;
+import com.tally.access.AccessApi;
 import com.tally.payment.PaymentSucceeded;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionChanged;
@@ -19,13 +19,13 @@ import org.springframework.stereotype.Service;
  */
 @Service
 @EnableConfigurationProperties(AccessProperties.class)
-class EntitlementService implements EntitlementApi {
+class AccessService implements AccessApi {
 
     private final JdbcTemplate jdbc;
     private final AccessProperties properties;
     private final Clock clock;
 
-    EntitlementService(JdbcTemplate jdbc, AccessProperties properties, Clock clock) {
+    AccessService(JdbcTemplate jdbc, AccessProperties properties, Clock clock) {
         this.jdbc = jdbc;
         this.properties = properties;
         this.clock = clock;
@@ -34,7 +34,7 @@ class EntitlementService implements EntitlementApi {
     @Override
     public boolean hasAccess(UUID accountId) {
         return Boolean.TRUE.equals(jdbc.queryForObject(
-                "SELECT EXISTS (SELECT 1 FROM entitlement.access WHERE account_id = ?)", Boolean.class, accountId));
+                "SELECT EXISTS (SELECT 1 FROM access.access WHERE account_id = ?)", Boolean.class, accountId));
     }
 
     @ApplicationModuleListener
@@ -50,7 +50,7 @@ class EntitlementService implements EntitlementApi {
     }
 
     private void grant(UUID accountId, String grantedBy) {
-        jdbc.update("INSERT INTO entitlement.access (account_id, granted_at, granted_by) VALUES (?, ?, ?)"
+        jdbc.update("INSERT INTO access.access (account_id, granted_at, granted_by) VALUES (?, ?, ?)"
                 + " ON CONFLICT (account_id) DO NOTHING",
                 accountId, OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC), grantedBy);
     }

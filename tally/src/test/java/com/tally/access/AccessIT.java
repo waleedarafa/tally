@@ -1,4 +1,4 @@
-package com.tally.entitlement;
+package com.tally.access;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -23,7 +23,7 @@ class AccessIT {
     abstract static class Base extends AbstractIntegrationTest {
 
         @Autowired
-        EntitlementApi entitlements;
+        AccessApi access;
 
         @Autowired
         ApplicationEventPublisher events;
@@ -52,15 +52,15 @@ class AccessIT {
         @Test
         void accessStartsWithTheSubscription() {
             UUID account = UUID.randomUUID();
-            assertThat(entitlements.hasAccess(account)).isFalse();
+            assertThat(access.hasAccess(account)).isFalse();
 
             publish(started(account));
-            await().atMost(Duration.ofSeconds(5)).until(() -> entitlements.hasAccess(account));
+            await().atMost(Duration.ofSeconds(5)).until(() -> access.hasAccess(account));
 
             // A later payment, or a redelivered event, changes nothing.
             publish(paid(account));
             publish(started(account));
-            await().during(Duration.ofMillis(500)).until(() -> entitlements.hasAccess(account));
+            await().during(Duration.ofMillis(500)).until(() -> access.hasAccess(account));
         }
     }
 
@@ -74,10 +74,10 @@ class AccessIT {
 
             publish(started(account));
             await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(2))
-                    .until(() -> !entitlements.hasAccess(account));
+                    .until(() -> !access.hasAccess(account));
 
             publish(paid(account));
-            await().atMost(Duration.ofSeconds(5)).until(() -> entitlements.hasAccess(account));
+            await().atMost(Duration.ofSeconds(5)).until(() -> access.hasAccess(account));
         }
     }
 }
