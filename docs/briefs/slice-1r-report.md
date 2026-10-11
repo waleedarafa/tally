@@ -326,3 +326,19 @@ These changes were made after the report, in the close-out PR. The user's decisi
 | README row §10 (§6) | "Payment depends on `shared` only" corrected to `shared` and `platform`, as design §3 and the code say. Row §10 C names F11 among its checks. | — |
 | Decisions in the repository | From now on, a decision the user pastes is posted verbatim as a comment on the PR it concerns before it is acted on (CLAUDE.md, "How to work") | — |
 
+
+### Test-infrastructure debt: one database, many clocks
+
+**Root cause.** Integration tests share one database. Spring caches several test contexts, and each runs its own job runner on its own `TestClock`. A scheduled job's row (`payment.jobs`, `platform.jobs`, `invoicing.jobs`) is shared by all of them. So a context whose clock is ahead can claim the row and reschedule it into its own future, where another context's runner never sees it due. Its run also acts on the shared rows with its own clock.
+
+**Three flakes so far came from it:**
+
+| Flake | PR | What happened | Mitigation |
+|---|---|---|---|
+| `InconsistentLookupIT` | #20 | Another context's reconciliation job resolved the attempt first | Direct calls instead of the job |
+| `ReconciliationIT` | #23 | The shared job changed the counters the test checked | The job parked in the year 9999, restored after each test |
+| AT-15 | #32 run 38153130900 | The reconciliation job sat in another context's future; the attempt was never resolved within 15 s | `SharedJob` re-arms the row at the waiting context's clock on every poll (AT-5, AT-6, AT-8, AT-12, AT-15, `EventSequenceIT`, `EventResubmissionIT`, Spike B); `SharedJobIT` reproduces the stranded job |
+
+**The mitigations narrow the race; they do not remove it.** A foreign context that claims the job still runs it on its own clock.
+
+**Candidate fix for Slice 2, step 0, to be spiked:** one test clock shared by every context.
