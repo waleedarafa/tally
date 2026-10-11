@@ -209,7 +209,7 @@ Modelled on Stripe's API v1 (sources at the end). Tests: `IdempotencyKeysTest`.
 None of the following exist in the fake, so no test covers them. Each needs a decision before production.
 - **Webhooks**, or any asynchronous notification.
 - **Refunds**, partial or full.
-- **Disputes and chargebacks**: money taken back weeks later, which invoicing and entitlement must react to.
+- **Disputes and chargebacks**: money taken back weeks later, which invoicing and access must react to.
 - **Partial approvals**: an amount lower than requested.
 - **Currency conversion** by the provider.
 - **Key retention in real time**: the fake keeps keys for 24 hours of its own wall clock; tests prune them instead of waiting (A22).

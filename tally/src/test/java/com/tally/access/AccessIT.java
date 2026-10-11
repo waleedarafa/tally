@@ -4,80 +4,46 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.AbstractIntegrationTest;
-import com.tally.payment.PaymentSucceeded;
-import com.tally.shared.Money;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionChanged;
 import java.time.Duration;
 import java.util.UUID;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Brief section 3: access before the first payment is a setting, while FR-019 is Proposed. */
-class AccessIT {
+/** H7: a subscription gives access from sign-up, without waiting for a payment (Slice 1R PR-10). */
+class AccessIT extends AbstractIntegrationTest {
 
-    abstract static class Base extends AbstractIntegrationTest {
+    @Autowired
+    AccessApi access;
 
-        @Autowired
-        AccessApi access;
+    @Autowired
+    ApplicationEventPublisher events;
 
-        @Autowired
-        ApplicationEventPublisher events;
+    @Autowired
+    TransactionTemplate transactions;
 
-        @Autowired
-        TransactionTemplate transactions;
-
-        void publish(Object event) {
-            transactions.executeWithoutResult(tx -> events.publishEvent(event));
-        }
-
-        SubscriptionChanged started(UUID account) {
-            return new SubscriptionChanged(UUID.randomUUID(), clock.instant(), account, UUID.randomUUID(), "BASIC", 1,
-                    SubscriptionChangeType.STARTED);
-        }
-
-        PaymentSucceeded paid(UUID account) {
-            return new PaymentSucceeded(UUID.randomUUID(), clock.instant(), account, "INV-x", Money.of(999, "USD"),
-                    "ch_x", 1L);
-        }
+    void publish(Object event) {
+        transactions.executeWithoutResult(tx -> events.publishEvent(event));
     }
 
-    @Nested
-    class GrantBeforePayment extends Base {
-
-        @Test
-        void accessStartsWithTheSubscription() {
-            UUID account = UUID.randomUUID();
-            assertThat(access.hasAccess(account)).isFalse();
-
-            publish(started(account));
-            await().atMost(Duration.ofSeconds(5)).until(() -> access.hasAccess(account));
-
-            // A later payment, or a redelivered event, changes nothing.
-            publish(paid(account));
-            publish(started(account));
-            await().during(Duration.ofMillis(500)).until(() -> access.hasAccess(account));
-        }
+    SubscriptionChanged started(UUID account) {
+        return new SubscriptionChanged(UUID.randomUUID(), clock.instant(), account, UUID.randomUUID(), "BASIC", 1,
+                SubscriptionChangeType.STARTED);
     }
 
-    @Nested
-    @TestPropertySource(properties = "tally.access.grant-before-payment=false")
-    class GrantOnFirstPayment extends Base {
+    @Test
+    void accessStartsWithTheSubscription() {
+        UUID account = UUID.randomUUID();
+        assertThat(access.hasAccess(account)).isFalse();
 
-        @Test
-        void accessWaitsForTheFirstSuccessfulPayment() {
-            UUID account = UUID.randomUUID();
+        publish(started(account));
+        await().atMost(Duration.ofSeconds(5)).until(() -> access.hasAccess(account));
 
-            publish(started(account));
-            await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(2))
-                    .until(() -> !access.hasAccess(account));
-
-            publish(paid(account));
-            await().atMost(Duration.ofSeconds(5)).until(() -> access.hasAccess(account));
-        }
+        // A redelivered event changes nothing.
+        publish(started(account));
+        await().during(Duration.ofMillis(500)).until(() -> access.hasAccess(account));
     }
 }
