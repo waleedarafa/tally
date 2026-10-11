@@ -1,6 +1,6 @@
 # Tally decision log, second design
 
-The architecture was designed a second time, from zero, in sixteen steps. The full reasoning, options and rejected alternatives live in the **Tally Design Record** (outside this repository). This file summarises the decisions the code must follow.
+The architecture was designed a second time, from zero, in sixteen steps. The full reasoning, options and rejected alternatives live in the **Tally Design Record**, [`design-record.md`](design-record.md) (a snapshot of the document where it is written, refreshed at the end of every step and slice). This file summarises the decisions the code must follow.
 
 Rules for this log are unchanged from the first run: one decision per record; an accepted decision's text is never edited, only superseded.
 
