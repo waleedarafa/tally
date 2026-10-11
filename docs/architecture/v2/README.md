@@ -37,21 +37,24 @@ First-run records are archived under `docs/architecture/archive/first-run/` as `
 | 018 | Lifecycles as an enum and transition table inside each aggregate; a stale requested or sent attempt becomes unknown | D2, P1, P2 | Exhaustive table tests; AT-15 |
 | 019 | REST: client `Idempotency-Key` stored before acting; RFC 9457 problem details; version in the path; OpenAPI first | D2 | AT-13; contract tests |
 | 020 | Backups: 7-day point-in-time recovery, 25-day snapshots; a deletion log replayed after any restore | D8 | Restore drill |
+| **Accepted in Slice 1R** | | | |
+| 024 | Where UNKNOWN is a real state of a shared enum, a value the reader does not know maps to UNRECOGNISED, never to UNKNOWN; amends 016 | D3, D13 | FF-12 (`EnumsHaveUnknownDefaultTest`); `UnknownEnumValuesIT` |
+| 026 | How an unknown payment is resolved, in order: (a) look the reference up; for the latest attempt of the reference, a charge found decides, and a decline found decides an UNKNOWN first attempt; an earlier attempt learns nothing from the lookup, which also shows its successors' charges (a superseded decline stops being re-checked; an earlier UNKNOWN goes on to b); (b) if nothing decides and the attempt's own key is younger than the provider's retention minus a margin, repeat with the key and the stored parameters; the outcome decides; (c) else never repeat: it stays UNKNOWN, with the alert, for settlement reconciliation (021). "Not found" alone never means "no charge". Only a SENT attempt becomes UNKNOWN by age; a REQUESTED attempt was never sent. Before Collections retries a declined reference, Payment looks the reference up. If the provider shows any charge for it, no new attempt is made, and the declined attempt is corrected to SUCCEEDED. Amends 004, 018 and the payment state machine | D2 | `UnknownResolutionIT`; `KeyRepeatWindowTest`; `PaymentAttemptTransitionsTest`; `ReconciliationIT`; AT-15; AT-16 |
+| 027 | Idempotency keys: every `Idempotency-Key` is a UUID, or the request is refused with 400 and nothing stored. Keys are held by `platform`, in one table per module; a key is claimed before acting; the response is stored in the change's own transaction; a key whose request has not answered within the request timeout is taken over. Keys are scoped per account until callers are authenticated, then per caller. Extends 019 | D2 | AT-13; `SignUpRecoveryIT`; `ContractIT` |
+| 028 | A listener is pinned like an event class: its identity (class, method, parameter types) is stored with each pending publication, so it is never renamed or moved while it may have incomplete publications. To move one: deploy the new listener, wait until the old one has none, then remove it. Extends 016 | D3 | `PinnedListenersTest` |
 
 §-numbers refer to sections of the Design Record where the decision has no separate ADR number.
 
-## Proposed: imported from the first run
+## Proposed
 
-The second design missed these. They are proposed here, to be confirmed in the Design Record.
+The second design missed these, or Slice 1R raised them. They are proposed here, to be confirmed in the Design Record. 024 and 026 were accepted in Slice 1R and moved to the decision table.
 
 | # | Proposal | From |
 |---|---|---|
-| 021 | Daily reconciliation against the provider's settlement report, both directions; every mismatch recorded and alerted (D14) | FR-031 |
+| 021 | Daily reconciliation against the provider's settlement report, both directions; every mismatch recorded and alerted (D14). **Required before production** | FR-031 |
 | 022 | What happens to an invoice and to access when a recorded success proves false; needs finance | FR-032 |
 | 023 | Renewals are merchant-initiated; an authentication demand is a distinct outcome and reaches the customer (D15) | first-run D15 |
-| 024 | Where UNKNOWN is a real state of a shared enum, a value the reader does not know maps to UNRECOGNISED, never to UNKNOWN; amends 016 | Slice 1R PR #13 review (`AttemptState`) |
 | 025 | A decline on the first invoice ends the subscription at once; for finance and product, not in Slice 1R | Slice 1R PR #13 review (access at sign-up) |
-| 026 | How an unknown payment is resolved, in order: (a) look the reference up; for the latest attempt of the reference, a charge found decides, and a decline found decides an UNKNOWN first attempt; an earlier attempt learns nothing from the lookup, which also shows its successors' charges (a superseded decline stops being re-checked; an earlier UNKNOWN goes on to b); (b) if none is found and the attempt's own key is younger than the provider's retention minus a margin, repeat with the key and the stored parameters; the outcome decides; (c) else never repeat: it stays UNKNOWN, with the alert, for settlement reconciliation (021). "Not found" alone never means "no charge". Only a SENT attempt becomes UNKNOWN by age; a REQUESTED attempt was never sent. Before Collections retries a declined reference, Payment looks the reference up. If the provider shows any charge for it, no new attempt is made, and the declined attempt is corrected to SUCCEEDED. Amends 004, 018 and the payment state machine | Slice 1R PR #14, #15 and #20 reviews; PR-8; spike S-2; #26 (latest attempt only) |
 
 ## Mapping of first-run records
 
