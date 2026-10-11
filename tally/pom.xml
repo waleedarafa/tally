@@ -84,6 +84,15 @@
             <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Contract tests (ADR-019): validates raw MockMvc requests and responses against docs/api/openapi.yaml.
+             Test scope only. Uses Jackson 2 internally; its version comes from Spring Boot's jackson-2-bom
+             (PR #23 review conditions). 3.0.0 supports Spring Framework 7 / Spring Boot 4 (release notes). -->
+        <dependency>
+            <groupId>com.atlassian.oai</groupId>
+            <artifactId>openapi-request-validator-mockmvc</artifactId>
+            <version>3.0.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
