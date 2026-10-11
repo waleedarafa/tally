@@ -1,6 +1,6 @@
 # Runbook: unknown payment past the key window
 
-A payment attempt is UNKNOWN when Tally does not know whether the provider charged. Reconciliation resolves it automatically (proposed ADR-026):
+A payment attempt is UNKNOWN when Tally does not know whether the provider charged. Reconciliation resolves it automatically (ADR-026):
 - **(a) lookup:** it looks the reference up;
 - **(b) repeat:** while the attempt's key is younger than `tally.payment.provider.key-repeat-window` (20 hours), it repeats the charge with the same key;
 - **(c) never repeat:** past that window, the provider may have forgotten the key, and a repeat would charge a second time. So Tally stops, and the attempt waits for a person.

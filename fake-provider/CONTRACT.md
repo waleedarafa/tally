@@ -104,9 +104,9 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **Tally relies on it in:** `HttpPaymentGateway.chargesFor` and `Reconciliation`. Spike B's "resolved in 5 minutes" depends on it.
 - **If a real provider differs:** search by metadata is often backed by an index that lags by seconds to minutes, or is not offered at all, which leaves webhooks or settlement files as the only source.
 - **Check:** open (Q-B). Confirm that a lookup by reference exists, and its consistency delay. If there is none, reconciliation must use webhooks or reports (and FR-018 needs revisiting).
-- **Assumed by Tally since Slice 1R PR-8 (proposed ADR-026):** a charge found decides; "not found" decides nothing. Reconciliation then repeats the attempt's charge with its key (A23) while the key is inside the window, and never after. A lagging search therefore costs time, never a second charge.
+- **Assumed by Tally since Slice 1R PR-8 (ADR-026):** a charge found decides; "not found" decides nothing. Reconciliation then repeats the attempt's charge with its key (A23) while the key is inside the window, and never after. A lagging search therefore costs time, never a second charge.
 - **Fake:** `LOOKUP_LAG` mode makes the lookup show no charge at all, as a search that lags behind would (`UnknownResolutionIT`).
-- **Assumed by Tally since #26 (proposed ADR-026, clarified):** the lookup by reference reflects a charge long before Collections' retry delay (3 days). The lookup shows every attempt's charges, so it decides only for the latest attempt of a reference, and `collectAgain` looks the reference up before each retry: a charge missing from the lookup at that moment means a second charge. **Check during selection:** the provider's stated search lag.
+- **Assumed by Tally since #26 (ADR-026, clarified):** the lookup by reference reflects a charge long before Collections' retry delay (3 days). The lookup shows every attempt's charges, so it decides only for the latest attempt of a reference, and `collectAgain` looks the reference up before each retry: a charge missing from the lookup at that moment means a second charge. **Check during selection:** the provider's stated search lag.
 
 **A12. The lookup's answer is the truth; a charge response can be wrong.**
 - **Fake:** in `LIE` mode, the response shows the opposite of the recorded outcome, while the lookup shows the recorded one.
@@ -192,7 +192,7 @@ Modelled on Stripe's API v1 (sources at the end). Tests: `IdempotencyKeysTest`.
 
 **A23. The outcome of a request is learnt by key: repeating it with the same key and the same parameters returns the saved response without charging again.** (critical)
 - **Fake:** as A22. There is no endpoint that looks a charge up by key; the repeat is the lookup (`afterATimeoutTheSameKeyReturnsTheRecordedChargeWithoutChargingAgain`).
-- **Tally relies on it in:** `Reconciliation`, since Slice 1R PR-8 (proposed ADR-026), after the lookup by reference (A11) found no charge:
+- **Tally relies on it in:** `Reconciliation`, since Slice 1R PR-8 (ADR-026), after the lookup by reference (A11) found no charge:
   - (b) while the attempt's key is younger than `tally.payment.provider.key-repeat-window` (20 hours: the 24-hour retention minus a margin), the charge is repeated with the same key and the stored token, amount, currency and reference. A replay or a fresh outcome decides; a refusal, a `409` or a timeout leaves the attempt UNKNOWN for a later check;
   - (c) past the window, it is never repeated: it stays UNKNOWN, counted in `tally.payment.unknown_past_key_window`, for settlement reconciliation.
   - Tests: `UnknownResolutionIT` (a never-executed first request, a lagging lookup, a key past the window with the provider's keys pruned, a refused repeat).
@@ -202,7 +202,7 @@ Modelled on Stripe's API v1 (sources at the end). Tests: `IdempotencyKeysTest`.
   - while the first request still executes, a repeat gets `409`: no answer yet, ask again later.
   - In every case the repeat must carry exactly the first request's parameters, so an attempt must store them.
 - **Check:** confirm that no lookup by key exists, and the retention period.
-- **Check, for provider selection:** can each charge carry metadata (Tally's attempt number) that the lookup by reference returns? If so, the resolver can match each record to its attempt, an exact match. That is the real fix: once confirmed, the rules "a decline found decides only the first attempt" and "the lookup decides only for the latest attempt" (proposed ADR-026, #26) can both be replaced by it.
+- **Check, for provider selection:** can each charge carry metadata (Tally's attempt number) that the lookup by reference returns? If so, the resolver can match each record to its attempt, an exact match. That is the real fix: once confirmed, the rules "a decline found decides only the first attempt" and "the lookup decides only for the latest attempt" (ADR-026, #26) can both be replaced by it.
 
 ## 7. Things the fake does not model at all
 
