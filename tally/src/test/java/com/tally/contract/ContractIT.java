@@ -15,11 +15,15 @@ import com.tally.account.AccountStanding;
 import com.tally.account.Standing;
 import com.tally.payment.PaymentApi;
 import com.tally.shared.Money;
+import io.swagger.v3.oas.models.PathItem.HttpMethod;
+import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.parser.OpenAPIV3Parser;
+import io.swagger.v3.parser.core.models.ParseOptions;
 import java.nio.file.Path;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Currency;
+import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -145,6 +149,60 @@ class ContractIT extends AbstractIntegrationTest {
                                 .forEach(method -> served.add(method + " " + path))));
 
         assertThat(served).containsExactlyInAnyOrderElementsOf(TESTED);
+    }
+
+    /**
+     * Every operation that changes state requires an Idempotency-Key that is a UUID (ADR-019; #24 review). Loosening
+     * the rule later is additive; tightening it later would break clients.
+     */
+    @Test
+    void everyStateChangingOperationRequiresAUuidKey() {
+        Set<String> keyed = new TreeSet<>();
+        Set<String> changing = new TreeSet<>();
+        ParseOptions resolved = new ParseOptions();
+        resolved.setResolve(true);
+        resolved.setResolveFully(true);
+        new OpenAPIV3Parser().read(SPECIFICATION.toString(), null, resolved).getPaths().forEach((path, item) ->
+                item.readOperationsMap().forEach((method, operation) -> {
+                    if (method != HttpMethod.GET) {
+                        changing.add(method + " " + path);
+                    }
+                    for (Parameter parameter : operation.getParameters() == null ? List.<Parameter>of()
+                            : operation.getParameters()) {
+                        if ("header".equals(parameter.getIn()) && "Idempotency-Key".equals(parameter.getName())
+                                && Boolean.TRUE.equals(parameter.getRequired())
+                                && "uuid".equals(parameter.getSchema().getFormat())) {
+                            keyed.add(method + " " + path);
+                        }
+                    }
+                }));
+
+        assertThat(changing).isNotEmpty();
+        assertThat(keyed).isEqualTo(changing);
+    }
+
+    /** A key that is not a UUID is refused with a 400 problem, on every operation that takes one, and not stored. */
+    @Test
+    void aKeyThatIsNotAUuidIsRefusedAndNotStored() throws Exception {
+        String key = "not-a-uuid-" + UUID.randomUUID();
+        MvcResult account = exchange(json(post("/v1/accounts").header("Idempotency-Key", key),
+                "{\"currency\":\"USD\",\"timeZone\":\"UTC\"}"));
+        MvcResult signUp = exchange(json(post("/v1/subscriptions").header("Idempotency-Key", key),
+                signUp(account(), "BASIC")));
+
+        for (MvcResult result : List.of(account, signUp)) {
+            assertThat(result.getResponse().getStatus()).isEqualTo(400);
+            assertThat(result.getResponse().getContentAsString()).contains("UUID");
+            assertConforms(VALIDATOR.validateResponse(result.getRequest().getRequestURI(), Method.POST,
+                    MockMvcResponse.of(result.getResponse())));
+            assertThat(VALIDATOR.validateRequest(MockMvcRequest.of(result.getRequest())).getMessages())
+                    .as("the specification itself refuses the key")
+                    .anySatisfy(message -> assertThat(message.getMessage()).contains("uuid"));
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM account.idempotency_key WHERE key = ?", Integer.class,
+                key)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM subscription.idempotency_key WHERE key = ?",
+                Integer.class, key)).isZero();
     }
 
     /** Requests are checked too: one without its required Idempotency-Key does not conform. */

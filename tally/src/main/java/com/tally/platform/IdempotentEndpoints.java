@@ -15,7 +15,7 @@ public interface IdempotentEndpoints {
     /**
      * Handles one request that changes state:
      * <ul>
-     *   <li>no {@code Idempotency-Key}, or one longer than 255 characters: 400 problem, not stored;</li>
+     *   <li>no {@code Idempotency-Key}, or one that is not a UUID: 400 problem, not stored;</li>
      *   <li>a key used for a different request: 422 {@code /problems/idempotency-key-reused};</li>
      *   <li>the same request still being handled: 409 {@code /problems/request-in-progress}, with
      *       {@code Retry-After} the seconds left of its request timeout;</li>

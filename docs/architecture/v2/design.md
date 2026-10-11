@@ -144,4 +144,4 @@ Clock (all with dates), `CardProvider` (payment), `TaxRates` (invoicing), `Invoi
 | `GET /v1/access/{subscriberId}` | canWatch, reason, asOf, sequence | served by Access |
 
 Errors: `application/problem+json` (RFC 9457). Types: `offer-not-available`, `already-subscribed`, `account-blocked`, `idempotency-key-reused`, `request-in-progress` (409, with `Retry-After`: the same request is still being handled; added in Slice 1R PR-9b).
-Idempotency keys are claimed before acting; the response is stored in the same transaction as the change, and both are kept for 24 hours. Keys are scoped by account until callers are authenticated. Versions live in the path; changes are additive; a break is `/v2`.
+An `Idempotency-Key` must be a UUID; any other value is refused with 400 and not stored (Slice 1R PR-10, from the #24 review: loosening this later is additive, tightening it would break clients). Idempotency keys are claimed before acting; the response is stored in the same transaction as the change, and both are kept for 24 hours. Keys are scoped by account until callers are authenticated. Versions live in the path; changes are additive; a break is `/v2`.
