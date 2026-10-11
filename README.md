@@ -28,8 +28,8 @@ One top-level package per module under `com.tally`, with dependencies declared i
 | `subscription` | Subscriptions, their periods and the billing calendar; renewals run on its own queue and publish `SubscriptionChanged` (Design Record §12) |
 | `invoicing` | Invoices, one per subscription period (I2), with the PriceQuote's lines; the invoiced-versus-collected check |
 | `payment` | Collection requests, payment attempts, provider calls and reconciliation. Knows nothing about invoices (FR-014) |
-| `entitlement` | Access granted to accounts |
-| `checkout` | A process module: record the card token, subscribe, wait briefly for the first payment (FR-034) |
+| `collections` | A case per account on a declined payment; the day-3 retry; closed when the invoice is paid (ADR-005; Slice 1R builds day 3 only) |
+| `access` | Access granted to accounts, from sign-up (H7). Reacts to events and answers from its own tables; never calls a billing API (separate deployable from Slice 2) |
 
 Each module owns one PostgreSQL schema; modules talk through public APIs and events (Spring Modulith), never each other's tables.
 

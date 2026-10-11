@@ -91,8 +91,9 @@ class AT09KillOneInstanceIT {
         // Exactly one next billing date scheduled per account.
         assertThat(count(jdbc, "SELECT count(*) FROM subscription.renewal WHERE queue_key LIKE ?", "%:" + nextDate))
                 .isEqualTo(ACCOUNTS);
-        // One payment attempt per invoice, plus one retry per technical failure: an attempt A committed as
-        // sent but never delivered goes stale, and a consistent lookup proves no charge (proposed ADR-026).
+        // One payment attempt per invoice, plus one new attempt per technical failure (ADR-013). An attempt left
+        // SENT by the killed instance goes stale and is resolved by a repeat with its own key, never by a new
+        // attempt (proposed ADR-026 b).
         // Nothing left claimed.
         long technicalFailures = count(jdbc,
                 "SELECT count(*) FROM payment.payment_attempt WHERE state = 'TECHNICAL_FAILURE'");
