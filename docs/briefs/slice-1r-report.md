@@ -240,10 +240,11 @@ Outside rule 14 (closed layers, by design):
 
 **Fixed in this PR:** rule 14 cited `JpaInvoices.insertIfAbsent` as its example, which does not exist. It now cites `JpaCollectionRequests.addIfAbsent`.
 
-### 4.7 Open questions
+### 4.7 Open questions and later work
 
-1. Should `domainDoesNotDependOnAdapters` be split into F9 plus a closed-layer domain rule (§5)?
+1. ~~Should `domainDoesNotDependOnAdapters` be split into F9 plus a closed-layer domain rule (§5)?~~ Done at the close-out: F9 bans `jakarta.servlet`, new F11 covers the closed-layer domains, and FF-8 is retired (§7).
 2. Should the proposed records 024 and 026, and the suggestions in §4.2, be confirmed in the Design Record as they stand?
+3. **Later work, required before the first production database:** a migration check that rejects destructive DDL (dropping or renaming a schema, table or column, or narrowing a type) unless the migration carries an explicit marker. Today nothing checks migrations (§6, ADR-009), and this slice's one-step renames were allowed only because no production database exists. No code now.
 
 ## 5. Fitness functions added
 
@@ -309,3 +310,19 @@ The "Checked by" column of `docs/architecture/v2/README.md`, against the code. A
 | FR-040 (pinned graph) | A test checks the approved graph | `PinnedModuleDependenciesTest`, on design §3 since #27 | None |
 | Proposed ADR-024 | (not yet in the column) | `EnumsHaveUnknownDefaultTest`, `UnknownEnumValuesIT` | The column has no entry for proposed records |
 | Proposed ADR-026 | (not yet in the column) | `UnknownResolutionIT`, `KeyRepeatWindowTest`, `PaymentAttemptTransitionsTest.aRequestedAttemptOfAnyAgeIsNeverMadeUnknown`, `ReconciliationIT.aRetrysChargeDoesNotCorrectTheDeclineBeforeIt`, AT-15, AT-16 | As above |
+
+## 7. Close-out (after the report)
+
+These changes were made after the report, in the close-out PR. The user's decision is posted verbatim on #28. Sections 1 to 6 describe the state at the end of the slice; this section records what changed since.
+
+| Item | Change | Test, shown failing first |
+|---|---|---|
+| AT-4 gap (§1, §6 ADR-013) | AT-4 now asserts that the outage produced `TECHNICAL_FAILURE` attempts and no `DECLINED` ones. The gap is closed. | `AT04ProviderOutageIT`. With the transition table's `SENT + PROVIDER_ERROR` row temporarily pointing to `DECLINED`: `[technical failures] Expecting actual: 0L to be greater than: 0L` |
+| F9 and `jakarta.servlet` (§5) | F9 bans `jakarta.servlet..` as well | `F9PlainDomainTest`. A temporary `jakarta.servlet.ServletRequest` field in `payment.domain`: `Field <…ReconciliationSchedule.redStepOnly> has type <jakarta.servlet.ServletRequest>` |
+| **F11**, closed-layer domains | In `account` and `collections`, the domain may not depend on `org.springframework.web..`, `org.springframework.http..`, `jakarta.servlet..` or any adapter package. Spring Data is allowed. A second test fails if a module with a domain package is checked by neither F9 nor F11. | `F11ClosedLayerDomainTest`: `aClosedLayerDomainUsesNoWebAndNoAdapter`, `everyDomainPackageIsCoveredByF9OrF11`. A temporary `HttpStatus` field in `account.domain`: `Field <…Account.redStepOnly> has type <org.springframework.http.HttpStatus>` |
+| FF-8 retired | `ArchitectureRulesTest.domainDoesNotDependOnAdapters` is removed: F9 and F11 cover every domain package between them, and the coverage test keeps it so | — |
+| **F12** | `AccessReactsOnlyToEventsTest` is renamed `F12AccessReactsOnlyToEventsTest` | Unchanged rule (shown failing first in #27) |
+| Pinned listeners (§6 ADR-016 gap) | `PinnedListenersTest` pins every event listener's identity, `class.method(parameter types)`, the form Spring Modulith stores with each publication, in `architecture/pinned-listeners.txt` (7 listeners). A rename or move fails the build (rule 7). The gap is closed. | `PinnedListenersTest.eventListenersMatchThePinnedList`. With the pin file empty: `Event listeners missing from architecture/pinned-listeners.txt` |
+| README row §10 (§6) | "Payment depends on `shared` only" corrected to `shared` and `platform`, as design §3 and the code say. Row §10 C names F11 among its checks. | — |
+| Decisions in the repository | From now on, a decision the user pastes is posted verbatim as a comment on the PR it concerns before it is acted on (CLAUDE.md, "How to work") | — |
+

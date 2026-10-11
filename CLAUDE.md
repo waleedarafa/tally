@@ -34,6 +34,7 @@ Before adding any other dependency, or if unsure which version is compatible wit
 
 ## How to work
 - `main` is the trunk. Work on a short-lived branch and merge through a pull request (FR-038, ADR-008).
+- Before acting on a decision the user pastes, post it verbatim as a comment on the PR it concerns, so the repository holds the decisions themselves.
 - Write the acceptance test for a scenario before its implementation, where practical.
 - Run `./mvnw verify` before every commit. It runs unit, integration and fitness-function tests.
 - Small commits, each leaving the build green.

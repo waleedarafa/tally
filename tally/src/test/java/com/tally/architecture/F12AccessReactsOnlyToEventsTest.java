@@ -12,12 +12,12 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 /**
- * Slice 1R PR-10 (design.md §3): {@code access} may use {@code subscription} and {@code account} only through
+ * F12 (Slice 1R PR-10; design.md §3): {@code access} may use {@code subscription} and {@code account} only through
  * their events, and only until Slice 2, when Access becomes its own deployable. It never calls a billing API:
  * it reacts to events and answers from its own tables. The module graph allows the edge; this test narrows it
  * to the events and the types they carry (an event's enum, for one).
  */
-class AccessReactsOnlyToEventsTest {
+class F12AccessReactsOnlyToEventsTest {
 
     /** The modules Access may use, through their events only, until Slice 2. */
     static boolean upstream(JavaClass type) {
@@ -33,7 +33,7 @@ class AccessReactsOnlyToEventsTest {
         Set<JavaClass> carried = events.stream()
                 .flatMap(event -> event.getFields().stream())
                 .map(JavaField::getRawType)
-                .filter(AccessReactsOnlyToEventsTest::upstream)
+                .filter(F12AccessReactsOnlyToEventsTest::upstream)
                 .collect(Collectors.toSet());
         carried.addAll(events);
         return carried;
