@@ -148,13 +148,13 @@ components:
       in: header
       required: true
       description: >
-        A key the client makes for this request, such as a UUID. Kept for 24 hours. A key still held by a request
+        A UUID the client makes for this request; any other value is refused with 400 and not stored. Kept for
+        24 hours. A key still held by a request
         that has not answered within 60 seconds is taken over by the next request with it: that request died, and
         its change rolled back with its response.
       schema:
         type: string
-        minLength: 1
-        maxLength: 255
+        format: uuid
     AccountId:
       name: id
       in: path

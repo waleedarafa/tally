@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -27,6 +28,13 @@ import tools.jackson.databind.json.JsonMapper;
 /** {@link IdempotentEndpoints}: the claim, the act and its stored response, and the problems in between. */
 @Component
 class HttpIdempotentEndpoints implements IdempotentEndpoints {
+
+    /**
+     * The textual form of a UUID (RFC 9562), as OpenAPI's {@code format: uuid}. {@code UUID.fromString} is not
+     * used: it also accepts short forms such as {@code 1-1-1-1-1}.
+     */
+    private static final Pattern UUID_FORM =
+            Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
     private final TransactionTemplate transactions;
     private final JsonMapper json;
@@ -40,9 +48,9 @@ class HttpIdempotentEndpoints implements IdempotentEndpoints {
     public ResponseEntity<String> handle(IdempotencyStore store, String scope, String key, Object request,
             Supplier<ResponseEntity<String>> act,
             Function<RuntimeException, Optional<ResponseEntity<String>>> refusals) {
-        if (key == null || key.isBlank() || key.length() > 255) {
+        if (key == null || !UUID_FORM.matcher(key).matches()) {
             return problem(HttpStatus.BAD_REQUEST, "about:blank", "An Idempotency-Key header is required",
-                    "Send a key you made for this request, such as a UUID, of at most 255 characters.");
+                    "Send a new UUID for each request, such as 123e4567-e89b-12d3-a456-426614174000.");
         }
         return switch (store.claim(scope, key, fingerprint(request))) {
             case Replay replay -> ResponseEntity.status(replay.response().status())
