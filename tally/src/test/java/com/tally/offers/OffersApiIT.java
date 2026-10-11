@@ -65,11 +65,11 @@ class OffersApiIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void anOfferIsOfferedWhereItHasAPriceInTheAccountsCurrency() {
-        assertThat(offers.isOffered("BASIC", account("AED"))).isTrue();
-        assertThat(offers.isOffered("BASIC", account("EUR"))).isFalse();
-        assertThat(offers.isOffered("GOLD", account("USD"))).isFalse();
-        assertThatThrownBy(() -> offers.isOffered("BASIC", UUID.randomUUID()))
+    void anOfferHasACurrentVersionWhereItHasAPriceInTheAccountsCurrency() {
+        assertThat(offers.currentVersion("BASIC", account("AED"))).isPresent();
+        assertThat(offers.currentVersion("BASIC", account("EUR"))).isEmpty();
+        assertThat(offers.currentVersion("GOLD", account("USD"))).isEmpty();
+        assertThatThrownBy(() -> offers.currentVersion("BASIC", UUID.randomUUID()))
                 .isInstanceOf(UnknownAccountException.class);
     }
 }

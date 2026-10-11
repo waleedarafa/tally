@@ -7,13 +7,6 @@ import java.util.UUID;
 public interface Offers {
 
     /**
-     * True if the offer exists and has a price in the account's currency.
-     *
-     * @throws com.tally.account.UnknownAccountException if there is no such account
-     */
-    boolean isOffered(String offerId, UUID accountId);
-
-    /**
      * The offer's current version, if it can be sold to the account: what a new subscription signs up to
      * and keeps (decision A).
      *

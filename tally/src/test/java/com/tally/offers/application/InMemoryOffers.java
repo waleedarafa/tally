@@ -34,7 +34,8 @@ class InMemoryOffers implements OfferCatalogue, OfferKinds, AccountApi {
 
     @Override
     public AccountView open(Currency currency, ZoneId timeZone) {
-        AccountView account = new AccountView(UUID.randomUUID(), currency, timeZone, Optional.empty());
+        AccountView account = new AccountView(UUID.randomUUID(), currency, timeZone, Optional.empty(),
+                com.tally.account.Standing.GOOD);
         accounts.put(account.id(), account);
         return account;
     }

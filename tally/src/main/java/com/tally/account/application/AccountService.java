@@ -56,6 +56,7 @@ class AccountService implements AccountApi, AccountStanding {
     }
 
     private static AccountView view(Account account) {
-        return new AccountView(account.id(), account.currency(), account.timeZone(), account.paymentToken());
+        return new AccountView(account.id(), account.currency(), account.timeZone(), account.paymentToken(),
+                account.standing());
     }
 }

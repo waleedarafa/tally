@@ -61,6 +61,6 @@ Measures marked *(assumed)* come from played stakeholders and must be confirmed 
 - **R1** Payment knows nothing about invoices.
 - **R2** Invoicing receives amounts; it never applies offer rules.
 - **R3** Only Collections sets an account's standing.
-- **R4** Offers and Pricing exposes only Pricing.quote, PriceQuote, and Offers (isOffered, currentVersion).
+- **R4** Offers and Pricing exposes only Pricing.quote, PriceQuote, and Offers (currentVersion).
 - **R5** The shared kernel holds only Money, Ratio and the event marker.
 - **C2** Card numbers never enter Tally.
