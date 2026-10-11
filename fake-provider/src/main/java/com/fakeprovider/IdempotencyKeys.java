@@ -1,5 +1,6 @@
 package com.fakeprovider;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -46,6 +47,11 @@ class IdempotencyKeys {
     }
 
     private final Map<String, Entry> entries = new ConcurrentHashMap<>();
+    private final Clock clock;
+
+    IdempotencyKeys(Clock clock) {
+        this.clock = clock;
+    }
 
     /** Claims the key for this request, or says why not. */
     Decision begin(String key, Object request) {
@@ -62,7 +68,7 @@ class IdempotencyKeys {
     }
 
     void save(String key, Object request, Object response) {
-        entries.put(key, new Saved(request, response, Instant.now()));
+        entries.put(key, new Saved(request, response, clock.instant()));
     }
 
     /** Test-only: as if the retention period had passed for every key. */
@@ -70,7 +76,7 @@ class IdempotencyKeys {
         entries.clear();
     }
 
-    private static boolean expired(Entry entry) {
-        return entry instanceof Saved saved && saved.savedAt().plus(RETENTION).isBefore(Instant.now());
+    private boolean expired(Entry entry) {
+        return entry instanceof Saved saved && saved.savedAt().plus(RETENTION).isBefore(clock.instant());
     }
 }

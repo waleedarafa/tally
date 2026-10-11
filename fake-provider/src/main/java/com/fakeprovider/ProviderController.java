@@ -1,5 +1,6 @@
 package com.fakeprovider;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -33,6 +34,7 @@ class ProviderController {
 
     private final Ledger ledger;
     private final IdempotencyKeys keys;
+    private final Clock clock;
     private final AtomicReference<Modes> modes = new AtomicReference<>(Modes.NORMAL);
     private final AtomicLong windowSecond = new AtomicLong();
     private final AtomicLong totalRequests = new AtomicLong();
@@ -42,9 +44,10 @@ class ProviderController {
     private final AtomicLong windowCount = new AtomicLong();
     private final AtomicLong replayed = new AtomicLong();
 
-    ProviderController(Ledger ledger, IdempotencyKeys keys) {
+    ProviderController(Ledger ledger, IdempotencyKeys keys, Clock clock) {
         this.ledger = ledger;
         this.keys = keys;
+        this.clock = clock;
     }
 
     /** Simulates the hosted card form: the card stays with the provider, Tally gets a token (FR-015). */
@@ -159,7 +162,7 @@ class ProviderController {
 
     /** A fixed one-second window: at most {@code limit} requests per wall-clock second. */
     private synchronized boolean overLimit(int limit) {
-        long second = System.currentTimeMillis() / 1000;
+        long second = clock.millis() / 1000;
         if (windowSecond.getAndSet(second) != second) {
             windowCount.set(0);
         }

@@ -10,7 +10,9 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -18,10 +20,14 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(TestClock.Configuration.class)
 class ProviderControllerTest {
 
     @LocalServerPort
     int port;
+
+    @Autowired
+    TestClock clock;
 
     RestClient http;
 
@@ -90,16 +96,17 @@ class ProviderControllerTest {
     void aRateLimitAnswers429AboveTheLimit() {
         mode("RATE_LIMIT(3)");
         String token = token();
+        clock.nextSecond();
 
         List<Integer> statuses = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             statuses.add(chargeStatus(token, "RL-" + i).value());
         }
 
-        assertThat(statuses).contains(429).filteredOn(s -> s == 200).hasSizeLessThanOrEqualTo(6);
+        assertThat(statuses).containsExactly(200, 200, 200, 429, 429, 429, 429, 429, 429, 429);
         Map<String, Integer> stats = http.get().uri("/admin/stats").retrieve()
                 .body(new ParameterizedTypeReference<>() { });
-        assertThat(stats.get("rateLimited")).isGreaterThanOrEqualTo((int) statuses.stream().filter(s -> s == 429).count());
+        assertThat(stats.get("rateLimited")).isGreaterThanOrEqualTo(7);
     }
 
     @Test
