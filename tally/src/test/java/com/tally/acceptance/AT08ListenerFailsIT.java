@@ -11,6 +11,7 @@ import com.tally.subscription.SubscriptionApi;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.SharedJob;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -99,7 +100,7 @@ class AT08ListenerFailsIT extends AbstractProviderIntegrationTest {
                 && Duration.between(failedAt, clock.instant()).compareTo(LIMIT.plusMinutes(5)) < 0) {
             clock.advance(Duration.ofMinutes(1));
             Instant now = clock.instant();
-            await().atMost(Duration.ofSeconds(10)).until(() -> !jobLastSuccess().isBefore(now));
+            SharedJob.EVENT_RESUBMISSION.await(jdbc, clock, Duration.ofSeconds(10), () -> !jobLastSuccess().isBefore(now));
             // The job marks a publication RESUBMITTED, then its listener runs on the listener pool. Wait for
             // the listener to settle it (COMPLETED, or FAILED again) before reading its effects: otherwise
             // "no attempt yet" passes before the listener has run, and the clock moves on a minute early.
@@ -120,7 +121,7 @@ class AT08ListenerFailsIT extends AbstractProviderIntegrationTest {
         // Exactly once in effect, also after more resubmission runs.
         clock.advance(Duration.ofMinutes(10));
         Instant later = clock.instant();
-        await().atMost(Duration.ofSeconds(10)).until(() -> !jobLastSuccess().isBefore(later));
+        SharedJob.EVENT_RESUBMISSION.await(jdbc, clock, Duration.ofSeconds(10), () -> !jobLastSuccess().isBefore(later));
         assertThat(attempts(reference)).isEqualTo(1);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
         System.out.printf("AT-8: resubmitted and paid %d min after the listener failed (limit %d min)%n",

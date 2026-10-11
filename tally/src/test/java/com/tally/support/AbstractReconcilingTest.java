@@ -70,6 +70,12 @@ public abstract class AbstractReconcilingTest extends AbstractProviderIntegratio
         await().atMost(atMost).until(() -> payments.status(reference).map(s -> s.state() == state).orElse(false));
     }
 
+    /** Waits until scheduled reconciliation has brought the attempt to {@code state} (see {@link SharedJob}). */
+    protected void awaitReconciled(String reference, AttemptState state, Duration atMost) {
+        SharedJob.RECONCILIATION.await(jdbc, clock, atMost,
+                () -> payments.status(reference).map(s -> s.state() == state).orElse(false));
+    }
+
     protected double corrected(String from, String to) {
         Counter counter = meters.find("tally.payment.outcome_corrected").tags("from", from, "to", to).counter();
         return counter == null ? 0 : counter.count();

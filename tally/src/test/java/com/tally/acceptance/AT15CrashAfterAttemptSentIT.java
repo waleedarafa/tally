@@ -71,7 +71,7 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
         assertThat(FakeProvider.requestCount(reference)).as("not sent again").isEqualTo(1);
 
         timePasses();
-        await().atMost(Duration.ofSeconds(10)).until(() -> "SUCCEEDED".equals(stateOf(attempt)));
+        awaitReconciled(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
         System.out.println("AT-15 charged before crash: " + stateOf(attempt) + ", provider requests "
                 + FakeProvider.requestCount(reference) + ", charges " + FakeProvider.chargeCount(reference));
         assertThat(payments.status(reference).orElseThrow().state()).isEqualTo(AttemptState.SUCCEEDED);
@@ -92,8 +92,7 @@ class AT15CrashAfterAttemptSentIT extends AbstractReconcilingTest {
         awaitItemDone(attempt);
         timePasses();
 
-        await().atMost(Duration.ofSeconds(15)).until(() ->
-                payments.status(reference).map(s -> s.state() == AttemptState.SUCCEEDED).orElse(false));
+        awaitReconciled(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(15));
         System.out.println("AT-15 crash before the call: attempt " + stateOf(attempt) + ", charges "
                 + FakeProvider.chargeCount(reference));
         assertThat(stateOf(attempt)).isEqualTo("SUCCEEDED");

@@ -8,6 +8,7 @@ import com.tally.payment.AttemptState;
 import com.tally.payment.PaymentStatus;
 import com.tally.support.AbstractReconcilingTest;
 import com.tally.support.FakeProvider;
+import com.tally.support.SharedJob;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -44,7 +45,7 @@ class SpikeBReconciliationIT extends AbstractReconcilingTest {
             }
             clock.advance(step);
             Instant now = clock.instant();
-            await().atMost(Duration.ofSeconds(10)).until(() -> !jobLastSuccess().isBefore(now));
+            SharedJob.RECONCILIATION.await(jdbc, clock, Duration.ofSeconds(10), () -> !jobLastSuccess().isBefore(now));
         }
         return Duration.between(start, clock.instant());
     }
