@@ -109,15 +109,17 @@ class AT03CalendarEdgesIT extends AbstractProviderIntegrationTest {
             clock.set(due);
             jumps++;
         }
-        await().atMost(Duration.ofSeconds(20)).until(() -> both.stream().flatMap(a -> invoicing.invoicesFor(a).stream())
-                .allMatch(i -> i.status() == InvoiceStatus.PAID));
-
         // Day 31: every New York invoice starts on the last day of its month (an independent oracle),
         // including 28 February 2026, 30 April 2026 and 29 February 2028.
         List<LocalDate> expected = new ArrayList<>();
         for (YearMonth m = YearMonth.of(2026, 1); !m.isAfter(YearMonth.of(2028, 3)); m = m.plusMonths(1)) {
             expected.add(m.atEndOfMonth());
         }
+        // Count nothing until every invoice exists and is paid: the newest one's collection may still be on
+        // its way (Quiesce sees events in flight; New York's count guards the newest invoice too).
+        await().atMost(Duration.ofSeconds(20)).until(() -> invoicing.invoicesFor(newYork).size() == expected.size()
+                && both.stream().flatMap(a -> invoicing.invoicesFor(a).stream())
+                        .allMatch(i -> i.status() == InvoiceStatus.PAID));
         List<InvoiceView> nyInvoices = invoicing.invoicesFor(newYork);
         assertThat(nyInvoices).extracting(InvoiceView::periodStart).containsExactlyElementsOf(expected);
         assertThat(nyInvoices).extracting(InvoiceView::periodStart)

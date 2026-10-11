@@ -127,6 +127,8 @@ class AT04ProviderOutageIT extends AbstractProviderIntegrationTest {
 
         // Nothing is claimed while the breaker is open: no request reaches the provider.
         List<String> references = new ArrayList<>(renewalReferences(all));
+        // Sign-up answers at once; the first invoice follows from SubscriptionChanged, so wait for it.
+        await().atMost(Duration.ofSeconds(10)).until(() -> !invoicing.invoicesFor(newcomer).isEmpty());
         references.add(invoicing.invoicesFor(newcomer).getFirst().paymentReference());
         int requestsWhileOpen = requests(references);
         await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(5))

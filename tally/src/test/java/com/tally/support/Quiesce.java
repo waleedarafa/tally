@@ -14,8 +14,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Waits until the given accounts have no work in progress: no billing item claimed or due, no
- * payment attempt REQUESTED or SENT. Time-travel tests call this before every clock jump: jumping
- * while a claim is held would make the claim look stale to the reaper, which no real clock does.
+ * payment attempt REQUESTED or SENT, and no event publication naming the account still in flight (a FAILED
+ * one is not in progress: it waits for resubmission, as AT-8 relies on). The
+ * last matters between a renewal and its payment attempt, where the work exists only as events
+ * (SubscriptionChanged, then InvoiceIssued); every event carries its account ID (CLAUDE.md rule 7).
+ * Time-travel tests call this before every clock jump: jumping while a claim is held would make the
+ * claim look stale to the reaper, which no real clock does.
  */
 public final class Quiesce {
 
@@ -30,16 +34,21 @@ public final class Quiesce {
         return jdbc.execute((Connection c) -> {
             Array ids = c.createArrayOf("uuid", accounts.toArray());
             Array keys = c.createArrayOf("text", accounts.stream().map(UUID::toString).toArray());
+            Array mentions = c.createArrayOf("text", accounts.stream().map(a -> "%" + a + "%").toArray());
             try (var billing = c.prepareStatement("SELECT count(*) FROM subscription.renewal"
                     + " WHERE split_part(queue_key, ':', 1) = ANY (?)"
                     + " AND (status = 'IN_PROCESSING' OR (status = 'READY' AND due_at <= ?))");
                  var attempts = c.prepareStatement("SELECT count(*) FROM payment.payment_attempt"
-                    + " WHERE account_id = ANY (?) AND state IN ('REQUESTED', 'SENT')")) {
+                    + " WHERE account_id = ANY (?) AND state IN ('REQUESTED', 'SENT')");
+                 var events = c.prepareStatement("SELECT count(*) FROM event_publication"
+                    + " WHERE completion_date IS NULL AND status IS DISTINCT FROM 'FAILED'"
+                    + " AND serialized_event LIKE ANY (?)")) {
                 billing.setArray(1, keys);
                 billing.setObject(2, clock.instant().atOffset(ZoneOffset.UTC));
                 attempts.setArray(1, ids);
+                events.setArray(1, mentions);
                 int busy = 0;
-                for (var statement : List.of(billing, attempts)) {
+                for (var statement : List.of(billing, attempts, events)) {
                     try (var rs = statement.executeQuery()) {
                         rs.next();
                         busy += rs.getInt(1);
