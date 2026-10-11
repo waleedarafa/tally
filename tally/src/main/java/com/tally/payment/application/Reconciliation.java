@@ -103,8 +103,10 @@ class Reconciliation implements PeriodicJob {
 
     /**
      * Resolves one attempt, in the order of proposed ADR-026, with no transaction open during any call to
-     * the provider (FR-005): (a) look the reference up; a charge found decides, and a decline found decides
-     * an UNKNOWN first attempt. (b) An UNKNOWN attempt with nothing found, whose key is inside the repeat
+     * the provider (FR-005): (a) look the reference up; for the latest attempt of the reference, a charge
+     * found decides, and a decline found decides an UNKNOWN first attempt. An earlier attempt learns nothing
+     * from the lookup, which also shows its successors' charges: a superseded decline stops being checked,
+     * and an UNKNOWN one goes on to (b). (b) An UNKNOWN attempt with nothing found, whose key is inside the repeat
      * window: repeat its charge with the same key and stored parameters; the replay or fresh outcome decides, and
      * no answer (a refusal, a 409, a timeout) leaves it UNKNOWN for a later check. (c) Past the window:
      * never repeat; it stays UNKNOWN, counted in {@code tally.payment.unknown_past_key_window}.
@@ -127,10 +129,18 @@ class Reconciliation implements PeriodicJob {
                 .filter(r -> r instanceof PaymentGateway.Declined)
                 .map(r -> ((PaymentGateway.Declined) r).reason()).findFirst();
 
-        if (charged.isPresent()) {
+        // Read after the lookup: an attempt is saved before it is sent (FR-005), so every charge the lookup
+        // shows belongs to an attempt this read sees. The lookup is by reference and shows every attempt's
+        // charges, so it decides only for the latest attempt.
+        boolean latest = attempts.latestFor(due.reference()).map(a -> a.id().equals(due.id())).orElse(false);
+
+        if (!latest && due.state() == AttemptState.DECLINED) {
+            // A later attempt settles the reference; this decline is history (AT-16).
+            transactions.executeWithoutResult(tx -> attempts.find(due.id()).orElseThrow().superseded());
+        } else if (latest && charged.isPresent()) {
             transactions.executeWithoutResult(tx -> corrections.charged(attempts.find(due.id()).orElseThrow(),
                     charged.get()));
-        } else if (due.state() == AttemptState.UNKNOWN && due.number() == 1 && declined.isPresent()) {
+        } else if (latest && due.state() == AttemptState.UNKNOWN && due.number() == 1 && declined.isPresent()) {
             // Only the first attempt: a later one's lookup also shows its predecessors' declines. A later
             // attempt learns its own outcome by repeating with its key, below.
             transactions.executeWithoutResult(tx -> corrections.declined(attempts.find(due.id()).orElseThrow(),

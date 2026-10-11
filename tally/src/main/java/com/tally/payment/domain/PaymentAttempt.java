@@ -241,6 +241,14 @@ public class PaymentAttempt {
         this.reconcileAt = ReconciliationSchedule.first(now);
     }
 
+    /** A later attempt for the same reference exists: this decline is history and is no longer re-checked. */
+    public void superseded() {
+        if (state != AttemptState.DECLINED) {
+            throw new IllegalStateException("Attempt " + id + " is " + state + ": only a decline is superseded");
+        }
+        reconcileAt = null;
+    }
+
     /** A check that changed nothing: back off (5 minutes, 1 hour, then daily; DECLINED for 48 hours only). */
     public void checkedWithoutChange(Instant now) {
         if (state != AttemptState.UNKNOWN && state != AttemptState.DECLINED) {
