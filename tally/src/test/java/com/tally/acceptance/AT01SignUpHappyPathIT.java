@@ -54,6 +54,7 @@ class AT01SignUpHappyPathIT extends AbstractProviderIntegrationTest {
         // The customer's browser gets a token from the provider's hosted card form (FR-015).
         String token = FakeProvider.token();
         UUID account = UUID.fromString((String) tally.post().uri("/v1/accounts")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(Map.of("currency", "AED", "timeZone", "Asia/Dubai"))
                 .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { }).get("id"));
 

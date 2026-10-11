@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
-import com.tally.subscription.domain.IdempotentRequests;
+import com.tally.platform.IdempotencyKeys;
+import com.tally.platform.IdempotencyStore;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.Map;
@@ -56,29 +56,32 @@ class SignUpRecoveryIT extends AbstractIntegrationTest {
             return new BeanPostProcessor() {
                 @Override
                 public Object postProcessAfterInitialization(Object bean, String name) {
-                    if (!(bean instanceof IdempotentRequests real)) {
+                    if (!(bean instanceof IdempotencyKeys real)) {
                         return bean;
                     }
-                    return new IdempotentRequests() {
-                        @Override
-                        public Claim claim(UUID accountId, String key, String requestHash, Instant now,
-                                Duration keptFor, Duration requestTimeout) {
-                            return real.claim(accountId, key, requestHash, now, keptFor, requestTimeout);
-                        }
+                    return (IdempotencyKeys) table -> dying(real.register(table));
+                }
+            };
+        }
 
-                        @Override
-                        public void complete(UUID accountId, String key, int status, String contentType, String body) {
-                            if (DIE_ON.remove(key)) {
-                                throw new RequestDied();
-                            }
-                            real.complete(accountId, key, status, contentType, body);
-                        }
+        static IdempotencyStore dying(IdempotencyStore real) {
+            return new IdempotencyStore() {
+                @Override
+                public Claim claim(String scope, String key, String requestHash) {
+                    return real.claim(scope, key, requestHash);
+                }
 
-                        @Override
-                        public void release(UUID accountId, String key) {
-                            real.release(accountId, key);
-                        }
-                    };
+                @Override
+                public void complete(String scope, String key, StoredResponse response) {
+                    if (DIE_ON.remove(key)) {
+                        throw new RequestDied();
+                    }
+                    real.complete(scope, key, response);
+                }
+
+                @Override
+                public void release(String scope, String key) {
+                    real.release(scope, key);
                 }
             };
         }
