@@ -147,4 +147,36 @@ class ReconciliationIT extends AbstractReconcilingTest {
         assertThat(corrected("DECLINED", "SUCCEEDED")).isEqualTo(before);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
     }
+
+    /**
+     * The lookup is by reference, and shows every attempt's charges. A retry's charge must not correct the
+     * earlier decline: it settles the reference, and the superseded decline is no longer re-checked (AT-16 run
+     * of 2026-10-11: "Corrected INV-1125... from DECLINED to SUCCEEDED").
+     */
+    @Test
+    void aRetrysChargeDoesNotCorrectTheDeclineBeforeIt() {
+        double before = corrected("DECLINED", "SUCCEEDED");
+        FakeProvider.mode("DECLINE_HARD(100)");
+        String reference = collect();
+        awaitState(reference, AttemptState.DECLINED, Duration.ofSeconds(10));
+        FakeProvider.mode("NORMAL");
+        UUID declined = attemptId(reference, 1);
+
+        payments.collectAgain(reference, 1);
+        awaitState(reference, AttemptState.SUCCEEDED, Duration.ofSeconds(10));
+        clock.advance(Duration.ofMinutes(5));
+        reconciliation.check(attempts.find(declined).orElseThrow());
+
+        assertThat(jdbc.queryForList("SELECT number || '=' || state FROM payment.payment_attempt"
+                + " WHERE reference = ? ORDER BY number", String.class, reference))
+                .containsExactly("1=DECLINED", "2=SUCCEEDED");
+        assertThat(jdbc.queryForObject("SELECT reconcile_at FROM payment.payment_attempt WHERE id = ?",
+                OffsetDateTime.class, declined)).as("a superseded decline is no longer re-checked").isNull();
+        assertThat(corrected("DECLINED", "SUCCEEDED")).isEqualTo(before);
+    }
+
+    UUID attemptId(String reference, int number) {
+        return jdbc.queryForObject("SELECT id FROM payment.payment_attempt WHERE reference = ? AND number = ?",
+                UUID.class, reference, number);
+    }
 }
