@@ -12,8 +12,8 @@ First-run records are archived under `docs/architecture/archive/first-run/` as `
 |---|---|---|---|
 | **Style and structure** | | | |
 | 001 | Billing is one modular monolith with one database. Access is a separate quantum with its own copy of who may watch. *(Access extraction: Slice 2.)* | D1, D3, D13, G9 | Pinned graph; Access-survives-billing test (Slice 2) |
-| §10 | One module per context; small public API in the base package; downstream depends on upstream's API; Payment depends on `shared` only | the context map; R1 | F1, F2 |
-| §10 C | Ports and adapters inside `offers`, `subscription`, `invoicing`, `payment`; closed layers inside `account`, `collections`, `support`; `jakarta.persistence` allowed on aggregates | D2, D10, D11, D12 | F8, F9, F10 |
+| §10 | One module per context; small public API in the base package; downstream depends on upstream's API; Payment depends on `shared` and `platform` only | the context map; R1 | F1, F2 |
+| §10 C | Ports and adapters inside `offers`, `subscription`, `invoicing`, `payment`; closed layers inside `account`, `collections`, `support`; `jakarta.persistence` allowed on aggregates | D2, D10, D11, D12 | F8, F9, F10, F11 |
 | §12 | Aggregates: Offer, OfferKind, Subscription, Invoice, CreditNote, Payment. Subscription owns periods through `renew(n)`; invoice ID = subscription + period; Payment ID = reference | D1, D2, D3 | Aggregate tests |
 | **Runtime and data** | | | |
 | 002 | Events inside billing use the event publication registry (an outbox); listeners are idempotent through business keys | D3 | AT-7, AT-8 |
