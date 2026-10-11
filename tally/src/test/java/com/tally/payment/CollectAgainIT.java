@@ -17,7 +17,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Collections' retry of a declined reference (Slice 1R PR-8; PR #13 review; proposed ADR-026). A new
+ * Collections' retry of a declined reference (Slice 1R PR-8; PR #13 review; ADR-026). A new
  * attempt for the same reference, with its own key, only when none is open and none succeeded; but first
  * Payment looks the reference up, and a charge found corrects the decline instead. The retry number is the
  * guard: a retry asked for twice makes one attempt.
@@ -84,7 +84,7 @@ class CollectAgainIT extends AbstractProviderIntegrationTest {
     }
 
     /**
-     * Proposed ADR-026: the provider reported a decline, but charged (FR-018). The retry's lookup finds the
+     * ADR-026: the provider reported a decline, but charged (FR-018). The retry's lookup finds the
      * charge: no new attempt, and the decline is corrected to SUCCEEDED.
      */
     @Test

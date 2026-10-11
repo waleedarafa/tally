@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonEnumDefaultValue;
  * States of a payment attempt (design.md §5; ADR-013, ADR-018). The transitions live in
  * {@code PaymentAttempt}. UNKNOWN is a real state: the charge may have happened; it is resolved by
  * asking the provider, never retried. UNRECOGNISED is the reading of a state this version does not know,
- * such as one a newer release adds (proposed ADR-024, amends ADR-016): a reader must not take it for
+ * such as one a newer release adds (ADR-024, amends ADR-016): a reader must not take it for
  * "outcome unknown".
  */
 public enum AttemptState {

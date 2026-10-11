@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Health of attempts waiting to be sent (Slice 1R PR #20 review; D9). A held-back call leaves its attempt
- * REQUESTED: it was never sent, so its outcome is not unknown (proposed ADR-026). An attempt that waits
+ * REQUESTED: it was never sent, so its outcome is not unknown (ADR-026). An attempt that waits
  * long means the collection queue is stuck. Read from the database when scraped, so the signal is shared
  * across instances and keeps ageing if every worker stops.
  * <ul>

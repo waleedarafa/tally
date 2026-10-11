@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * Proposed ADR-026, PR #14/#15 review D, CONTRACT.md A22/A23: how an UNKNOWN attempt is resolved, in order.
+ * ADR-026, PR #14/#15 review D, CONTRACT.md A22/A23: how an UNKNOWN attempt is resolved, in order.
  * (a) Look the reference up; a charge found decides. (b) If none is found and the attempt's key is younger
  * than the repeat window (the provider's retention minus a margin, 20 hours), repeat the charge with the
  * same key and the stored parameters; a replay or a fresh outcome decides; a refusal leaves it UNKNOWN.
