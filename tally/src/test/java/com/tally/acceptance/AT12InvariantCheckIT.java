@@ -1,20 +1,19 @@
 package com.tally.acceptance;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 
 import com.tally.AbstractIntegrationTest;
+import com.tally.platform.InvariantCheck;
 import com.tally.support.SharedJob;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
@@ -37,6 +36,11 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
     @Autowired
     MeterRegistry meters;
 
+    /** The check itself, to read the count before the injection from the data, not from a gauge. */
+    @Autowired
+    @Qualifier("duplicateInvoices")
+    InvariantCheck duplicateInvoices;
+
     /** Job rows are shared by every test context: bring this one due at this context's clock. */
     @BeforeEach
     void checkDueNow() {
@@ -47,15 +51,6 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
 
     double violations() {
         return meters.get("tally.invariant.violations").tag("check", "invoicing.duplicate-invoices").gauge().value();
-    }
-
-    void runCheck() {
-        Instant now = clock.instant();
-        SharedJob.invariantCheck(JOB).await(jdbc, clock, Duration.ofSeconds(10), () -> {
-            OffsetDateTime at = jdbc.queryForObject("SELECT last_success_at FROM invoicing.jobs WHERE queue_key = ?",
-                    OffsetDateTime.class, JOB);
-            return at != null && !at.toInstant().isBefore(now);
-        });
     }
 
     void invoice(UUID account, String start, String end) {
@@ -69,8 +64,7 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
 
     @Test
     void anInjectedDuplicateInvoiceRaisesTheViolationsMetric() {
-        runCheck();
-        double before = violations();
+        long before = duplicateInvoices.violations();
 
         // A second invoice for a period the account was already invoiced for, on another start date,
         // so the unique constraint on (account, period start) does not stop it.
@@ -78,8 +72,12 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
         invoice(account, "2026-01-15", "2026-02-15");
         invoice(account, "2026-01-20", "2026-02-20");
 
-        clock.advance(Duration.ofDays(1));
-        runCheck();
+        // Wait for the effect in this context: only this context's runner sets this context's gauge. Waiting
+        // on the shared row's last_success_at instead let another context's run satisfy the wait while this
+        // gauge stayed unchanged (Slice 1R report §7). The other tests that wait on a shared job read shared
+        // rows, which a run in any context changes, so only AT-12 needs this.
+        SharedJob.invariantCheck(JOB).await(jdbc, clock, Duration.ofSeconds(10),
+                () -> violations() == before + 1);
 
         assertThat(violations()).isEqualTo(before + 1);
     }
