@@ -9,8 +9,8 @@ How should the test suite be isolated, so that a test that waits on background w
 ## Summary
 
 - **Recommendation: B, one database per Spring test context**, copied from a template database migrated once per run.
-  - It was green in 10 out of 10 runs and changed no test class. E was green too, but saved no time and needs Spring's context pausing turned off (section 5).
-  - It ran no slower than the baseline (415.5 s median against 427 s).
+  - **No option beat the baseline with the patches on.** D, B and E were each green in 10 out of 10 runs: the CI flakes did not reproduce in 10 baseline runs on this machine. Duration showed no measurable difference.
+  - **B's case is the patches it removes.**
   - With the patches switched off, the hostile ordering dropped from 10 failures per run to 1. That one failure went away once AT-12 advanced its clock to the job's next run (3 of 3 runs).
 - **The cost of B is realism.** A test context no longer meets rows left behind by other tests. Production's competition between instances is kept only where a test builds it on purpose, as AT-9, AT-10, `PeriodicJobIT` and `DuplicateCollectionRequestIT` already do.
 - **The brief's premise needs one correction.** Cached Spring test contexts never ran their job runners at the same time. Spring Framework 7.0.9 closes the old context before it loads the next one, and the cache holds one context (section 1). The interference came from:
@@ -50,7 +50,7 @@ How should the test suite be isolated, so that a test that waits on background w
 | **1. Contexts created (configurations)** | 47 (30) | 47 (30) | 47 (30), plus 47 databases | Not measured for the suite. The sample moves AT-12 into the default configuration (29). | **30 (30)** |
 | **2. Flake rate, patches on** | 0 failures in 10 runs | **Failures in 3 of 3 runs**: 6, 2, 3 (AT-4 ×3, AT-11 ×3, `UnknownResolutionIT` ×2, `EventSequenceIT` 3 tests ×1). Stopped at 3 runs: two of the failures are deterministic. | 0 failures in 10 runs | Sample only: converted AT-12, 0 failures in 5 runs, after AT-3, patches off | 0 failures in 10 runs (with Spring's default pausing: 5 failures in 1 run, section 5) |
 | **2b. Patches off: full suite / hostile order** | 12, 12 / 10, 10, 10 | 8 / 1 | 3, 1 / 1, 1, 1. With AT-12 advancing its clock: full suite 1, 1, 1 (`SharedJobIT` only) / hostile **0, 0, 0** | Sample: 0 in 5 after AT-3 | 6, 5 / 1, 2, 0 |
-| **3. Suite duration, median wall time** | **427 s** (413 to 439) | 431 s (3 failing runs) | **415.5 s** (411 to 427) | Not measured | 428.5 s (421 to 441) |
+| **3. Suite duration, median wall time** | 427 s (413 to 439) | 431 s (3 failing runs) | 415.5 s (411 to 427) | Not measured | 428.5 s (421 to 441); no measurable difference between D, B and E (section 2) |
 | **4. Blast radius** | — | 2 infrastructure classes and 2 tests rewritten (AT-3, `FirstInvoiceIT`). 4 more fail and would need rewriting or data clean-up (`EventSequenceIT`, AT-4, AT-11, `UnknownResolutionIT`). | 3 infrastructure files (`AbstractIntegrationTest`, new `PerContextDatabase`, `spring.factories`); **no test class**. In the rollout, AT-12 changes, and optionally three reconciliation tests (section 4). | 31 test classes (list below), plus a test driver | As B, plus `spring.properties` |
 | **5. What it removes** | — | Nothing shown. Stranding cannot happen by construction, but with all patches off 8 tests failed: the waiting tests need clock advances, and others fail on leftovers. | All the cross-context patches (section 3) | All job-row patches in converted tests | As B; the cached reconciliation context needs the clock advance in AT-5, AT-6 and AT-15 (4 tests) |
 | **6. Realism** | Loses: one wall clock (contexts years apart). Keeps: shared database, incidental competition. | Keeps: one clock, one database, all instances competing for every row, the closest to production. Loses: the test's control over what work exists. | Keeps: one clock per database; competition where a test builds it (AT-9, AT-10, `PeriodicJobIT`, `DuplicateCollectionRequestIT`, `ConcurrentRenewalIT`, `ConcurrentDeliveryIT`). Loses: incidental competition with other tests' leftovers, which no test asserts on. | Loses: the scheduler end to end, for converted tests. Keeps it in one dedicated context. | As B; idle cached contexts keep polling their own database |
@@ -59,7 +59,7 @@ How should the test suite be isolated, so that a test that waits on background w
 - one template migration per run, 1.1 to 1.5 s (10 runs);
 - each per-context copy (`CREATE DATABASE … TEMPLATE`): median 51 ms, p95 89 ms, over 470 copies. The first copy of each run also times the template migration (up to 1.65 s).
 
-That is about 4 s per run. The suite was still 11.5 s faster at the median than the baseline: each context's database holds only its own tests' rows.
+That is about 4 s per run. Between B and the baseline there is no measurable difference in wall time. D ran first, and its own times fell from 438 s to 413 s over its 10 runs (a warming machine), so the 11.5 s between the medians is not evidence either way.
 
 **E's cache** saved 17 of 47 context starts, but no wall time. Contexts start in about a second, and idle cached contexts keep polling.
 
