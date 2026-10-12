@@ -55,7 +55,7 @@ The second design missed these, or Slice 1R raised them. They are proposed here,
 | 022 | What happens to an invoice and to access when a recorded success proves false; needs finance | FR-032 |
 | 023 | Renewals are merchant-initiated; an authentication demand is a distinct outcome and reaches the customer (D15) | first-run D15 |
 | 025 | A decline on the first invoice ends the subscription at once; for finance and product, not in Slice 1R | Slice 1R PR #13 review (access at sign-up) |
-| 029 | Test isolation: every Spring test context gets its own PostgreSQL database, copied from a template migrated once per run (`CREATE DATABASE … TEMPLATE`); no two test contexts share a row. A test that needs instances competing for rows starts them on one database it owns. A test that waits on a periodic job moves its clock to the job's next run; no test rewrites a job row to make it due | Slice 2 step 0 spike, `docs/briefs/slice-2-spike-test-isolation.md` (PR #37) |
+| 029 | Test isolation. No test class meets a row it did not create. Every test class, and every set of instances a test starts by hand, gets its own PostgreSQL database copied from a template migrated once per run (`CREATE DATABASE ... TEMPLATE`). A test that needs instances competing for rows starts them on one database it owns (AT-9, AT-10, `PeriodicJobIT`). A test that waits on a periodic job moves its clock to the job's next run; no test rewrites a job row to make it due | Slice 2 step 0 spike, `docs/briefs/slice-2-spike-test-isolation.md` (PR #37) |
 
 ## Mapping of first-run records
 

@@ -1,0 +1,314 @@
+diff --git a/tally/src/test/java/com/tally/AbstractIntegrationTest.java b/tally/src/test/java/com/tally/AbstractIntegrationTest.java
+index 4cfc66c..dfa8617 100644
+--- a/tally/src/test/java/com/tally/AbstractIntegrationTest.java
++++ b/tally/src/test/java/com/tally/AbstractIntegrationTest.java
+@@ -4,7 +4,6 @@ import com.tally.platform.TestClock;
+ import com.tally.platform.TestClockConfiguration;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.boot.test.context.SpringBootTest;
+-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+ import org.springframework.context.annotation.Import;
+ import org.springframework.test.context.TestPropertySource;
+ import org.testcontainers.postgresql.PostgreSQLContainer;
+@@ -24,9 +23,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
+         "tally.platform.polling-enabled=false"
+ })
+ @Import(TestClockConfiguration.class)
++// Spike option B: no @ServiceConnection; each context gets its own database (support.PerContextDatabase).
+ public abstract class AbstractIntegrationTest {
+ 
+-    @ServiceConnection
+     // Every cached Spring context keeps its own connection pool (10 by default); the default limit
+     // of 100 connections runs out once a dozen contexts are alive in one test run.
+     public static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine")
+diff --git a/tally/src/test/java/com/tally/acceptance/AT07CrashBeforeListenerIT.java b/tally/src/test/java/com/tally/acceptance/AT07CrashBeforeListenerIT.java
+index aae4a8c..cbaa6f8 100644
+--- a/tally/src/test/java/com/tally/acceptance/AT07CrashBeforeListenerIT.java
++++ b/tally/src/test/java/com/tally/acceptance/AT07CrashBeforeListenerIT.java
+@@ -70,7 +70,7 @@ class AT07CrashBeforeListenerIT {
+                 "tally.events.listener-threads=1",
+                 "tally.payment.provider.base-url=" + providerUrl);
+         JdbcTemplate jdbc = a.getBean(JdbcTemplate.class);
+-        jdbc.update("DELETE FROM event_publication WHERE completion_date IS NULL");
++        if (com.tally.support.Patches.on()) jdbc.update("DELETE FROM event_publication WHERE completion_date IS NULL");
+         AccountApi accounts = a.getBean(AccountApi.class);
+         UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+         accounts.recordPaymentToken(account, FakeProvider.token());
+diff --git a/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java b/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
+index d817e71..2cf6b14 100644
+--- a/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
++++ b/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
+@@ -1,6 +1,7 @@
+ package com.tally.acceptance;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
++import static org.awaitility.Awaitility.await;
+ 
+ import com.tally.AbstractIntegrationTest;
+ import com.tally.platform.InvariantCheck;
+@@ -67,6 +68,10 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
+ 
+     @Test
+     void anInjectedDuplicateInvoiceRaisesTheViolationsMetric() {
++        // Spike, option B2: the context is new, so the check runs once as it starts, and its next run is set
++        // from the clock when that run ends. Let it end before time moves, or it lands a day later still.
++        await().atMost(Duration.ofSeconds(10)).until(() -> jdbc.queryForObject(
++                "SELECT last_success_at FROM invoicing.jobs WHERE queue_key = ?", java.time.OffsetDateTime.class, JOB) != null);
+         long before = duplicateInvoices.violations();
+ 
+         // A second invoice for a period the account was already invoiced for, on another start date,
+@@ -75,6 +80,10 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
+         invoice(account, "2026-01-15", "2026-02-15");
+         invoice(account, "2026-01-20", "2026-02-20");
+ 
++        // Spike, option B: the check ran when the context started and is next due a day later on this
++        // context's clock; time moves to then, as it would in production, instead of re-arming the row.
++        clock.advance(Duration.ofDays(1));
++
+         // Wait for the effect in this context: only this context's runner sets this context's gauge. Waiting
+         // on the shared row's last_success_at instead let another context's run satisfy the wait while this
+         // gauge stayed unchanged (Slice 1R report §7). The other tests that wait on a shared job read shared
+diff --git a/tally/src/test/java/com/tally/offers/PricingRulesStartupCheckIT.java b/tally/src/test/java/com/tally/offers/PricingRulesStartupCheckIT.java
+index cde45fc..b7f3b08 100644
+--- a/tally/src/test/java/com/tally/offers/PricingRulesStartupCheckIT.java
++++ b/tally/src/test/java/com/tally/offers/PricingRulesStartupCheckIT.java
+@@ -31,8 +31,8 @@ class PricingRulesStartupCheckIT {
+         sql("DELETE FROM offers.offer_kind WHERE id = 'mystery'");
+     }
+ 
+-    static void sql(String statement) throws SQLException {
+-        try (Connection c = DriverManager.getConnection(AbstractIntegrationTest.POSTGRES.getJdbcUrl(),
++    void sql(String statement) throws SQLException {
++        try (Connection c = DriverManager.getConnection(instances.url(),
+                 AbstractIntegrationTest.POSTGRES.getUsername(), AbstractIntegrationTest.POSTGRES.getPassword())) {
+             c.createStatement().execute(statement);
+         }
+diff --git a/tally/src/test/java/com/tally/payment/application/ReconciliationIT.java b/tally/src/test/java/com/tally/payment/application/ReconciliationIT.java
+index 758713f..b46fc0e 100644
+--- a/tally/src/test/java/com/tally/payment/application/ReconciliationIT.java
++++ b/tally/src/test/java/com/tally/payment/application/ReconciliationIT.java
+@@ -37,7 +37,7 @@ class ReconciliationIT extends AbstractReconcilingTest {
+     /** Runs after the base class makes the job due: waits for any run in progress, then parks the job. */
+     @BeforeEach
+     void stopTheScheduledJob() {
+-        if (!com.tally.support.Patches.on()) {
++        if (!com.tally.support.Patches.on("reconciliation-parking")) {
+             return;
+         }
+         await().atMost(Duration.ofSeconds(10)).until(() -> jdbc.update("UPDATE payment.jobs"
+@@ -51,7 +51,7 @@ class ReconciliationIT extends AbstractReconcilingTest {
+      */
+     @AfterEach
+     void restartTheScheduledJob() {
+-        if (!com.tally.support.Patches.on()) {
++        if (!com.tally.support.Patches.on("reconciliation-parking")) {
+             return;
+         }
+         jdbc.update("UPDATE payment.jobs SET status = 'READY', claim_token = NULL, due_at = ?"
+diff --git a/tally/src/test/java/com/tally/spikes/SpikeS1ResubmitOneAtATimeIT.java b/tally/src/test/java/com/tally/spikes/SpikeS1ResubmitOneAtATimeIT.java
+index 4a1d20a..0a6bb4c 100644
+--- a/tally/src/test/java/com/tally/spikes/SpikeS1ResubmitOneAtATimeIT.java
++++ b/tally/src/test/java/com/tally/spikes/SpikeS1ResubmitOneAtATimeIT.java
+@@ -45,7 +45,9 @@ class SpikeS1ResubmitOneAtATimeIT {
+     /** An unreadable row left behind would fail every later resubmission on the shared database. */
+     @AfterEach
+     void stop() {
+-        unreadable.forEach(id -> jdbc().update("DELETE FROM event_publication WHERE id = ?", id));
++        if (com.tally.support.Patches.on()) {
++            unreadable.forEach(id -> jdbc().update("DELETE FROM event_publication WHERE id = ?", id));
++        }
+         SpikeListener.RELEASE.release(10);
+         instances.close();
+     }
+diff --git a/tally/src/test/java/com/tally/support/AbstractReconcilingTest.java b/tally/src/test/java/com/tally/support/AbstractReconcilingTest.java
+index 2a10545..70c3812 100644
+--- a/tally/src/test/java/com/tally/support/AbstractReconcilingTest.java
++++ b/tally/src/test/java/com/tally/support/AbstractReconcilingTest.java
+@@ -50,7 +50,7 @@ public abstract class AbstractReconcilingTest extends AbstractProviderIntegratio
+     /** The job's row is shared by every test context; bring it due at this context's clock. */
+     @BeforeEach
+     void reconciliationDueNow() {
+-        if (!Patches.on()) {
++        if (!Patches.on("reconciling-reset")) {
+             return;
+         }
+         jdbc.update("UPDATE payment.jobs SET status = 'READY', claim_token = NULL, due_at = ?"
+diff --git a/tally/src/test/java/com/tally/support/Patches.java b/tally/src/test/java/com/tally/support/Patches.java
+index 73aa4c6..dae435c 100644
+--- a/tally/src/test/java/com/tally/support/Patches.java
++++ b/tally/src/test/java/com/tally/support/Patches.java
+@@ -3,7 +3,9 @@ package com.tally.support;
+ /**
+  * Spike on test isolation: switches off, for one run, every per-test patch that works around shared job rows
+  * (Slice 1R report §7), so a run shows which isolation option still needs them. Off with
+- * {@code -Dtally.spike.patches=off}; on by default, as on main.
++ * {@code -Dtally.spike.patches=off}; on by default, as on main. With patches off, {@code
++ * -Dtally.spike.patches.keep=name,...} keeps the named ones on ({@code reconciliation-parking},
++ * {@code reconciling-reset}).
+  */
+ public final class Patches {
+ 
+@@ -11,6 +13,15 @@ public final class Patches {
+     }
+ 
+     public static boolean on() {
+-        return !"off".equals(System.getProperty("tally.spike.patches"));
++        return on("");
++    }
++
++    /** Whether the patch {@code name} is on: always, unless patches are off and it is not kept. */
++    public static boolean on(String name) {
++        if (!"off".equals(System.getProperty("tally.spike.patches"))) {
++            return true;
++        }
++        return !name.isEmpty()
++                && java.util.Arrays.asList(System.getProperty("tally.spike.patches.keep", "").split(",")).contains(name);
+     }
+ }
+diff --git a/tally/src/test/java/com/tally/support/PerContextDatabase.java b/tally/src/test/java/com/tally/support/PerContextDatabase.java
+new file mode 100644
+index 0000000..4dd3fea
+--- /dev/null
++++ b/tally/src/test/java/com/tally/support/PerContextDatabase.java
+@@ -0,0 +1,107 @@
++package com.tally.support;
++
++import com.tally.AbstractIntegrationTest;
++import java.sql.Connection;
++import java.sql.DriverManager;
++import java.sql.SQLException;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.atomic.AtomicInteger;
++import org.flywaydb.core.Flyway;
++import org.springframework.context.ConfigurableApplicationContext;
++import org.springframework.core.env.MapPropertySource;
++import org.springframework.test.context.ContextConfigurationAttributes;
++import org.springframework.test.context.ContextCustomizer;
++import org.springframework.test.context.ContextCustomizerFactory;
++import org.springframework.test.context.MergedContextConfiguration;
++
++/**
++ * Spike option B2: every test class that extends {@link AbstractIntegrationTest} gets a Spring context and a
++ * database of its own, copied from a migrated template ({@code CREATE DATABASE ... TEMPLATE ...}), so no test
++ * class meets a row it did not create. The test class is part of the customizer's equality, so a class never
++ * reuses the previous class's context. The template is migrated once per run. Registered in {@code META-INF/spring.factories} as a
++ * context customizer, which, unlike {@code @ContextConfiguration}, leaves Spring Boot's detection of a test
++ * class's nested configuration alone. Instances a test starts by hand get a database of their own too
++ * ({@link #newDatabase}, through {@link TallyInstances}).
++ */
++public final class PerContextDatabase implements ContextCustomizerFactory {
++
++    private static final String TEMPLATE = "tally_template";
++    private static final AtomicInteger NEXT = new AtomicInteger();
++    private static boolean templateReady;
++
++    @Override
++    public ContextCustomizer createContextCustomizer(Class<?> testClass, List<ContextConfigurationAttributes> attributes) {
++        return AbstractIntegrationTest.class.isAssignableFrom(testClass) ? new Customizer(testClass) : null;
++    }
++
++    /** A database of its own, copied from the template; returns its JDBC URL. */
++    public static String newDatabase(String prefix) {
++        String name = prefix + "_" + NEXT.incrementAndGet();
++        long started = System.nanoTime();
++        create(name);
++        System.out.printf("PER-CONTEXT-DATABASE %s created in %d ms%n", name, (System.nanoTime() - started) / 1_000_000);
++        return url(name);
++    }
++
++    /** Equal only for the same test class: every test class gets its own context, so its own database. */
++    static final class Customizer implements ContextCustomizer {
++
++        private final Class<?> testClass;
++
++        Customizer(Class<?> testClass) {
++            this.testClass = testClass;
++        }
++
++        @Override
++        public void customizeContext(ConfigurableApplicationContext context, MergedContextConfiguration config) {
++            String url = newDatabase("tally_ctx");
++            context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("per-context-database", Map.of(
++                    "spring.datasource.url", url,
++                    "spring.datasource.username", AbstractIntegrationTest.POSTGRES.getUsername(),
++                    "spring.datasource.password", AbstractIntegrationTest.POSTGRES.getPassword())));
++        }
++
++        @Override
++        public boolean equals(Object other) {
++            return other instanceof Customizer that && that.testClass == testClass;
++        }
++
++        @Override
++        public int hashCode() {
++            return testClass.hashCode();
++        }
++    }
++
++    private static synchronized void create(String name) {
++        AbstractIntegrationTest.POSTGRES.start();
++        if (!templateReady) {
++            long started = System.nanoTime();
++            execute("CREATE DATABASE " + TEMPLATE);
++            Flyway.configure()
++                    .dataSource(url(TEMPLATE), AbstractIntegrationTest.POSTGRES.getUsername(),
++                            AbstractIntegrationTest.POSTGRES.getPassword())
++                    .locations("classpath:db/migration", "classpath:db/testmigration")
++                    .defaultSchema("public")
++                    .load()
++                    .migrate();
++            templateReady = true;
++            System.out.printf("PER-CONTEXT-DATABASE template migrated in %d ms%n", (System.nanoTime() - started) / 1_000_000);
++        }
++        execute("CREATE DATABASE " + name + " TEMPLATE " + TEMPLATE);
++    }
++
++    private static void execute(String statement) {
++        try (Connection c = DriverManager.getConnection(AbstractIntegrationTest.POSTGRES.getJdbcUrl(),
++                AbstractIntegrationTest.POSTGRES.getUsername(), AbstractIntegrationTest.POSTGRES.getPassword())) {
++            c.createStatement().execute(statement);
++        } catch (SQLException e) {
++            throw new IllegalStateException(statement, e);
++        }
++    }
++
++    private static String url(String database) {
++        String base = AbstractIntegrationTest.POSTGRES.getJdbcUrl();
++        return base.replaceFirst("/" + AbstractIntegrationTest.POSTGRES.getDatabaseName() + "(\\?|$)", "/" + database + "$1");
++    }
++}
+diff --git a/tally/src/test/java/com/tally/support/TallyInstances.java b/tally/src/test/java/com/tally/support/TallyInstances.java
+index 9810616..1dfba6b 100644
+--- a/tally/src/test/java/com/tally/support/TallyInstances.java
++++ b/tally/src/test/java/com/tally/support/TallyInstances.java
+@@ -18,11 +18,21 @@ import org.springframework.context.ConfigurableApplicationContext;
+ public final class TallyInstances implements AutoCloseable {
+ 
+     private final List<ConfigurableApplicationContext> running = new ArrayList<>();
++    private String url;
++
++    /** This object's database, copied from the template on first use. */
++    public synchronized String url() {
++        if (url == null) {
++            url = PerContextDatabase.newDatabase("tally_instances");
++        }
++        return url;
++    }
+ 
+     public ConfigurableApplicationContext start(String name, Class<?> extraConfiguration, String... properties) {
+         AbstractIntegrationTest.POSTGRES.start();
+         Map<String, String> props = new LinkedHashMap<>();
+-        props.put("spring.datasource.url", AbstractIntegrationTest.POSTGRES.getJdbcUrl());
++        // Spike option B2: one database per TallyInstances object, shared by the instances it starts.
++        props.put("spring.datasource.url", url());
+         props.put("spring.datasource.username", AbstractIntegrationTest.POSTGRES.getUsername());
+         props.put("spring.datasource.password", AbstractIntegrationTest.POSTGRES.getPassword());
+         props.put("spring.flyway.locations", "classpath:db/migration,classpath:db/testmigration");
+diff --git a/tally/src/test/resources/META-INF/spring.factories b/tally/src/test/resources/META-INF/spring.factories
+new file mode 100644
+index 0000000..81fd4f8
+--- /dev/null
++++ b/tally/src/test/resources/META-INF/spring.factories
+@@ -0,0 +1 @@
++org.springframework.test.context.ContextCustomizerFactory=com.tally.support.PerContextDatabase
