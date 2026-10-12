@@ -1,0 +1,133 @@
+diff --git a/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java b/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
+index d817e71..751bb68 100644
+--- a/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
++++ b/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
+@@ -4,28 +4,24 @@ import static org.assertj.core.api.Assertions.assertThat;
+ 
+ import com.tally.AbstractIntegrationTest;
+ import com.tally.platform.InvariantCheck;
+-import com.tally.support.SharedJob;
++import com.tally.platform.internal.Drive;
+ import io.micrometer.core.instrument.MeterRegistry;
+-import java.time.Duration;
+ import java.time.LocalDate;
+ import java.time.ZoneOffset;
+ import java.util.UUID;
+-import org.junit.jupiter.api.BeforeEach;
+ import org.junit.jupiter.api.Test;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.beans.factory.annotation.Qualifier;
++import org.springframework.context.ApplicationContext;
+ import org.springframework.jdbc.core.JdbcTemplate;
+-import org.springframework.test.context.TestPropertySource;
+ 
+ /**
+  * AT-12. Invariant check (D1, FR-024). Pass when: an injected duplicate invoice raises
+  * {@code tally.invariant.violations}. The checks run daily, as jobs in each module's own job table.
++ *
++ * <p>Spike option C: runners off (the default), and the test runs the check itself, through {@link Drive}.
++ * It no longer touches the shared job row, so no patch is needed.
+  */
+-@TestPropertySource(properties = {
+-        "tally.platform.polling-enabled=true",
+-        "tally.platform.poll-interval=100ms",
+-        "tally.test.context=at12"
+-})
+ class AT12InvariantCheckIT extends AbstractIntegrationTest {
+ 
+     static final String JOB = "invariant.invoicing.duplicate-invoices";
+@@ -36,22 +32,14 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
+     @Autowired
+     MeterRegistry meters;
+ 
++    @Autowired
++    ApplicationContext context;
++
+     /** The check itself, to read the count before the injection from the data, not from a gauge. */
+     @Autowired
+     @Qualifier("duplicateInvoices")
+     InvariantCheck duplicateInvoices;
+ 
+-    /** Job rows are shared by every test context: bring this one due at this context's clock. */
+-    @BeforeEach
+-    void checkDueNow() {
+-        if (!com.tally.support.Patches.on()) {
+-            return;
+-        }
+-        jdbc.update("UPDATE invoicing.jobs SET status = 'READY', claim_token = NULL, due_at = ?, last_success_at = NULL"
+-                + " WHERE queue_key = ?",
+-                clock.instant().atOffset(ZoneOffset.UTC), JOB);
+-    }
+-
+     double violations() {
+         return meters.get("tally.invariant.violations").tag("check", "invoicing.duplicate-invoices").gauge().value();
+     }
+@@ -66,7 +54,7 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
+     }
+ 
+     @Test
+-    void anInjectedDuplicateInvoiceRaisesTheViolationsMetric() {
++    void anInjectedDuplicateInvoiceRaisesTheViolationsMetric() throws Exception {
+         long before = duplicateInvoices.violations();
+ 
+         // A second invoice for a period the account was already invoiced for, on another start date,
+@@ -75,12 +63,7 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
+         invoice(account, "2026-01-15", "2026-02-15");
+         invoice(account, "2026-01-20", "2026-02-20");
+ 
+-        // Wait for the effect in this context: only this context's runner sets this context's gauge. Waiting
+-        // on the shared row's last_success_at instead let another context's run satisfy the wait while this
+-        // gauge stayed unchanged (Slice 1R report §7). The other tests that wait on a shared job read shared
+-        // rows, which a run in any context changes, so only AT-12 needs this.
+-        SharedJob.invariantCheck(JOB).await(jdbc, clock, Duration.ofSeconds(10),
+-                () -> violations() == before + 1);
++        Drive.job(context, JOB);
+ 
+         assertThat(violations()).isEqualTo(before + 1);
+     }
+diff --git a/tally/src/test/java/com/tally/platform/internal/Drive.java b/tally/src/test/java/com/tally/platform/internal/Drive.java
+new file mode 100644
+index 0000000..e67ac31
+--- /dev/null
++++ b/tally/src/test/java/com/tally/platform/internal/Drive.java
+@@ -0,0 +1,40 @@
++package com.tally.platform.internal;
++
++import com.tally.platform.PeriodicJob;
++import org.springframework.context.ApplicationContext;
++
++/**
++ * Spike option C: tests drive background work themselves, on the calling thread, with the context's runners
++ * off. A periodic job runs by name, without its shared row: nothing is claimed or rescheduled, so no other
++ * context's clock can strand it, and no other context's run can stand in for this one's.
++ */
++public final class Drive {
++
++    private Drive() {
++    }
++
++    /** Runs the periodic job {@code name} (an invariant check is {@code invariant.<check>}) once, now. */
++    public static void job(ApplicationContext context, String name) throws Exception {
++        PeriodicJob job = context.getBean(InvariantJobs.class).jobs().stream()
++                .filter(j -> j.name().equals(name))
++                .findFirst()
++                .or(() -> context.getBeanProvider(PeriodicJob.class).orderedStream()
++                        .filter(j -> j.name().equals(name)).findFirst())
++                .orElseThrow(() -> new IllegalArgumentException("No periodic job " + name));
++        job.run();
++    }
++
++    /** Processes every due item of every registered queue, job tables included, until none is due. */
++    public static int allDue(ApplicationContext context) {
++        int handled = 0;
++        for (boolean more = true; more; ) {
++            more = false;
++            for (JdbcDurableQueue queue : context.getBean(JdbcDurableQueues.class).queues()) {
++                int n = queue.processDue();
++                handled += n;
++                more |= n > 0;
++            }
++        }
++        return handled;
++    }
++}

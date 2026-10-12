@@ -1,0 +1,16 @@
+diff --git a/tally/src/test/resources/spring.properties b/tally/src/test/resources/spring.properties
+index 95e4899..dadede2 100644
+--- a/tally/src/test/resources/spring.properties
++++ b/tally/src/test/resources/spring.properties
+@@ -1,4 +1,7 @@
+-# One Spring test context alive at a time. Contexts with pollers running behave like Tally instances,
+-# each with its own TestClock, all sharing one database: kept alive together they claim each other's
+-# queue rows and periodic jobs at clock times years apart. Closing the previous context stops its pollers.
+-spring.test.context.cache.maxSize=1
++# Spike option E: option B (a database per test context) with Spring's default cache size (32). Contexts no
++# longer share rows, so they may stay cached. Pausing is off: spring-test pauses an unused context by stopping
++# its lifecycle beans, and QueuePoller.stop() can leave a claimed item unhandled and a worker permit taken
++# (the spike report, option E), so a restarted single-worker job queue claims nothing. Unpaused, a cached
++# context keeps polling its own database, where nothing is due.
++spring.test.context.cache.maxSize=32
++spring.test.context.cache.pause=NEVER

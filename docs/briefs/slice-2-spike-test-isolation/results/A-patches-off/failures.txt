@@ -1,0 +1,8 @@
+1: com.tally.acceptance.AT04ProviderOutageIT.anOutageMidRunOpensTheBreakerAndEverythingIsChargedAfterRecovery [failure] [technical failures] 
+1: com.tally.acceptance.AT06LyingProviderIT.aChargeReportedAsDeclinedIsCorrectedAndTheInvoicePaid [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+1: com.tally.acceptance.AT12InvariantCheckIT.anInjectedDuplicateInvoiceRaisesTheViolationsMetric [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+1: com.tally.acceptance.AT15CrashAfterAttemptSentIT.theCallNeverReachedTheProviderSoTheRepeatWithItsKeyChargesOnce [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 15 seconds.
+1: com.tally.acceptance.AT15CrashAfterAttemptSentIT.theProviderChargedBeforeTheCrashSoTheAttemptResolvesAsSucceededAndIsNeverSentAgain [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+1: com.tally.payment.application.ReconciliationIT.aTimeoutAfterChargeIsUnknownNeverRetriedAndReconciledToSucceeded [failure] 
+1: com.tally.platform.internal.AT11StopEachWorkerAndJobIT.everyStoppedWorkerAndJobShowsOverdueWithinItsThreshold [failure] 
+1: com.tally.support.SharedJobIT.aJobRescheduledByAnotherContextStillRunsOnThisContextsClock [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.

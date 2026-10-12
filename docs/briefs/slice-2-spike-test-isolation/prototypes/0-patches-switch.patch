@@ -1,0 +1,127 @@
+diff --git a/tally/src/test/java/com/tally/acceptance/AT07CrashBeforeListenerIT.java b/tally/src/test/java/com/tally/acceptance/AT07CrashBeforeListenerIT.java
+index e129871..aae4a8c 100644
+--- a/tally/src/test/java/com/tally/acceptance/AT07CrashBeforeListenerIT.java
++++ b/tally/src/test/java/com/tally/acceptance/AT07CrashBeforeListenerIT.java
+@@ -103,7 +103,7 @@ class AT07CrashBeforeListenerIT {
+         JdbcTemplate jdbcB = b.getBean(JdbcTemplate.class);
+         TestClock clockB = b.getBean(TestClock.class);
+         InvoicingApi invoicingB = b.getBean(InvoicingApi.class);
+-        jdbcB.update("UPDATE platform.jobs SET status = 'READY', claim_token = NULL, due_at = ?, last_success_at = NULL"
++        if (com.tally.support.Patches.on()) jdbcB.update("UPDATE platform.jobs SET status = 'READY', claim_token = NULL, due_at = ?, last_success_at = NULL"
+                 + " WHERE queue_key = 'event-resubmission'", clockB.instant().atOffset(ZoneOffset.UTC));
+ 
+         // Time passes on B a minute at a time; the resubmission job runs each minute.
+diff --git a/tally/src/test/java/com/tally/acceptance/AT08ListenerFailsIT.java b/tally/src/test/java/com/tally/acceptance/AT08ListenerFailsIT.java
+index 5cc9305..a74a291 100644
+--- a/tally/src/test/java/com/tally/acceptance/AT08ListenerFailsIT.java
++++ b/tally/src/test/java/com/tally/acceptance/AT08ListenerFailsIT.java
+@@ -59,7 +59,7 @@ class AT08ListenerFailsIT extends AbstractProviderIntegrationTest {
+     @BeforeEach
+     void cleanSlate() {
+         jdbc.update("DELETE FROM event_publication WHERE completion_date IS NULL");
+-        jdbc.update("UPDATE platform.jobs SET status = 'READY', claim_token = NULL, due_at = ?, last_success_at = NULL"
++        if (com.tally.support.Patches.on()) jdbc.update("UPDATE platform.jobs SET status = 'READY', claim_token = NULL, due_at = ?, last_success_at = NULL"
+                 + " WHERE queue_key = 'event-resubmission'", clock.instant().atOffset(ZoneOffset.UTC));
+     }
+ 
+diff --git a/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java b/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
+index 90d71c0..d817e71 100644
+--- a/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
++++ b/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
+@@ -44,6 +44,9 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
+     /** Job rows are shared by every test context: bring this one due at this context's clock. */
+     @BeforeEach
+     void checkDueNow() {
++        if (!com.tally.support.Patches.on()) {
++            return;
++        }
+         jdbc.update("UPDATE invoicing.jobs SET status = 'READY', claim_token = NULL, due_at = ?, last_success_at = NULL"
+                 + " WHERE queue_key = ?",
+                 clock.instant().atOffset(ZoneOffset.UTC), JOB);
+diff --git a/tally/src/test/java/com/tally/payment/application/ReconciliationIT.java b/tally/src/test/java/com/tally/payment/application/ReconciliationIT.java
+index 1c20ecf..758713f 100644
+--- a/tally/src/test/java/com/tally/payment/application/ReconciliationIT.java
++++ b/tally/src/test/java/com/tally/payment/application/ReconciliationIT.java
+@@ -37,6 +37,9 @@ class ReconciliationIT extends AbstractReconcilingTest {
+     /** Runs after the base class makes the job due: waits for any run in progress, then parks the job. */
+     @BeforeEach
+     void stopTheScheduledJob() {
++        if (!com.tally.support.Patches.on()) {
++            return;
++        }
+         await().atMost(Duration.ofSeconds(10)).until(() -> jdbc.update("UPDATE payment.jobs"
+                 + " SET due_at = TIMESTAMPTZ '9999-01-01 00:00:00Z' WHERE queue_key = 'payment-reconciliation'"
+                 + " AND status = 'READY'") == 1);
+@@ -48,6 +51,9 @@ class ReconciliationIT extends AbstractReconcilingTest {
+      */
+     @AfterEach
+     void restartTheScheduledJob() {
++        if (!com.tally.support.Patches.on()) {
++            return;
++        }
+         jdbc.update("UPDATE payment.jobs SET status = 'READY', claim_token = NULL, due_at = ?"
+                 + " WHERE queue_key = 'payment-reconciliation'", clock.instant().atOffset(ZoneOffset.UTC));
+     }
+diff --git a/tally/src/test/java/com/tally/platform/internal/EventResubmissionIT.java b/tally/src/test/java/com/tally/platform/internal/EventResubmissionIT.java
+index 507899f..fc437c6 100644
+--- a/tally/src/test/java/com/tally/platform/internal/EventResubmissionIT.java
++++ b/tally/src/test/java/com/tally/platform/internal/EventResubmissionIT.java
+@@ -49,7 +49,7 @@ class EventResubmissionIT extends AbstractIntegrationTest {
+     @BeforeEach
+     void cleanSlate() {
+         jdbc.update("DELETE FROM event_publication WHERE completion_date IS NULL");
+-        jdbc.update("UPDATE platform.jobs SET status = 'READY', claim_token = NULL, due_at = ?, last_success_at = NULL"
++        if (com.tally.support.Patches.on()) jdbc.update("UPDATE platform.jobs SET status = 'READY', claim_token = NULL, due_at = ?, last_success_at = NULL"
+                 + " WHERE queue_key = 'event-resubmission'", clock.instant().atOffset(ZoneOffset.UTC));
+     }
+ 
+diff --git a/tally/src/test/java/com/tally/support/AbstractReconcilingTest.java b/tally/src/test/java/com/tally/support/AbstractReconcilingTest.java
+index 978cd11..2a10545 100644
+--- a/tally/src/test/java/com/tally/support/AbstractReconcilingTest.java
++++ b/tally/src/test/java/com/tally/support/AbstractReconcilingTest.java
+@@ -50,6 +50,9 @@ public abstract class AbstractReconcilingTest extends AbstractProviderIntegratio
+     /** The job's row is shared by every test context; bring it due at this context's clock. */
+     @BeforeEach
+     void reconciliationDueNow() {
++        if (!Patches.on()) {
++            return;
++        }
+         jdbc.update("UPDATE payment.jobs SET status = 'READY', claim_token = NULL, due_at = ?"
+                 + " WHERE queue_key = 'payment-reconciliation'", clock.instant().atOffset(ZoneOffset.UTC));
+     }
+diff --git a/tally/src/test/java/com/tally/support/Patches.java b/tally/src/test/java/com/tally/support/Patches.java
+new file mode 100644
+index 0000000..73aa4c6
+--- /dev/null
++++ b/tally/src/test/java/com/tally/support/Patches.java
+@@ -0,0 +1,16 @@
++package com.tally.support;
++
++/**
++ * Spike on test isolation: switches off, for one run, every per-test patch that works around shared job rows
++ * (Slice 1R report §7), so a run shows which isolation option still needs them. Off with
++ * {@code -Dtally.spike.patches=off}; on by default, as on main.
++ */
++public final class Patches {
++
++    private Patches() {
++    }
++
++    public static boolean on() {
++        return !"off".equals(System.getProperty("tally.spike.patches"));
++    }
++}
+diff --git a/tally/src/test/java/com/tally/support/SharedJob.java b/tally/src/test/java/com/tally/support/SharedJob.java
+index 4da9123..9783281 100644
+--- a/tally/src/test/java/com/tally/support/SharedJob.java
++++ b/tally/src/test/java/com/tally/support/SharedJob.java
+@@ -25,6 +25,9 @@ public record SharedJob(String table, String key) {
+ 
+     /** Makes the job due now at this context's clock, if it waits for a later time. A claimed job is left alone. */
+     public void rearm(JdbcTemplate jdbc, Clock clock) {
++        if (!Patches.on()) {
++            return;
++        }
+         var now = clock.instant().atOffset(ZoneOffset.UTC);
+         jdbc.update("UPDATE " + table + " SET due_at = ? WHERE queue_key = ? AND status = 'READY' AND due_at > ?",
+                 now, key, now);
