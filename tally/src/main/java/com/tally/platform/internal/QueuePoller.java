@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
@@ -75,13 +76,15 @@ final class QueuePoller {
             return;
         }
         scheduler.shutdownNow();
-        workers.shutdown();
         try {
-            // Wait for a poll cycle in progress, so nothing is claimed or recorded once stop returns.
+            // Wait for a poll cycle in progress, so nothing is claimed or recorded once stop returns. The workers
+            // close only after it: an item the cycle claimed still gets one.
             scheduler.awaitTermination(10, TimeUnit.SECONDS);
+            workers.shutdown();
             // Items still running after this are returned by a reaper later.
             workers.awaitTermination(10, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
+            workers.shutdown();
             Thread.currentThread().interrupt();
         }
         scheduler = null;
@@ -109,13 +112,20 @@ final class QueuePoller {
                 List<JdbcDurableQueue.Claim> claims = queue.claim(capacity);
                 freeWorkers.release(capacity - claims.size());
                 for (JdbcDurableQueue.Claim claim : claims) {
-                    workers.execute(() -> {
-                        try {
-                            queue.handle(claim);
-                        } finally {
-                            freeWorkers.release();
-                        }
-                    });
+                    try {
+                        workers.execute(() -> {
+                            try {
+                                queue.handle(claim);
+                            } finally {
+                                freeWorkers.release();
+                            }
+                        });
+                    } catch (RejectedExecutionException e) {
+                        // Stopping after a cycle outlived stop()'s wait: the reaper returns the item; its worker
+                        // is free again, so a poller started later still claims.
+                        freeWorkers.release();
+                        log.warn("Queue {}: item {} claimed while stopping, left to the reaper", queue.name(), claim.item().key());
+                    }
                 }
                 lastPoll.set(clock.instant());
                 if (claims.size() < capacity) {
