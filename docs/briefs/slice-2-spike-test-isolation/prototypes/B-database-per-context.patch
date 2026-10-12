@@ -1,0 +1,144 @@
+diff --git a/tally/src/test/java/com/tally/AbstractIntegrationTest.java b/tally/src/test/java/com/tally/AbstractIntegrationTest.java
+index 4cfc66c..dfa8617 100644
+--- a/tally/src/test/java/com/tally/AbstractIntegrationTest.java
++++ b/tally/src/test/java/com/tally/AbstractIntegrationTest.java
+@@ -4,7 +4,6 @@ import com.tally.platform.TestClock;
+ import com.tally.platform.TestClockConfiguration;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.boot.test.context.SpringBootTest;
+-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+ import org.springframework.context.annotation.Import;
+ import org.springframework.test.context.TestPropertySource;
+ import org.testcontainers.postgresql.PostgreSQLContainer;
+@@ -24,9 +23,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
+         "tally.platform.polling-enabled=false"
+ })
+ @Import(TestClockConfiguration.class)
++// Spike option B: no @ServiceConnection; each context gets its own database (support.PerContextDatabase).
+ public abstract class AbstractIntegrationTest {
+ 
+-    @ServiceConnection
+     // Every cached Spring context keeps its own connection pool (10 by default); the default limit
+     // of 100 connections runs out once a dozen contexts are alive in one test run.
+     public static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine")
+diff --git a/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java b/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
+index d817e71..b0e50fa 100644
+--- a/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
++++ b/tally/src/test/java/com/tally/acceptance/AT12InvariantCheckIT.java
+@@ -75,6 +75,10 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
+         invoice(account, "2026-01-15", "2026-02-15");
+         invoice(account, "2026-01-20", "2026-02-20");
+ 
++        // Spike, option B: the check ran when the context started and is next due a day later on this
++        // context's clock; time moves to then, as it would in production, instead of re-arming the row.
++        clock.advance(Duration.ofDays(1));
++
+         // Wait for the effect in this context: only this context's runner sets this context's gauge. Waiting
+         // on the shared row's last_success_at instead let another context's run satisfy the wait while this
+         // gauge stayed unchanged (Slice 1R report §7). The other tests that wait on a shared job read shared
+diff --git a/tally/src/test/java/com/tally/support/PerContextDatabase.java b/tally/src/test/java/com/tally/support/PerContextDatabase.java
+new file mode 100644
+index 0000000..a707f96
+--- /dev/null
++++ b/tally/src/test/java/com/tally/support/PerContextDatabase.java
+@@ -0,0 +1,93 @@
++package com.tally.support;
++
++import com.tally.AbstractIntegrationTest;
++import java.sql.Connection;
++import java.sql.DriverManager;
++import java.sql.SQLException;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.atomic.AtomicInteger;
++import org.flywaydb.core.Flyway;
++import org.springframework.context.ConfigurableApplicationContext;
++import org.springframework.core.env.MapPropertySource;
++import org.springframework.test.context.ContextConfigurationAttributes;
++import org.springframework.test.context.ContextCustomizer;
++import org.springframework.test.context.ContextCustomizerFactory;
++import org.springframework.test.context.MergedContextConfiguration;
++
++/**
++ * Spike option B: every Spring test context that extends {@link AbstractIntegrationTest} gets a database of
++ * its own, copied from a migrated template ({@code CREATE DATABASE ... TEMPLATE ...}), so no two contexts
++ * share a row. The template is migrated once per run. Registered in {@code META-INF/spring.factories} as a
++ * context customizer, which, unlike {@code @ContextConfiguration}, leaves Spring Boot's detection of a test
++ * class's nested configuration alone. Instances a test starts by hand keep the container's own database.
++ */
++public final class PerContextDatabase implements ContextCustomizerFactory {
++
++    private static final String TEMPLATE = "tally_template";
++    private static final AtomicInteger NEXT = new AtomicInteger();
++    private static boolean templateReady;
++
++    @Override
++    public ContextCustomizer createContextCustomizer(Class<?> testClass, List<ContextConfigurationAttributes> attributes) {
++        return AbstractIntegrationTest.class.isAssignableFrom(testClass) ? new Customizer() : null;
++    }
++
++    /** Equal to every other, so it adds nothing to the context cache key. */
++    static final class Customizer implements ContextCustomizer {
++
++        @Override
++        public void customizeContext(ConfigurableApplicationContext context, MergedContextConfiguration config) {
++            String name = "tally_ctx_" + NEXT.incrementAndGet();
++            long started = System.nanoTime();
++            create(name);
++            System.out.printf("PER-CONTEXT-DATABASE %s created in %d ms%n", name, (System.nanoTime() - started) / 1_000_000);
++            context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("per-context-database", Map.of(
++                    "spring.datasource.url", url(name),
++                    "spring.datasource.username", AbstractIntegrationTest.POSTGRES.getUsername(),
++                    "spring.datasource.password", AbstractIntegrationTest.POSTGRES.getPassword())));
++        }
++
++        @Override
++        public boolean equals(Object other) {
++            return other instanceof Customizer;
++        }
++
++        @Override
++        public int hashCode() {
++            return Customizer.class.hashCode();
++        }
++    }
++
++    private static synchronized void create(String name) {
++        AbstractIntegrationTest.POSTGRES.start();
++        if (!templateReady) {
++            long started = System.nanoTime();
++            execute("CREATE DATABASE " + TEMPLATE);
++            Flyway.configure()
++                    .dataSource(url(TEMPLATE), AbstractIntegrationTest.POSTGRES.getUsername(),
++                            AbstractIntegrationTest.POSTGRES.getPassword())
++                    .locations("classpath:db/migration", "classpath:db/testmigration")
++                    .defaultSchema("public")
++                    .load()
++                    .migrate();
++            templateReady = true;
++            System.out.printf("PER-CONTEXT-DATABASE template migrated in %d ms%n", (System.nanoTime() - started) / 1_000_000);
++        }
++        execute("CREATE DATABASE " + name + " TEMPLATE " + TEMPLATE);
++    }
++
++    private static void execute(String statement) {
++        try (Connection c = DriverManager.getConnection(AbstractIntegrationTest.POSTGRES.getJdbcUrl(),
++                AbstractIntegrationTest.POSTGRES.getUsername(), AbstractIntegrationTest.POSTGRES.getPassword())) {
++            c.createStatement().execute(statement);
++        } catch (SQLException e) {
++            throw new IllegalStateException(statement, e);
++        }
++    }
++
++    private static String url(String database) {
++        String base = AbstractIntegrationTest.POSTGRES.getJdbcUrl();
++        return base.replaceFirst("/" + AbstractIntegrationTest.POSTGRES.getDatabaseName() + "(\\?|$)", "/" + database + "$1");
++    }
++}
+diff --git a/tally/src/test/resources/META-INF/spring.factories b/tally/src/test/resources/META-INF/spring.factories
+new file mode 100644
+index 0000000..81fd4f8
+--- /dev/null
++++ b/tally/src/test/resources/META-INF/spring.factories
+@@ -0,0 +1 @@
++org.springframework.test.context.ContextCustomizerFactory=com.tally.support.PerContextDatabase

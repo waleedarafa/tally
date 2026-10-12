@@ -1,0 +1,30 @@
+1: com.tally.acceptance.AT05TimeoutAfterChargeIT.aChargeThatTimedOutIsReconciledNotRetried [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+1: com.tally.acceptance.AT06LyingProviderIT.aChargeReportedAsDeclinedIsCorrectedAndTheInvoicePaid [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+1: com.tally.acceptance.AT08ListenerFailsIT.aFailedListenerIsResubmittedWithinTheLimitAndItsEffectHappensOnce [failure] 
+1: com.tally.acceptance.AT12InvariantCheckIT.anInjectedDuplicateInvoiceRaisesTheViolationsMetric [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+1: com.tally.acceptance.AT15CrashAfterAttemptSentIT.theCallNeverReachedTheProviderSoTheRepeatWithItsKeyChargesOnce [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 15 seconds.
+1: com.tally.acceptance.AT15CrashAfterAttemptSentIT.theProviderChargedBeforeTheCrashSoTheAttemptResolvesAsSucceededAndIsNeverSentAgain [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+1: com.tally.platform.internal.EventResubmissionIT.aFailedListenerIsResubmittedOnceOlderThanTheThresholdAndTheGaugesFollow [error] Condition with Lambda expression in com.tally.platform.internal.EventResubmissionIT was not fulfilled within 10 seconds.
+1: com.tally.spikes.SpikeBReconciliationIT.b1TimeoutAfterASuccessfulCharge [failure] 
+1: com.tally.spikes.SpikeBReconciliationIT.b3LieAboutASuccessfulCharge [failure] 
+1: com.tally.spikes.SpikeBReconciliationIT.b2TimeoutAfterADeclinedCharge [failure] 
+2: com.tally.acceptance.AT05TimeoutAfterChargeIT.aChargeThatTimedOutIsReconciledNotRetried [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+2: com.tally.acceptance.AT06LyingProviderIT.aChargeReportedAsDeclinedIsCorrectedAndTheInvoicePaid [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+2: com.tally.acceptance.AT08ListenerFailsIT.aFailedListenerIsResubmittedWithinTheLimitAndItsEffectHappensOnce [failure] 
+2: com.tally.acceptance.AT12InvariantCheckIT.anInjectedDuplicateInvoiceRaisesTheViolationsMetric [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+2: com.tally.acceptance.AT15CrashAfterAttemptSentIT.theCallNeverReachedTheProviderSoTheRepeatWithItsKeyChargesOnce [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 15 seconds.
+2: com.tally.acceptance.AT15CrashAfterAttemptSentIT.theProviderChargedBeforeTheCrashSoTheAttemptResolvesAsSucceededAndIsNeverSentAgain [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+2: com.tally.platform.internal.EventResubmissionIT.aFailedListenerIsResubmittedOnceOlderThanTheThresholdAndTheGaugesFollow [error] Condition with Lambda expression in com.tally.platform.internal.EventResubmissionIT was not fulfilled within 10 seconds.
+2: com.tally.spikes.SpikeBReconciliationIT.b1TimeoutAfterASuccessfulCharge [failure] 
+2: com.tally.spikes.SpikeBReconciliationIT.b3LieAboutASuccessfulCharge [failure] 
+2: com.tally.spikes.SpikeBReconciliationIT.b2TimeoutAfterADeclinedCharge [failure] 
+3: com.tally.acceptance.AT05TimeoutAfterChargeIT.aChargeThatTimedOutIsReconciledNotRetried [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+3: com.tally.acceptance.AT06LyingProviderIT.aChargeReportedAsDeclinedIsCorrectedAndTheInvoicePaid [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+3: com.tally.acceptance.AT08ListenerFailsIT.aFailedListenerIsResubmittedWithinTheLimitAndItsEffectHappensOnce [failure] 
+3: com.tally.acceptance.AT12InvariantCheckIT.anInjectedDuplicateInvoiceRaisesTheViolationsMetric [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+3: com.tally.acceptance.AT15CrashAfterAttemptSentIT.theCallNeverReachedTheProviderSoTheRepeatWithItsKeyChargesOnce [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 15 seconds.
+3: com.tally.acceptance.AT15CrashAfterAttemptSentIT.theProviderChargedBeforeTheCrashSoTheAttemptResolvesAsSucceededAndIsNeverSentAgain [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+3: com.tally.platform.internal.EventResubmissionIT.aFailedListenerIsResubmittedOnceOlderThanTheThresholdAndTheGaugesFollow [error] Condition with Lambda expression in com.tally.platform.internal.EventResubmissionIT was not fulfilled within 10 seconds.
+3: com.tally.spikes.SpikeBReconciliationIT.b1TimeoutAfterASuccessfulCharge [failure] 
+3: com.tally.spikes.SpikeBReconciliationIT.b3LieAboutASuccessfulCharge [failure] 
+3: com.tally.spikes.SpikeBReconciliationIT.b2TimeoutAfterADeclinedCharge [failure] 

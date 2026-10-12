@@ -1,0 +1,5 @@
+1: com.tally.acceptance.AT05TimeoutAfterChargeIT.aChargeThatTimedOutIsReconciledNotRetried [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+1: com.tally.acceptance.AT06LyingProviderIT.aChargeReportedAsDeclinedIsCorrectedAndTheInvoicePaid [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+1: com.tally.acceptance.AT15CrashAfterAttemptSentIT.theCallNeverReachedTheProviderSoTheRepeatWithItsKeyChargesOnce [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 15 seconds.
+1: com.tally.acceptance.AT15CrashAfterAttemptSentIT.theProviderChargedBeforeTheCrashSoTheAttemptResolvesAsSucceededAndIsNeverSentAgain [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
+1: com.tally.support.SharedJobIT.aJobRescheduledByAnotherContextStillRunsOnThisContextsClock [error] Condition with Lambda expression in com.tally.support.SharedJob was not fulfilled within 10 seconds.
