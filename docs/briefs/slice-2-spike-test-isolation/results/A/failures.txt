@@ -1,0 +1,11 @@
+1: com.tally.EventSequenceIT.aDeclineCarriesThePaymentsVersion [error] Condition with Lambda expression in com.tally.EventSequenceIT was not fulfilled within 15 seconds.
+1: com.tally.EventSequenceIT.aCorrectedDeclineCarriesAHigherSequenceThanTheDecline [error] Condition with Lambda expression in com.tally.EventSequenceIT was not fulfilled within 15 seconds.
+1: com.tally.EventSequenceIT.eachEventOfAPaidSignUpCarriesItsAggregatesVersion [error] Condition with Lambda expression in com.tally.EventSequenceIT was not fulfilled within 15 seconds.
+1: com.tally.acceptance.AT04ProviderOutageIT.anOutageMidRunOpensTheBreakerAndEverythingIsChargedAfterRecovery [failure] [technical failures] 
+1: com.tally.payment.application.UnknownResolutionIT.aLaggingLookupIsAnsweredByTheRepeatWhichReplaysTheCharge [failure] 
+1: com.tally.platform.internal.AT11StopEachWorkerAndJobIT.everyStoppedWorkerAndJobShowsOverdueWithinItsThreshold [failure] 
+2: com.tally.acceptance.AT04ProviderOutageIT.anOutageMidRunOpensTheBreakerAndEverythingIsChargedAfterRecovery [failure] [technical failures] 
+2: com.tally.platform.internal.AT11StopEachWorkerAndJobIT.everyStoppedWorkerAndJobShowsOverdueWithinItsThreshold [failure] 
+3: com.tally.acceptance.AT04ProviderOutageIT.anOutageMidRunOpensTheBreakerAndEverythingIsChargedAfterRecovery [failure] [technical failures] 
+3: com.tally.payment.application.UnknownResolutionIT.aLaggingLookupIsAnsweredByTheRepeatWhichReplaysTheCharge [failure] 
+3: com.tally.platform.internal.AT11StopEachWorkerAndJobIT.everyStoppedWorkerAndJobShowsOverdueWithinItsThreshold [failure] 
