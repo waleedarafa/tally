@@ -14,15 +14,18 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * FR-018: unknown outcomes are reconciled, never retried; recent failures are re-checked.
  *
- * <p>Each check is a direct call. The scheduled job is no longer parked in the year 9999 (PR #23 review): the class
- * has a database of its own (ADR-029, proposed), so it shares no job row. Its own scheduled reconciliation could
- * still act between two direct calls; in the test-isolation spike it never did (0 failures in 7 runs without the
- * parking). If it does, the next step is to run this class with runners off.
+ * <p>Each check is a direct call, so this class's scheduled reconciliation must not run between two of them: it did
+ * in 3 of 10 runs of the test-isolation rollout, once the job was no longer parked in the year 9999 (PR #23 review).
+ * Its context schedules reconciliation every ten years instead: the job runs once as the context starts (the base
+ * class waits for that run), then never within the few days these tests move the clock. A setting, not a rewrite of
+ * the job's row (ADR-029, proposed; F13).
  */
+@TestPropertySource(properties = "tally.payment.reconciliation.interval=3650d")
 class ReconciliationIT extends AbstractReconcilingTest {
 
     @Autowired
