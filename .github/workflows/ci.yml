@@ -1,24 +1,33 @@
-# The deployment pipeline, in two stages, for every push.
+# The deployment pipeline, in two stages, run once per change.
 #   1. Commit stage: unit, fitness-function and module integration tests (about 2 minutes), then
-#      one container image per commit, tagged with the commit ID. Fast feedback on every change.
-#   2. Acceptance stage: the brief's acceptance tests (AT-1 to AT-12) and the spikes' behaviour
-#      tests, on the same commit. When they pass, the image gets a second tag, accepted-<commit>:
-#      only accepted images are candidates for deployment.
+#      one container image per commit to main, tagged with the commit ID. Fast feedback on every change.
+#   2. Acceptance stage: the brief's acceptance tests and the spikes' behaviour tests, on the same
+#      commit. When they pass on main, the image gets a second tag, accepted-<commit>: only accepted
+#      images are candidates for deployment.
 # The split is two Maven profiles in tally/pom.xml; without a profile, ./mvnw verify runs both.
-# Both stages also run on pull requests, against GitHub's merge of the branch into its base, so the
-# merged result is tested before it is merged (FR-038). Images are built and tagged for pushes
-# only: a pull request's merge commit never reaches main under that ID, so its image could never
-# be deployed.
+# When it runs, and why:
+#   - On a pull request, against GitHub's merge of the branch into its base, so the merged result is
+#     tested before it is merged (FR-038). A push to a branch with a pull request already runs it there,
+#     so pushes to other branches do not run the pipeline a second time.
+#   - On a push to main: the merged commit is the one that is deployed, so it is tested and its image
+#     built. Images are built and tagged for pushes to main only: a pull request's merge commit never
+#     reaches main under that ID, so its image could never be deployed.
+#   - A newer commit on a pull request cancels the older run of that pull request: only the newest
+#     merge result matters. Runs on main are never cancelled: every commit there gets its image.
 name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
+# A pull request's runs share one group, so a newer commit cancels the older run. Every other run has a
+# group of its own: GitHub cancels a pending run whenever a newer one joins its group, even without
+# cancel-in-progress, so sharing a group on main could drop a commit's run.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: false
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   commit-stage:
@@ -57,12 +66,12 @@ jobs:
 
       # Reached only when the commit tests passed, so every image comes from a green commit.
       - name: Image name
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push'
         id: image
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tally:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@v4
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -71,10 +80,10 @@ jobs:
       # BuildKit pushes straight to the registry. The plain `docker push` from the
       # classic image store failed on GHCR with "unknown blob" (CI run 1).
       - uses: docker/setup-buildx-action@v4
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push'
 
       - name: Build and push image
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push'
         uses: docker/build-push-action@v7
         with:
           context: tally
@@ -85,7 +94,7 @@ jobs:
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
 
       - name: Summary
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push'
         run: echo "Commit stage passed. Pushed \`${{ steps.image.outputs.name }}\`" >> "$GITHUB_STEP_SUMMARY"
 
   acceptance-stage:
@@ -122,18 +131,18 @@ jobs:
           if-no-files-found: ignore
 
       - uses: docker/login-action@v4
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: docker/setup-buildx-action@v4
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push'
 
       # A new tag on the same image, by manifest: nothing is rebuilt.
       - name: Mark the image accepted
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push'
         env:
           IMAGE: ${{ needs.commit-stage.outputs.image }}
         run: |
