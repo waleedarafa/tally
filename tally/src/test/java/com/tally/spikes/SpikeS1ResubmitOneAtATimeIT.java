@@ -42,10 +42,8 @@ class SpikeS1ResubmitOneAtATimeIT {
         context = instances.start("s1", SpikeConfiguration.class);
     }
 
-    /** An unreadable row left behind would fail every later resubmission on the shared database. */
     @AfterEach
     void stop() {
-        unreadable.forEach(id -> jdbc().update("DELETE FROM event_publication WHERE id = ?", id));
         SpikeListener.RELEASE.release(10);
         instances.close();
     }

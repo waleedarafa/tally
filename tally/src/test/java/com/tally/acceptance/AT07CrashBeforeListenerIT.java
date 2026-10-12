@@ -14,7 +14,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -70,7 +69,6 @@ class AT07CrashBeforeListenerIT {
                 "tally.events.listener-threads=1",
                 "tally.payment.provider.base-url=" + providerUrl);
         JdbcTemplate jdbc = a.getBean(JdbcTemplate.class);
-        jdbc.update("DELETE FROM event_publication WHERE completion_date IS NULL");
         AccountApi accounts = a.getBean(AccountApi.class);
         UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         accounts.recordPaymentToken(account, FakeProvider.token());
@@ -103,8 +101,6 @@ class AT07CrashBeforeListenerIT {
         JdbcTemplate jdbcB = b.getBean(JdbcTemplate.class);
         TestClock clockB = b.getBean(TestClock.class);
         InvoicingApi invoicingB = b.getBean(InvoicingApi.class);
-        jdbcB.update("UPDATE platform.jobs SET status = 'READY', claim_token = NULL, due_at = ?, last_success_at = NULL"
-                + " WHERE queue_key = 'event-resubmission'", clockB.instant().atOffset(ZoneOffset.UTC));
 
         // Time passes on B a minute at a time; the resubmission job runs each minute.
         Instant crashedAt = clockB.instant();

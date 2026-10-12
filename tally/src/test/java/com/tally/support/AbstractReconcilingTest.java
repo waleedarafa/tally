@@ -12,7 +12,6 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,11 +46,15 @@ public abstract class AbstractReconcilingTest extends AbstractProviderIntegratio
     @Autowired
     protected JdbcTemplate jdbc;
 
-    /** The job's row is shared by every test context; bring it due at this context's clock. */
+    /**
+     * The class has a context and a database of its own (ADR-029, proposed): reconciliation runs once as the context
+     * starts, and its next run is set from the clock when that run ends. Let it end before a test moves time.
+     */
     @BeforeEach
-    void reconciliationDueNow() {
-        jdbc.update("UPDATE payment.jobs SET status = 'READY', claim_token = NULL, due_at = ?"
-                + " WHERE queue_key = 'payment-reconciliation'", clock.instant().atOffset(ZoneOffset.UTC));
+    void firstReconciliationEnded() {
+        await().atMost(Duration.ofSeconds(10)).until(() -> jdbc.queryForObject(
+                "SELECT last_success_at FROM payment.jobs WHERE queue_key = 'payment-reconciliation'",
+                java.time.OffsetDateTime.class) != null);
     }
 
     protected UUID subscribedAccount() {
@@ -70,10 +73,9 @@ public abstract class AbstractReconcilingTest extends AbstractProviderIntegratio
         await().atMost(atMost).until(() -> payments.status(reference).map(s -> s.state() == state).orElse(false));
     }
 
-    /** Waits until scheduled reconciliation has brought the attempt to {@code state} (see {@link SharedJob}). */
+    /** Waits until scheduled reconciliation has brought the attempt to {@code state}. */
     protected void awaitReconciled(String reference, AttemptState state, Duration atMost) {
-        SharedJob.RECONCILIATION.await(jdbc, clock, atMost,
-                () -> payments.status(reference).map(s -> s.state() == state).orElse(false));
+        await().atMost(atMost).until(() -> payments.status(reference).map(s -> s.state() == state).orElse(false));
     }
 
     protected double corrected(String from, String to) {

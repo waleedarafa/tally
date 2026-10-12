@@ -11,7 +11,6 @@ import com.tally.shared.DomainEvent;
 import com.tally.subscription.SubscriptionChanged;
 import com.tally.support.AbstractReconcilingTest;
 import com.tally.support.FakeProvider;
-import com.tally.support.SharedJob;
 import java.time.Duration;
 import java.util.List;
 import java.util.Queue;
@@ -101,8 +100,8 @@ class EventSequenceIT extends AbstractReconcilingTest {
         FakeProvider.mode("NORMAL");
 
         clock.advance(Duration.ofMinutes(5));
-        SharedJob.RECONCILIATION.await(jdbc, clock, Duration.ofSeconds(15),
-                () -> !storedSequences(PaymentSucceeded.class, failed.reference()).isEmpty());
+        await().atMost(Duration.ofSeconds(15))
+                .until(() -> !storedSequences(PaymentSucceeded.class, failed.reference()).isEmpty());
 
         assertThat(failed.sequence()).isEqualTo(2L);
         assertThat(storedSequences(PaymentFailed.class, failed.reference())).containsExactly(2L);
