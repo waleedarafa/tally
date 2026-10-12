@@ -9,7 +9,7 @@ How should the test suite be isolated, so that a test that waits on background w
 ## Summary
 
 - **Recommendation: B, one database per Spring test context**, copied from a template database migrated once per run.
-  - It was the only option that was green in 10 out of 10 runs and changed no test class.
+  - It was green in 10 out of 10 runs and changed no test class. E was green too, but saved no time and needs Spring's context pausing turned off (section 5).
   - It ran no slower than the baseline (415.5 s median against 427 s).
   - With the patches switched off, the hostile ordering dropped from 10 failures per run to 1. That one failure went away once AT-12 advanced its clock to the job's next run (3 of 3 runs).
 - **The cost of B is realism.** A test context no longer meets rows left behind by other tests. Production's competition between instances is kept only where a test builds it on purpose, as AT-9, AT-10, `PeriodicJobIT` and `DuplicateCollectionRequestIT` already do.
@@ -26,8 +26,8 @@ How should the test suite be isolated, so that a test that waits on background w
 | Claim in the brief | What the spike found | Evidence |
 |---|---|---|
 | "Several cached Spring test contexts … each runs its own job runners" at the same time | Only one cached context is alive at a time. `spring.properties` sets `spring.test.context.cache.maxSize=1` (since Slice 1 step 7, 7 October). spring-test 7.0.9 evicts the least recently used context *before* it loads the next (`DefaultContextCache.put(key, LoadFunction)`: `evictLruContextIfNecessary`, then `pauseOnContextSwitchIfNecessary`, then `loadContext`; read from the jar's bytecode, as the documentation host is blocked here). | Baseline log, every context switch: the old context's `Closing JPA EntityManagerFactory` comes before the new context's `Started …IT`. All four flakes happened with this setting in place. |
-| A context whose clock is far ahead reschedules a shared row into a future the others never reach | **Confirmed, but in sequence, not at the same time.** AT-3 leaves `payment.jobs`, `platform.jobs` and `invoicing.jobs` due in 2028. Every later context starts at 2026-01-15 and never sees them due. | Patches off, hostile order (AT-3 first): 10 failures per run in 3 of 3 runs (`D-hostile`) |
-| Another context's job resolved the attempt first (`InconsistentLookupIT`, #20; `ReconciliationIT`, #23) | No other context was alive. The runner that interfered was the test's own context's scheduled reconciliation (`AbstractReconcilingTest` turns polling on), racing the test's direct calls. B does not change this. | B, patches off: `ReconciliationIT` failed in 1 of 2 runs |
+| A context whose clock is far ahead reschedules a shared row into a future the others never reach | **Confirmed, but in sequence, not at the same time.** AT-3's context ends in April 2028, so the job rows it runs are rescheduled into 2028. Every later context starts at 2026-01-15 and never sees them due. (The 2028 dates are inferred from AT-3's clock; the failures are the evidence.) | Patches off, hostile order (AT-3 first): 10 failures per run in 3 of 3 runs (`D-hostile`) |
+| Another context's job resolved the attempt first (`InconsistentLookupIT`, #20; `ReconciliationIT`, #23) | No other context was alive. The runner that interfered was the test's own context's scheduled reconciliation (`AbstractReconcilingTest` turns polling on), racing the test's direct calls. B does not change this. | B, patches off: `ReconciliationIT` failed in 1 of 5 full runs |
 | AT-12 (#36): another context ran the invariant job on its own clock | **Wrong, as I explained it in #36.** No other test context was alive; the CI run's hand-started instances (AT-9, AT-10) use their own databases. The real cause of the 0.0 is still not established. One thing the CI log does show: AT-12's context, with polling on, was also reconciling other tests' leftover attempts against an unreachable provider. #36's change stays correct and harmless. | CI log of run 38160641754, attempt 1: AT-12 runs after AT-15 and AT-9 and fails in 0.24 s |
 | — | Hand-started instances (`TallyInstances`: AT-7, Spike A, Spike S-1) do run beside the test context, each on its own `TestClock`, on the container's database | 25 such instances per run |
 
@@ -49,10 +49,10 @@ How should the test suite be isolated, so that a test that waits on background w
 |---|---|---|---|---|---|
 | **1. Contexts created (configurations)** | 47 (30) | 47 (30) | 47 (30), plus 47 databases | Not measured for the suite. The sample moves AT-12 into the default configuration (29). | **30 (30)** |
 | **2. Flake rate, patches on** | 0 failures in 10 runs | **Failures in 3 of 3 runs**: 6, 2, 3 (AT-4 ×3, AT-11 ×3, `UnknownResolutionIT` ×2, `EventSequenceIT` 3 tests ×1). Stopped at 3 runs: two of the failures are deterministic. | 0 failures in 10 runs | Sample only: converted AT-12, 0 failures in 5 runs, after AT-3, patches off | 0 failures in 10 runs (with Spring's default pausing: 5 failures in 1 run, section 5) |
-| **2b. Patches off: full suite / hostile order** | 12, 12 / 10, 10, 10 | 8 / 1 | 3, 1 / 1, 1, 1; **0, 0, 0** with AT-12 advancing its clock | Sample: 0 in 5 after AT-3 | 6, 5 / 1, 2, 0 |
+| **2b. Patches off: full suite / hostile order** | 12, 12 / 10, 10, 10 | 8 / 1 | 3, 1 / 1, 1, 1. With AT-12 advancing its clock: full suite 1, 1, 1 (`SharedJobIT` only) / hostile **0, 0, 0** | Sample: 0 in 5 after AT-3 | 6, 5 / 1, 2, 0 |
 | **3. Suite duration, median wall time** | **427 s** (413 to 439) | 431 s (3 failing runs) | **415.5 s** (411 to 427) | Not measured | 428.5 s (421 to 441) |
-| **4. Blast radius** | — | 2 infrastructure classes and 2 tests rewritten (AT-3, `FirstInvoiceIT`). 4 more fail and would need rewriting or data clean-up (`EventSequenceIT`, AT-4, AT-11, `UnknownResolutionIT`). | 2 infrastructure files (`AbstractIntegrationTest`, new `PerContextDatabase`, `spring.factories`); **no test class**. In the rollout, AT-12 and the two reconciliation tests change (section 4). | 31 test classes (list below), plus a test driver | As B, plus `spring.properties` |
-| **5. What it removes** | — | The 9999 parking and the re-arm are no longer needed for stranding. The tests then need clock advances and fail on leftovers instead. | All the cross-context patches (section 3) | All job-row patches in converted tests | As B; the cached reconciliation context needs the clock advance in AT-5, AT-6 and AT-15 (4 tests) |
+| **4. Blast radius** | — | 2 infrastructure classes and 2 tests rewritten (AT-3, `FirstInvoiceIT`). 4 more fail and would need rewriting or data clean-up (`EventSequenceIT`, AT-4, AT-11, `UnknownResolutionIT`). | 3 infrastructure files (`AbstractIntegrationTest`, new `PerContextDatabase`, `spring.factories`); **no test class**. In the rollout, AT-12 changes, and optionally three reconciliation tests (section 4). | 31 test classes (list below), plus a test driver | As B, plus `spring.properties` |
+| **5. What it removes** | — | Nothing shown. Stranding cannot happen by construction, but with all patches off 8 tests failed: the waiting tests need clock advances, and others fail on leftovers. | All the cross-context patches (section 3) | All job-row patches in converted tests | As B; the cached reconciliation context needs the clock advance in AT-5, AT-6 and AT-15 (4 tests) |
 | **6. Realism** | Loses: one wall clock (contexts years apart). Keeps: shared database, incidental competition. | Keeps: one clock, one database, all instances competing for every row, the closest to production. Loses: the test's control over what work exists. | Keeps: one clock per database; competition where a test builds it (AT-9, AT-10, `PeriodicJobIT`, `DuplicateCollectionRequestIT`, `ConcurrentRenewalIT`, `ConcurrentDeliveryIT`). Loses: incidental competition with other tests' leftovers, which no test asserts on. | Loses: the scheduler end to end, for converted tests. Keeps it in one dedicated context. | As B; idle cached contexts keep polling their own database |
 
 **B's startup cost:**
@@ -66,8 +66,8 @@ That is about 4 s per run. The suite was still 11.5 s faster at the median than 
 ### A in detail: what one clock does to leftovers
 
 With one clock that only moves forward, every row an earlier test left behind becomes due in every later context:
-- **`EventSequenceIT`:** collection items from AT-11's provider outage (`UNAVAILABLE`, retried as new attempts: 35 technical failures in run 1) kept the collection queue busy. The test's own payments never ran within 15 s.
-- **AT-4:** in the outage month, other tests' items opened the breaker before AT-4's own renewals were tried, so AT-4 counted 0 technical failures.
+- **`EventSequenceIT`:** collection items left by AT-11 (`UNAVAILABLE`, retried as new attempts: 35 technical failures in run 1) were being worked when it started. Its own payments never completed within 15 s. That they were held up by the leftovers is my reading of the log, not traced further.
+- **AT-4:** it counted 0 technical failures among its own references. My reading, not traced further: in the outage month, other tests' leftover items opened the breaker before AT-4's own renewals were tried.
 - **`UnknownResolutionIT`:** counted a leftover attempt (2, expected 1, in runs 1 and 3).
 - **AT-11:** jobs whose rows are old on the shared timeline show as overdue at once (1.0, expected 0.0).
 
@@ -84,11 +84,11 @@ Each was switched off with `-Dtally.spike.patches=off` (`prototypes/0-patches-sw
 
 | Patch | Guards against | D | A | B | C |
 |---|---|---|---|---|---|
-| `SharedJob` re-arm (AT-5, AT-6, AT-8, AT-12, AT-15, `EventSequenceIT`, `EventResubmissionIT`, Spike B) | H1, and "the job is not due yet on this clock" | Needed: 12 failures without it | Replaced by clock advances; H2 breaks other tests | **H1 gone.** Only "not due yet" remains: advance the clock by the job's interval (AT-12, shown 3 of 3) | Gone for converted tests |
-| `@BeforeEach` row resets (`AbstractReconcilingTest`, AT-7, AT-8, AT-12, `EventResubmissionIT`) | H1 | Needed | Not needed for H1 | **Not needed**: none failed in 5 patches-off runs | Gone |
-| 9999 parking and its `@AfterEach` restore (`ReconciliationIT`) | H3: its own context's scheduled job | Needed | Needed | **Still needed** (failed in 1 of 2 runs without it), or run `ReconciliationIT` with runners off | Gone: the test drives reconciliation itself |
-| AT-12 waiting on its own gauge (#36) | H4 | Harmless | Still needed | Harmless; the foreign run it guards against cannot happen | Gone: the test runs the check itself |
-| `SharedJobIT`, the stranding reproducer | — | Needed as a test | — | **Obsolete**: no other context shares the row | Obsolete |
+| `SharedJob` re-arm (AT-5, AT-6, AT-8, AT-12, AT-15, `EventSequenceIT`, `EventResubmissionIT`, Spike B) | H1, and "the job is not due yet on this clock" | Needed. With all patches off: 12 failures | Not shown. With all patches off: 8 failures (AT-4, AT-6, AT-11, AT-12, AT-15 ×2, `ReconciliationIT`, `SharedJobIT`) | **H1 gone.** Only "not due yet" remains: advance the clock by the job's interval (AT-12, shown 3 of 3) | Gone for converted tests (shown for AT-12 only) |
+| `@BeforeEach` row resets (`AbstractReconcilingTest`, AT-7, AT-8, AT-12, `EventResubmissionIT`) | H1 | Needed | Not measured separately | **Not needed**: none failed in 8 patches-off runs (5 full, 3 hostile order) | Gone |
+| 9999 parking and its `@AfterEach` restore (`ReconciliationIT`) | H3: its own context's scheduled job | Needed | Needed | **Still needed** (failed in 1 of 5 full runs without it), or run `ReconciliationIT` with runners off | Gone: the test drives reconciliation itself |
+| AT-12 waiting on its own gauge (#36) | H4 | Harmless | Not measured | Harmless; the foreign run it guards against cannot happen | Gone: the test runs the check itself |
+| `SharedJobIT`, the stranding reproducer | — | Needed as a test | — | **Obsolete**: no other context shares the row. It is the only failure left in the full suite with every patch off (3 of 3) | Obsolete |
 
 ## 4. Recommendation and the rollout PR
 
@@ -117,6 +117,8 @@ Each was switched off with `-Dtally.spike.patches=off` (`prototypes/0-patches-sw
    - `ReconciliationIT`'s parking, or better, move `ReconciliationIT`, `UnknownResolutionIT` and `RequestedAttemptIT` off `AbstractReconcilingTest`, so their runners are off while they call reconciliation directly. Small, and C's idea where it pays.
 5. **Update the Slice 1R report's §7** to the mechanism in section 1.
 6. **Run the suite 10 times before merging**, as here.
+
+The plan is measured, not only argued. Under B, with AT-12 advancing its clock and every patch switched off, the full suite failed only `SharedJobIT` in 3 of 3 runs (`results/B-patches-off-AT12-advances`, median 424 s). `SharedJobIT` exercises the re-arm itself, and B makes its scenario impossible.
 
 ### Which prototypes should merge
 
@@ -186,10 +188,11 @@ Raw logs stayed local (about 1 MB each).
 | E-paused-check | B, cache 32, Spring's default pausing | 1 | 5 | 469 |
 | D-patches-off / B / E / A | patches off, full suite | 2 / 2 / 2 / 1 | 12, 12 / 3, 1 / 6, 5 / 8 | 558.5 / 438 / 491 / 481 |
 | D-hostile / B / E / A | patches off, AT-3 first | 3 / 3 / 3 / 1 | 10 ×3 / 1 ×3 / 1, 2, 0 / 1 | 212 / 107 / 106 / 106 |
-| B-hostile-AT12-advances | B; AT-12 advances its clock | 3 | 0 ×3 | 95 |
+| B-hostile-AT12-advances | B; AT-12 advances its clock; patches off, AT-3 first | 3 | 0 ×3 | 95 |
+| B-patches-off-AT12-advances | B; AT-12 advances its clock; patches off, full suite | 3 | 1 ×3, `SharedJobIT` only | 424 |
 | C-sample-after-AT03 | C sample: AT-3, then the converted AT-12 | 5 | 0 ×5 | 38 |
 | C-sample-hostile | first attempt; the sample did not compile (`PeriodicJob.run` throws `Exception`) | 5 | build failed | — |
-| A-check, B-check | first prototypes, since fixed: A's shared clock was initialised before `DEFAULT_START`; B's `@ContextConfiguration` hid nested test configurations | 1 each | — | — |
+| A-check / B-check | first full run of each prototype after two fixes: A's shared clock had been initialised before `DEFAULT_START`; B's `@ContextConfiguration` hid nested test configurations. The broken first runs were discarded. | 1 / 1 | 6 / 0 | 475 / 415 |
 
 ### The runner-on test classes C would rewrite (31)
 
