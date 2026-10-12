@@ -1,0 +1,3 @@
+# Raw Maven logs stay local (about 1 MB each, gzipped); runs.csv, failures.txt and keys-N.txt are the record.
+*.log
+*.log.gz
