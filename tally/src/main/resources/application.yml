@@ -25,5 +25,6 @@ management:
   endpoints:
     web:
       exposure:
-        # Queue and job health (FR-023) is read from /actuator/metrics.
-        include: health,metrics
+        # Queue and job health (FR-023) is read from /actuator/metrics, and scraped for the alert rules
+        # (ops/alerts, ADR-030) from /actuator/prometheus.
+        include: health,metrics,prometheus

@@ -22,9 +22,11 @@ import java.util.regex.Pattern;
  *     claimed_by      TEXT,
  *     last_error      TEXT,
  *     last_success_at TIMESTAMPTZ,
+ *     finished_at     TIMESTAMPTZ,
  *     created_at      TIMESTAMPTZ  NOT NULL
  * );
  * CREATE INDEX ON <schema>.<table> (due_at) WHERE status IN ('READY', 'IN_PROCESSING');
+ * CREATE INDEX ON <schema>.<table> (finished_at);
  * }</pre>
  * The platform checks the table's columns and key constraint, and that the guard exists as a unique
  * constraint or index on another table, when the queue is registered.

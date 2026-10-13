@@ -10,7 +10,7 @@ final class QueueTableCheck {
 
     static final List<String> REQUIRED_COLUMNS = List.of(
             "id", "queue_key", "due_at", "payload", "status", "attempts",
-            "claim_token", "claimed_at", "claimed_by", "last_error", "last_success_at", "created_at");
+            "claim_token", "claimed_at", "claimed_by", "last_error", "last_success_at", "finished_at", "created_at");
 
     private QueueTableCheck() {
     }

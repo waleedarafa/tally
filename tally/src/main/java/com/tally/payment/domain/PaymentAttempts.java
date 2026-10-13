@@ -29,6 +29,9 @@ public interface PaymentAttempts {
     /** UNKNOWN attempts sent before {@code cutoff}: past the key window, waiting for a person (ADR-026 c). */
     long countUnknownSentBefore(Instant cutoff);
 
+    /** When the longest-unresolved UNKNOWN attempt was sent; empty if none is UNKNOWN (D2). */
+    Optional<Instant> oldestUnknownSentAt();
+
     /** When the longest-waiting REQUESTED attempt was made; empty if none waits to be sent. */
     Optional<Instant> oldestWaitingToBeSent();
 
