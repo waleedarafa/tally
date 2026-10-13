@@ -9,7 +9,7 @@ The billing team's on-call engineer (Design Record §11).
 ## When
 
 - **`BillingStalled`** (page, D9): a money queue (`money="true"`) has work due for over 3 minutes and has finished nothing for over 3 minutes. Stall to alert: 4m30s.
-- **`ListenersStalled`** (page, D9): event publications have waited over 3 minutes and no listener has succeeded for over 3 minutes. Invoices are issued and collection requests made by listeners, so the run stops between queues.
+- **`ListenersStalled`** (page, D9): on the instance in the `instance` label, the event-listener pool has work queued and no listener has succeeded for over 3 minutes. Invoices are issued and collection requests made by listeners, so the run stops between queues. A failed publication waiting for resubmission does not raise it; `EventsStuck` does, after 15 minutes.
 - **`BillingBehind`** (page, D6): a money queue's oldest due item is over 4 hours old. The run is moving, but too slowly to finish the busiest day in time.
 - **`PaymentRequestedStuck`** (page, D2): a payment attempt has waited over 15 minutes to be sent (ADR-018). Tally held it back (its rate permit) or no worker took it.
 
@@ -65,7 +65,9 @@ ORDER BY running DESC;
 Find the blocking session. Escalate to the database owner before ending any session.
 
 ### (e) Listeners are stalled
-The pool is full (`tally_events_listeners_queued` keeps growing) or every listener fails. Check the log for `Event listener ... failed`, then follow `events-stuck.md`.
+On the instance in the alert, work is queued and no listener succeeds: its threads are hung, or every listener fails.
+- Hung: take a thread dump of that instance (`jcmd <pid> Thread.print`) to see what the listener threads wait on (the database, a lock), then restart it. Its incomplete publications are resubmitted.
+- Failing: the log shows `Event listener ... failed`; follow `events-stuck.md`.
 
 ### (f) Behind, not stalled (`BillingBehind`)
 Items finish, but the oldest due item keeps ageing. Add instances; check whether the provider's rate (`tally.payment.provider.rate-limit-per-second`) is the limit.

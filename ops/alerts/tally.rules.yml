@@ -2,6 +2,10 @@
 # Every rule names a severity (page or ticket), the driver or record it protects, a summary a person can act
 # on, and its runbook. F14 (F14AlertRulesAgreeIT) checks rules, runbooks and exported metric names agree.
 # Where the rules are evaluated and who is paged is decided with the first deployed environment.
+#
+# Scrape assumptions, for whoever writes the scrape configuration:
+# - the scrape job is named tally (TallyDown reads up{job="tally"});
+# - honor_labels is false (Prometheus's default), so Tally's own job tag on tally_job_* arrives as exported_job.
 groups:
   - name: tally
     rules:
@@ -30,16 +34,19 @@ groups:
           summary: "Money queue {{ $labels.queue }} has work due and has finished nothing for over 3 minutes."
           runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
 
+      # One instance's listener pool: work queued and no listener succeeding, both read from the same pool. Not the
+      # oldest incomplete publication: a failed one waits outside the pool for resubmission after 5 minutes (AT-8),
+      # and that age is read from the database for every instance (#48 review, 2).
       - alert: ListenersStalled
         expr: >-
-          tally_events_listeners_last_success_age_seconds > 180
-          and tally_events_oldest_incomplete_age_seconds > 180
+          tally_events_listeners_queued > 0
+          and tally_events_listeners_last_success_age_seconds > 180
         for: 1m
         labels:
           severity: page
           driver: D9
         annotations:
-          summary: Event publications are waiting and no event listener has succeeded for over 3 minutes.
+          summary: "Event listeners on {{ $labels.instance }} have work queued and none has succeeded for over 3 minutes."
           runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
 
       - alert: BillingBehind

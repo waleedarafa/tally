@@ -47,7 +47,7 @@ The alerts, with the measure each one protects:
 |---|---|---|---|---|---|
 | `TallyDown` | Prometheus cannot scrape Tally (`up == 0`, or the target is absent) | 2m | page | G9 | `tally-down.md` (new) |
 | `BillingStalled` | A money queue (`money="true"`) has `tally.queue.last_progress_age_seconds` > 180 and `tally.queue.oldest_due_age_seconds` > 180 | 1m | page | D9 | `billing-stalled.md` (new) |
-| `ListenersStalled` | `tally.events.listeners.last_success_age_seconds` > 180 and `tally.events.oldest_incomplete_age_seconds` > 180 | 1m | page | D9 | `billing-stalled.md` |
+| `ListenersStalled` | `tally.events.listeners.queued` > 0 and `tally.events.listeners.last_success_age_seconds` > 180, both from one instance's pool | 1m | page | D9 | `billing-stalled.md` |
 | `BillingBehind` | A money queue's `tally.queue.oldest_due_age_seconds` > 14400 (4 hours) | 0m | page | D6 | `billing-stalled.md` |
 | `JobOverdue` | `tally.job.overdue` is 1 for any job | 5m | ticket | FR-023 | `job-overdue.md` (new) |
 | `PaymentRequestedStuck` | `tally.payment.requested.stuck` is 1 (its own 15 minutes, ADR-018) | 0m | page | D2 | `billing-stalled.md` |
@@ -72,7 +72,9 @@ So D9 and D6 ask two different questions:
 
 `tally.queue.overdue` and FR-023's 5-minute floor stay as they are. They are not used for paging.
 
-**Two clocks (corrected after the review of #46).** Progress alone pages falsely when a queue has been idle for hours and one item falls due: its last progress is already hours old, and only the 1-minute `for` stops the page. So each stall rule needs two clocks: nothing has finished for 3 minutes, and work has been due for 3 minutes. Oldest due age is 0 when nothing waits, so it also replaces `waiting > 0`. The tests add a quiet case: a queue idle for 2 hours gets one due item, finished after 90 s, and does not fire.
+**Two clocks (corrected after the review of #46).** Progress alone pages falsely when a queue has been idle for hours and one item falls due: its last progress is already hours old, and only the 1-minute `for` stops the page. So `BillingStalled` needs two clocks: nothing has finished for 3 minutes, and work has been due for 3 minutes. Oldest due age is 0 when nothing waits, so it also replaces `waiting > 0`. The tests add a quiet case: a queue idle for 2 hours gets one due item, finished after 90 s, and does not fire.
+
+Two clocks apply to queues, where a failed item comes back due. They do not apply to the listener pool (corrected after the review of #48). A failed publication waits outside the pool for resubmission, after 5 minutes (AT-8 is a normal business case: no payment token yet), so the oldest incomplete publication passes 180 s on a quiet night for work resubmission fixes by itself. That age is also read from the database for every instance, while the last success is per instance. So `ListenersStalled` reads one instance's pool only: work queued, and no listener has succeeded for 3 minutes. The tests add two quiet cases: a publication incomplete for 240 s with nothing queued and no success for an hour; and an idle pool that gets a burst, with the first success 20 s later.
 
 **The D9 budget.** Stall to alert = 180 s without progress + up to one scrape interval (assume 30 s) + `for` 1m = 4 minutes 30 seconds, inside D9's 5 minutes. Keep `for` at least 1 minute so a single bad scrape does not page anyone. The rules select money queues by `money="true"` and never name a queue: today they are the renewal, payment-collection and collections-retry queues. The listener pool carries the work between them (renewal, then invoice, then collection request).
 

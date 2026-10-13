@@ -117,12 +117,12 @@ tests:
   - eval_time: 10m
     alertname: BillingStalled
     exp_alerts: []
-- name: 'D9 budget: the listener pool stalls at 0 (publications wait, no listener succeeds); fires by 4m30s'
+- name: 'D9 budget: the listener pool stalls at 0 (work queued, no listener succeeds); fires by 4m30s'
   interval: 30s
   input_series:
-  - series: tally_events_listeners_last_success_age_seconds
-    values: 0+30x20
-  - series: tally_events_oldest_incomplete_age_seconds
+  - series: tally_events_listeners_queued{instance="tally-1"}
+    values: 3x20
+  - series: tally_events_listeners_last_success_age_seconds{instance="tally-1"}
     values: 0+30x20
   alert_rule_test:
   - eval_time: 4m
@@ -132,18 +132,22 @@ tests:
     alertname: ListenersStalled
     exp_alerts:
     - exp_labels:
+        instance: tally-1
         severity: page
         driver: D9
       exp_annotations:
-        summary: Event publications are waiting and no event listener has succeeded for over 3 minutes.
+        summary: Event listeners on tally-1 have work queued and none has succeeded for over 3 minutes.
         runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
-- name: 'Busy listeners: publications always waiting, listeners succeeding every few seconds; never fires'
+- name: A failed publication waits for resubmission (incomplete for 240 s), nothing queued, no success for an hour; ListenersStalled
+    does not fire
   interval: 30s
   input_series:
-  - series: tally_events_listeners_last_success_age_seconds
-    values: 1 0 2 1 0 3 1 0 2 1 0 1 2 0 1 0 2 1 0 1 0
-  - series: tally_events_oldest_incomplete_age_seconds
-    values: 5 8 4 9 6 7 5 8 4 9 6 7 5 8 4 9 6 7 5 8 4
+  - series: tally_events_listeners_queued{instance="tally-1"}
+    values: '0x20'
+  - series: tally_events_listeners_last_success_age_seconds{instance="tally-1"}
+    values: 3600+30x20
+  - series: tally_events_oldest_incomplete_age_seconds{instance="tally-1"}
+    values: 240+30x20
   alert_rule_test:
   - eval_time: 5m
     alertname: ListenersStalled
@@ -151,17 +155,31 @@ tests:
   - eval_time: 10m
     alertname: ListenersStalled
     exp_alerts: []
-- name: Listeners idle for 2 hours get one publication, completed after 90 s; ListenersStalled does not fire
+- name: 'An idle pool gets a burst: work queued, the first success 20 s later; ListenersStalled does not fire'
   interval: 30s
   input_series:
-  - series: tally_events_listeners_last_success_age_seconds
-    values: 7200 7230 7260 0+30x17
-  - series: tally_events_oldest_incomplete_age_seconds
-    values: 0 30 60 0x17
+  - series: tally_events_listeners_queued{instance="tally-1"}
+    values: 0 0 5 3 1 0x16
+  - series: tally_events_listeners_last_success_age_seconds{instance="tally-1"}
+    values: 3600 3630 3660 10 2 1 31 61 91 121 151 181 211 241 271 301 331 361 391 421 451
   alert_rule_test:
+  - eval_time: 1m
+    alertname: ListenersStalled
+    exp_alerts: []
   - eval_time: 1m30s
     alertname: ListenersStalled
     exp_alerts: []
+  - eval_time: 10m
+    alertname: ListenersStalled
+    exp_alerts: []
+- name: 'Busy listeners: work always queued, listeners succeeding every few seconds; never fires'
+  interval: 30s
+  input_series:
+  - series: tally_events_listeners_queued{instance="tally-1"}
+    values: 5x20
+  - series: tally_events_listeners_last_success_age_seconds{instance="tally-1"}
+    values: 1 0 2 1 0 3 1 0 2 1 0 1 2 0 1 0 2 1 0 1 0
+  alert_rule_test:
   - eval_time: 5m
     alertname: ListenersStalled
     exp_alerts: []
