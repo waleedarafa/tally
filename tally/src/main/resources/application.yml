@@ -14,8 +14,8 @@ spring:
       enum:
         # CLAUDE.md rule 7: a stored event read by an older version may hold an enum value it does not
         # know. Every enum that crosses a module boundary or is stored in an event has a constant marked
-        # @JsonEnumDefaultValue (UNKNOWN, or UNRECOGNISED where UNKNOWN is a real state: proposed
-        # ADR-024); this maps unknown values to it instead of failing.
+        # @JsonEnumDefaultValue (UNKNOWN, or UNRECOGNISED where UNKNOWN is a real state: ADR-024);
+        # this maps unknown values to it instead of failing.
         # Spring Modulith serializes event publications with this JsonMapper.
         read-unknown-enum-values-using-default-value: true
   flyway:

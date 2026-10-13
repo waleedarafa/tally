@@ -23,7 +23,7 @@ import org.springframework.test.context.TestPropertySource;
  * in 3 of 10 runs of the test-isolation rollout, once the job was no longer parked in the year 9999 (PR #23 review).
  * Its context schedules reconciliation every ten years instead: the job runs once as the context starts (the base
  * class waits for that run), then never within the few days these tests move the clock. A setting, not a rewrite of
- * the job's row (ADR-029, proposed; F13).
+ * the job's row (ADR-029; F13).
  */
 @TestPropertySource(properties = "tally.payment.reconciliation.interval=3650d")
 class ReconciliationIT extends AbstractReconcilingTest {

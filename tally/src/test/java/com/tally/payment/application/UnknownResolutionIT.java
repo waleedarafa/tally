@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * than the repeat window (the provider's retention minus a margin, 20 hours), repeat the charge with the
  * same key and the stored parameters; a replay or a fresh outcome decides; a refusal leaves it UNKNOWN.
  * (c) If the key is older, never repeat: it stays UNKNOWN and raises an alert, for settlement
- * reconciliation (proposed ADR-021).
+ * reconciliation (ADR-021).
  *
  * <p>The fake's lookup is consistent, so the fake's {@code LOOKUP_LAG} mode stands in for a provider whose
  * search lags (Q-B). Each test checks one attempt by calling reconciliation directly; the attempt has no
