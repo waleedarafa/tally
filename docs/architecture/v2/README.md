@@ -57,6 +57,7 @@ The second design missed these, or Slice 1R raised them. They are proposed here,
 | 022 | What happens to an invoice and to access when a recorded success proves false; needs finance | FR-032 |
 | 023 | Renewals are merchant-initiated; an authentication demand is a distinct outcome and reaches the customer (D15) | first-run D15 |
 | 025 | A decline on the first invoice ends the subscription at once; for finance and product, not in Slice 1R | Slice 1R PR #13 review (access at sign-up) |
+| 030 | Alert rules as code. Prometheus alerting rules live in the repository (`ops/alerts/tally.rules.yml`); every rule names a severity (page or ticket), a driver and a runbook; every rule has a `promtool` unit test (`ops/alerts/tally.rules.test.yml`); a fitness function (F14) checks rules, runbooks and exported metric names against each other. D9 is measured as progress (work due and nothing finished), not as age. Where rules are evaluated and who is paged is decided with the first deployed environment | Slice 2 step 0, `docs/briefs/slice-2-step-0-alerts.md` (amended in #45) |
 
 ## Mapping of first-run records
 

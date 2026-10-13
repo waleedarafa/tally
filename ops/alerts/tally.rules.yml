@@ -1,0 +1,173 @@
+# Tally's alert rules (ADR-030): Prometheus alerting rules, unit-tested with promtool (tally.rules.test.yml).
+# Every rule names a severity (page or ticket), the driver or record it protects, a summary a person can act
+# on, and its runbook. F14 (F14AlertRulesAgreeIT) checks rules, runbooks and exported metric names agree.
+# Where the rules are evaluated and who is paged is decided with the first deployed environment.
+#
+# Scrape assumptions, for whoever writes the scrape configuration:
+# - the scrape job is named tally (TallyDown reads up{job="tally"});
+# - honor_labels is false (Prometheus's default), so Tally's own job tag on tally_job_* arrives as exported_job.
+groups:
+  - name: tally
+    rules:
+      - alert: TallyDown
+        expr: up{job="tally"} == 0 or absent(up{job="tally"})
+        for: 2m
+        labels:
+          severity: page
+          driver: G9
+        annotations:
+          summary: Prometheus cannot scrape Tally; it is down, hung or unreachable.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/tally-down.md
+
+      # D9: a stall is "work is due and nothing finishes". Two clocks: progress alone would page when one item
+      # falls due on a queue idle for hours; due age alone would page on every busy billing day (D6).
+      # Stall to alert: 180 s + one scrape (30 s) + for 1m = 4m30s.
+      - alert: BillingStalled
+        expr: >-
+          tally_queue_last_progress_age_seconds{money="true"} > 180
+          and tally_queue_oldest_due_age_seconds{money="true"} > 180
+        for: 1m
+        labels:
+          severity: page
+          driver: D9
+        annotations:
+          summary: "Money queue {{ $labels.queue }} has work due and has finished nothing for over 3 minutes."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
+
+      # One instance's listener pool: work queued and no listener succeeding, both read from the same pool. Not the
+      # oldest incomplete publication: a failed one waits outside the pool for resubmission after 5 minutes (AT-8),
+      # and that age is read from the database for every instance (#48 review, 2).
+      - alert: ListenersStalled
+        expr: >-
+          tally_events_listeners_queued > 0
+          and tally_events_listeners_last_success_age_seconds > 180
+        for: 1m
+        labels:
+          severity: page
+          driver: D9
+        annotations:
+          summary: "Event listeners on {{ $labels.instance }} have work queued and none has succeeded for over 3 minutes."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
+
+      - alert: BillingBehind
+        expr: tally_queue_oldest_due_age_seconds{money="true"} > 14400
+        labels:
+          severity: page
+          driver: D6
+        annotations:
+          summary: "Money queue {{ $labels.queue }} is over 4 hours behind: its oldest due item is older than D6 allows."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
+
+      - alert: JobOverdue
+        expr: tally_job_overdue == 1
+        for: 5m
+        labels:
+          severity: ticket
+          driver: FR-023
+        annotations:
+          # Prometheus renames Tally's job label to exported_job: job is its own target label (honor_labels: false).
+          summary: "Background job {{ $labels.exported_job }} has not succeeded within twice its interval (at least 5 minutes)."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/job-overdue.md
+
+      - alert: PaymentRequestedStuck
+        expr: tally_payment_requested_stuck == 1
+        labels:
+          severity: page
+          driver: D2
+        annotations:
+          summary: A payment attempt has waited over 15 minutes to be sent (ADR-018); its collection is stuck.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
+
+      - alert: MoneyQueueItemsFailed
+        expr: tally_queue_failed{money="true"} > 0
+        labels:
+          severity: page
+          driver: D1, D2
+        annotations:
+          summary: "Money queue {{ $labels.queue }} has failed items; each waits for a person."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/queue-items-failed.md
+
+      - alert: QueueItemsFailed
+        expr: tally_queue_failed{money="false"} > 0
+        for: 10m
+        labels:
+          severity: ticket
+          driver: FR-017
+        annotations:
+          summary: "Queue {{ $labels.queue }} has failed items; each waits for a person."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/queue-items-failed.md
+
+      - alert: EventsStuck
+        expr: tally_events_oldest_incomplete_age_seconds > 900
+        labels:
+          severity: page
+          driver: D3
+        annotations:
+          summary: An event publication has been incomplete for over 15 minutes; its work has not happened.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/events-stuck.md
+
+      - alert: EventUnreadable
+        expr: tally_events_unreadable > 0
+        labels:
+          severity: page
+          driver: D3
+        annotations:
+          summary: Event publications cannot be read, so they are never resubmitted.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/unreadable-event-publication.md
+
+      - alert: ListenerFailing
+        expr: increase(tally_events_listeners_failed_total[15m]) > 0
+        labels:
+          severity: ticket
+          driver: D3
+        annotations:
+          summary: An event listener failed in the last 15 minutes; resubmission retries it.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/events-stuck.md
+
+      - alert: PaymentUnknownTooLong
+        expr: tally_payment_unknown_oldest_age_seconds > 3600
+        labels:
+          severity: page
+          driver: D2
+        annotations:
+          summary: A payment outcome has been UNKNOWN for over an hour.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/unknown-payment.md
+
+      - alert: PaymentUnknownPastKeyWindow
+        expr: tally_payment_unknown_past_key_window > 0
+        labels:
+          severity: page
+          driver: D2
+        annotations:
+          summary: An UNKNOWN payment is past the key window; Tally will not repeat it, and a person must decide.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/unknown-payment-past-key-window.md
+
+      # Open is 1 and half-open 2: during an outage the breaker alternates between them every open-for (30 s),
+      # so the rule asks "not closed" for 10 minutes.
+      - alert: ProviderBreakerOpen
+        expr: tally_payment_breaker_state != 0
+        for: 10m
+        labels:
+          severity: ticket
+          driver: ADR-013
+        annotations:
+          summary: The payment provider breaker has not closed for 10 minutes; collection is paused.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/provider-outage.md
+
+      - alert: ProviderFalseDecline
+        expr: increase(tally_payment_outcome_corrected_total{from="DECLINED", to="SUCCEEDED"}[1d]) > 0
+        labels:
+          severity: ticket
+          driver: D2
+        annotations:
+          summary: The provider reported a charge as declined that it had made; Tally corrected it.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/provider-false-decline.md
+
+      - alert: InvariantViolated
+        expr: tally_invariant_violations > 0
+        labels:
+          severity: page
+          driver: D1, D2
+        annotations:
+          summary: "Invariant check {{ $labels.check }} found violations."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/invariant-violated.md
