@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -19,7 +18,9 @@ import org.junit.jupiter.api.Test;
  * F13, ADR-029 (proposed): a test that waits on background work moves its clock to the work's due time; it never
  * rewrites a job or queue row's due time or status to make the work due. Every test class has a database of its own,
  * so no row is stranded on another context's clock, and a rewrite would only hide a test that does not move time.
- * Only the platform's own tests, which test the queue itself, may write those columns.
+ * Only the platform's own tests, which test the queue itself, may write those columns; a test that needs a queue
+ * fault (a redelivery after a crash) asks the platform for it ({@code com.tally.platform.internal.QueueFaults}).
+ * There are no exceptions.
  *
  * <p>The job and queue tables are read from the main sources: every {@code QueueDefinition.of(name, table, ...)} and
  * every module's {@code *.jobs} table. A test's SQL is read with its string literals joined across {@code +}.
@@ -28,14 +29,6 @@ class F13NoTestMakesWorkDueTest {
 
     static final Path MAIN = Path.of("src/main/java");
     static final Path TESTS = Path.of("src/test/java");
-
-    /**
-     * Crash simulations that rewrite a row on purpose, each with its reason. Not a way around the rule: a new
-     * entry needs a reviewer's agreement.
-     */
-    static final Map<String, String> ALLOWED = Map.of(
-            "com/tally/subscription/RenewalIT.java subscription.renewal",
-            "redelivers a renewal already DONE, as if the instance crashed before marking it done");
 
     static final Pattern QUEUE_DEFINITION = Pattern.compile("QueueDefinition\\.of\\(\\s*\"[^\"]+\",\\s*\"([a-z_]+\\.[a-z_]+)\"");
     static final Pattern JOB_TABLE = Pattern.compile("\"([a-z_]+\\.jobs)\"");
@@ -79,8 +72,7 @@ class F13NoTestMakesWorkDueTest {
             Matcher update = UPDATE.matcher(sql);
             while (update.find()) {
                 String table = update.group(1).toLowerCase();
-                if (tables.contains(table) && MAKES_DUE.matcher(update.group(2)).find()
-                        && !ALLOWED.containsKey(relative + " " + table)) {
+                if (tables.contains(table) && MAKES_DUE.matcher(update.group(2)).find()) {
                     violations.add(relative + ": UPDATE " + table + " SET " + update.group(2).strip());
                 }
             }
