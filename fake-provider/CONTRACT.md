@@ -124,6 +124,7 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **Fake:** `OUTAGE` returns 503 for `POST /charges` only; `GET /charges` still answers.
 - **Tally relies on it in:** nothing that a test requires: reconciliation backs off when the lookup fails. But AT-4 never exercises a lookup outage.
 - **If a real provider differs:** a real outage likely takes the lookup down too. Resolution of `UNKNOWN` attempts then waits one hour, then a day (Spike B), past D3's target.
+- **Gap:** the fake has no mode in which the lookup itself fails, once or for a while. So no test can show what Tally does when a lookup is refused or times out. `UnknownCheckScheduleIT` reaches the same "checked, nothing changed" path through `LOOKUP_LAG` and `OUTAGE` together: the lookup shows nothing, and the repeat with the key gets a 503. Listed here rather than added, pending the schedule decision (proposed ADR-031).
 - **Check:** see the provider's status history for partial outages.
 
 **A15. There is no settlement report.**
