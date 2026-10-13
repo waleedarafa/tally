@@ -31,7 +31,9 @@ Build A. Record it as **proposed ADR-030, "Alert rules as code"**: Prometheus al
 
 D2 says an unknown payment outcome is resolved within 1 hour. No metric shows how old the oldest unknown attempt is: `tally.payment.unknown_past_key_window` only covers attempts past 20 hours. Add a gauge, `tally.payment.unknown.oldest_age_seconds`: the age of the oldest attempt in state UNKNOWN, 0 if none. Test it first.
 
-If you find another driver measure with no metric behind it, list it in the report. Do not add metrics beyond this one without asking.
+D9 needs a second metric. A stall is "work is waiting, and nothing finishes". No metric shows when a queue last finished an item. Add `tally.queue.last_progress_age_seconds{queue, money}`: the time since an item of this queue last finished (any outcome that ends its processing), read from the queue table like the other queue gauges. Test it first. (Amended after the threshold check on 13 October: see "Why D9 is measured as progress" below.)
+
+If you find another driver measure with no metric behind it, list it in the report. Do not add metrics beyond these two without asking.
 
 ### 3. The rules file
 
@@ -44,10 +46,13 @@ The alerts, with the measure each one protects:
 | Alert | Fires when | For | Severity | Driver | Runbook |
 |---|---|---|---|---|---|
 | `TallyDown` | Prometheus cannot scrape Tally (`up == 0`, or the target is absent) | 2m | page | G9 | `tally-down.md` (new) |
-| `JobStalled` | `tally.job.overdue` is 1 for any job | see the budget below | page | D9 | `job-or-queue-stalled.md` (new) |
-| `QueueStalled` | `tally.queue.overdue` is 1 for any queue | see the budget below | page | D9 | `job-or-queue-stalled.md` |
-| `PaymentRequestedStuck` | `tally.payment.requested.stuck` is 1 | see the budget below | page | D9 | `job-or-queue-stalled.md` |
-| `QueueItemsFailed` | `tally.queue.failed` > 0 for any queue | 10m | ticket | FR-017 | `queue-items-failed.md` (new) |
+| `BillingStalled` | A money queue (`money="true"`) has `tally.queue.waiting` > 0 and `tally.queue.last_progress_age_seconds` > 180 | 1m | page | D9 | `billing-stalled.md` (new) |
+| `ListenersStalled` | `tally.events.listeners.queued` > 0 and `tally.events.listeners.last_success_age_seconds` > 180 | 1m | page | D9 | `billing-stalled.md` |
+| `BillingBehind` | A money queue's `tally.queue.oldest_due_age_seconds` > 14400 (4 hours) | 0m | page | D6 | `billing-stalled.md` |
+| `JobOverdue` | `tally.job.overdue` is 1 for any job | 5m | ticket | FR-023 | `job-overdue.md` (new) |
+| `PaymentRequestedStuck` | `tally.payment.requested.stuck` is 1 (its own 15 minutes, ADR-018) | 0m | page | D2 | `billing-stalled.md` |
+| `MoneyQueueItemsFailed` | `tally.queue.failed` > 0 for a money queue | 0m | page | D1, D2 | `queue-items-failed.md` (new) |
+| `QueueItemsFailed` | `tally.queue.failed` > 0 for any other queue | 10m | ticket | FR-017 | `queue-items-failed.md` |
 | `EventsStuck` | `tally.events.oldest_incomplete_age_seconds` > 900 | 0m | page | D3 | `events-stuck.md` (new) |
 | `EventUnreadable` | `tally.events.unreadable` > 0 | 0m | page | D3 | `unreadable-event-publication.md` (exists) |
 | `ListenerFailing` | `tally.events.listeners.failed` increased in the last 15 minutes | 0m | ticket | D3 | `events-stuck.md` |
@@ -59,7 +64,15 @@ The alerts, with the measure each one protects:
 
 **Metric names.** The names above are Micrometer's. In Prometheus format they become underscored, counters gain `_total`, and a base unit may be added. Use the names Tally actually exports. The fitness function in point 6 decides; where it disagrees with this table, correct the table and the rules, not the test.
 
-**The D9 budget.** D9 says a stalled billing run alerts on-call within 5 minutes. The time from stall to alert is: the job's or queue's own overdue threshold, plus up to one scrape interval (assume 30 seconds), plus the rule's `for`. For every job and queue that does billing or payment work, that sum must be 5 minutes or less. Choose each `for` to meet it, and keep it at least 1 minute so a single bad scrape does not page anyone. If a job's overdue threshold makes 5 minutes impossible, stop and report it: CLAUDE.md says a response measure that cannot be met is a stop-and-ask.
+**Why D9 is measured as progress, not as age.** The first version of this brief alerted on `tally.queue.overdue` and `tally.job.overdue`. The threshold check showed both use a 5-minute floor, so no alert could reach on-call within D9's 5 minutes. Lowering the floor would not fix the real problem. On D6's busiest day, 200,000 renewals fall due within hours and are worked at about 14 a second. The oldest due item is then legitimately hours old. An age alert would page on every busy billing day, and a real stall would look the same as a busy one.
+
+So D9 and D6 ask two different questions:
+- **Is the billing run stuck?** (D9) Work is waiting, and nothing has finished for 3 minutes. That is `BillingStalled` and `ListenersStalled`. A busy run finishes items every second, so it never fires.
+- **Is the billing run keeping up?** (D6) The oldest due item is older than D6's 4-hour window. That is `BillingBehind`.
+
+`tally.queue.overdue` and FR-023's 5-minute floor stay as they are. They are not used for paging.
+
+**The D9 budget.** Stall to alert = 180 s without progress + up to one scrape interval (assume 30 s) + `for` 1m = 4 minutes 30 seconds, inside D9's 5 minutes. Keep `for` at least 1 minute so a single bad scrape does not page anyone. The money queues are the renewal queue and the payment-collection queue; the listener pool carries the work between them (renewal, then invoice, then collection request).
 
 ### 4. Runbooks
 
@@ -73,7 +86,7 @@ Each existing metric description that already points to a runbook keeps its link
 - one test where it fires, at the expected time;
 - one test just below its threshold or `for`, where it does not fire.
 
-For `JobStalled` and `QueueStalled`, the test shows the D9 budget: a stall that starts at time zero fires by 5 minutes, using the real overdue threshold of the billing run's job and queue.
+For `BillingStalled` and `ListenersStalled`, the tests show the D9 budget: a stall that starts at time zero fires by 4 minutes 30 seconds, and a queue that is busy (waiting > 0, but finishing items every few seconds) never fires. For `BillingBehind`, a test shows a 3-hour backlog that is still progressing does not fire, and one older than 4 hours does.
 
 ### 6. Fitness function F14: rules, runbooks and metrics agree
 
@@ -103,16 +116,17 @@ The commit stage runs `promtool check rules` and `promtool test rules`. Use the 
 |---|---|
 | A0 | `/actuator/prometheus` serves every `tally.*` metric |
 | A1 | `tally.payment.unknown.oldest_age_seconds` shows the oldest UNKNOWN attempt's age, and 0 when there is none |
+| A1b | `tally.queue.last_progress_age_seconds` resets when an item of the queue finishes, and keeps ageing while nothing finishes |
 | A2 | `promtool check rules` passes |
 | A3 | Every alert has a firing test and a quiet test; `promtool test rules` passes |
-| A4 | The D9 budget test passes for the billing run's job and queue |
+| A4 | The D9 budget tests pass: a stall fires within 4m30s; a busy run never fires |
 | A5 | F14 passes, and was shown failing on each of its five conditions |
 | A6 | Every new runbook exists and is named by a rule |
 | A7 | CI's commit stage runs A2 and A3 |
 
 ## Pull requests
 
-1. **Export and the missing metric:** points 1 and 2, with A0 and A1.
+1. **Export and the missing metrics:** points 1 and 2, with A0, A1 and A1b.
 2. **Rules, tests, runbooks and F14:** points 3 to 6, with A2 to A6.
 3. **CI:** point 7, with A7.
 
