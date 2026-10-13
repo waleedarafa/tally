@@ -1,6 +1,6 @@
 # Runbook: unknown payment
 
-A payment attempt is UNKNOWN when Tally does not know whether the provider charged: the call timed out, or a sent attempt went stale (ADR-018). Reconciliation resolves it by itself, by looking the reference up and then, inside the key window, repeating the charge with the same key (ADR-026). D2 expects every unknown outcome resolved within 1 hour.
+A payment attempt is UNKNOWN when Tally does not know whether the provider charged: the call timed out, or a sent attempt went stale (ADR-018). Reconciliation resolves it by itself, by looking the reference up and then, inside the key window, repeating the charge with the same key (ADR-026). It checks at 5, 15, 30, 45 and 60 minutes after the attempt became UNKNOWN, then hourly until the key window ends (20 hours after it was sent), then daily (ADR-031). D2 expects every unknown outcome resolved within 1 hour.
 
 ## Who
 
@@ -8,7 +8,7 @@ The billing team's on-call engineer (Design Record §11).
 
 ## When
 
-**`PaymentUnknownTooLong`** (page, D2): the oldest UNKNOWN attempt was sent over an hour ago (`tally_payment_unknown_oldest_age_seconds`).
+**`PaymentUnknownTooLong`** (page, D2): the oldest UNKNOWN attempt was sent over 50 minutes ago (`tally_payment_unknown_oldest_age_seconds`). Four checks have already failed to resolve it, and D2's hour ends in about 10 minutes.
 
 ## See what is wrong
 

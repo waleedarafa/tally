@@ -187,8 +187,11 @@ public class PaymentAttempt {
      * the provider may have forgotten the key, and a repeat would charge a second time (CONTRACT.md A23).
      */
     public boolean mayRepeatKey(Duration window, Instant now) {
-        Instant keyFirstUsed = sentAt != null ? sentAt : createdAt;
-        return keyFirstUsed.plus(window).isAfter(now);
+        return keyFirstUsed().plus(window).isAfter(now);
+    }
+
+    private Instant keyFirstUsed() {
+        return sentAt != null ? sentAt : createdAt;
     }
 
     public void succeeded(String chargeId, Instant now) {
@@ -249,15 +252,19 @@ public class PaymentAttempt {
         reconcileAt = null;
     }
 
-    /** A check that changed nothing: back off (5 minutes, 1 hour, then daily; DECLINED for 48 hours only). */
-    public void checkedWithoutChange(Instant now) {
+    /**
+     * A check that changed nothing: the next one, by {@link ReconciliationSchedule}. An UNKNOWN attempt's times count
+     * from when it became UNKNOWN (its last transition, {@code updatedAt}), hourly while its key may be repeated
+     * ({@code keyWindow}, ADR-026 b), then daily (ADR-031). A DECLINED attempt backs off, for 48 hours only.
+     */
+    public void checkedWithoutChange(Duration keyWindow, Instant now) {
         if (state != AttemptState.UNKNOWN && state != AttemptState.DECLINED) {
             throw new IllegalStateException("Attempt " + id + " is " + state + ": nothing to reconcile");
         }
         reconcileChecks++;
         reconcileAt = state == AttemptState.DECLINED
                 ? ReconciliationSchedule.afterFailed(reconcileChecks, updatedAt, now).orElse(null)
-                : ReconciliationSchedule.after(reconcileChecks, now);
+                : ReconciliationSchedule.nextForUnknown(updatedAt, keyFirstUsed().plus(keyWindow), now);
     }
 
     private void move(Event event, Instant now) {

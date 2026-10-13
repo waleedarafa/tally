@@ -58,13 +58,13 @@ Times are from the rule unit tests. Those sample every 30 s, the scrape interval
 | `EventsStuck` | page | D3 | publication 15 minutes old, plus at most one scrape | none pending longer than 15 minutes |
 | `EventUnreadable` | page | D3 | the first unreadable publication, plus at most one scrape | D3 |
 | `ListenerFailing` | ticket | D3 | the first listener failure, plus at most one scrape | D3 |
-| `PaymentUnknownTooLong` | page | D2 | oldest UNKNOWN past 1 h, plus at most one scrape | resolved within 1 hour |
+| `PaymentUnknownTooLong` | page | D2 | oldest UNKNOWN past 50 minutes, plus at most one scrape (changed by ADR-031, #52) | resolved within 1 hour |
 | `PaymentUnknownPastKeyWindow` | page | D2 | the first attempt past the key window (20 h) | D2 |
 | `ProviderBreakerOpen` | ticket | ADR-013 | 10 minutes without the breaker closing | ADR-013 |
 | `ProviderFalseDecline` | ticket | D2 | the first DECLINED→SUCCEEDED correction, plus at most one scrape | D2 |
 | `InvariantViolated` | page | D1, D2 | the daily check's run, plus at most one scrape | D1: zero duplicates; D2: zero double charges |
 
-**`EventsStuck` and `PaymentUnknownTooLong` alert at their measure, not before it.** D3 allows no publication pending beyond 15 minutes, and D2 allows 1 hour to resolve an unknown outcome. Each alert fires when that limit is passed, so it reports a missed measure. It does not warn before one is missed. I've left them as the brief specifies; an earlier warning would be a new decision.
+**`EventsStuck` alerts at its measure, not before it.** D3 allows no publication pending beyond 15 minutes; the warning before that is `ListenerFailing`, a ticket on the first failure (decision on #50). **`PaymentUnknownTooLong` alerts at 50 minutes, before D2's hour ends** (ADR-031, #52): the reconciliation schedule now checks an UNKNOWN attempt at 5, 15, 30, 45 and 60 minutes, so one failed check no longer loses the hour, and a person is paged after the fourth.
 
 ## 5. Driver measures still without a metric or an alert
 
