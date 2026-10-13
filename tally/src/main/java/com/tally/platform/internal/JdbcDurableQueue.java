@@ -46,6 +46,7 @@ final class JdbcDurableQueue implements DurableQueue {
     private final String instance;
     private final Duration claimTimeout;
     private final String table;
+    private final Instant registeredAt;
 
     JdbcDurableQueue(QueueDefinition definition, Processor processor, ClaimGate gate, JdbcTemplate jdbc, Clock clock,
             String instance, Duration claimTimeout) {
@@ -57,6 +58,7 @@ final class JdbcDurableQueue implements DurableQueue {
         this.instance = instance;
         this.claimTimeout = claimTimeout;
         this.table = definition.table();
+        this.registeredAt = clock.instant();
     }
 
     QueueDefinition definition() {
@@ -141,22 +143,22 @@ final class JdbcDurableQueue implements DurableQueue {
     boolean complete(Claim claim, Outcome outcome) {
         int updated = switch (outcome) {
             case Outcome.Done done -> jdbc.update("UPDATE " + table
-                            + " SET status = 'DONE', claim_token = NULL, last_error = NULL"
+                            + " SET status = 'DONE', claim_token = NULL, last_error = NULL, finished_at = ?"
                             + " WHERE id = ? AND claim_token = ?",
-                    claim.item().id(), claim.token());
+                    at(clock.instant()), claim.item().id(), claim.token());
             case Outcome.RetryAt retry -> jdbc.update("UPDATE " + table
-                            + " SET status = 'READY', due_at = ?, claim_token = NULL, last_error = NULL"
+                            + " SET status = 'READY', due_at = ?, claim_token = NULL, last_error = NULL, finished_at = ?"
                             + " WHERE id = ? AND claim_token = ?",
-                    at(retry.dueAt()), claim.item().id(), claim.token());
+                    at(retry.dueAt()), at(clock.instant()), claim.item().id(), claim.token());
         };
         return owned(claim, updated);
     }
 
     boolean fail(Claim claim, Exception error) {
         int updated = jdbc.update("UPDATE " + table
-                        + " SET status = 'FAILED', claim_token = NULL, last_error = ?"
+                        + " SET status = 'FAILED', claim_token = NULL, last_error = ?, finished_at = ?"
                         + " WHERE id = ? AND claim_token = ?",
-                String.valueOf(error), claim.item().id(), claim.token());
+                String.valueOf(error), at(clock.instant()), claim.item().id(), claim.token());
         return owned(claim, updated);
     }
 
@@ -164,10 +166,10 @@ final class JdbcDurableQueue implements DurableQueue {
     boolean reschedule(Claim claim, Instant next, Optional<Exception> error) {
         int updated = jdbc.update("UPDATE " + table
                         + " SET status = 'READY', due_at = ?, claim_token = NULL, last_error = ?,"
-                        + " last_success_at = CASE WHEN ? THEN ? ELSE last_success_at END"
+                        + " last_success_at = CASE WHEN ? THEN ? ELSE last_success_at END, finished_at = ?"
                         + " WHERE id = ? AND claim_token = ?",
                 at(next), error.map(String::valueOf).orElse(null),
-                error.isEmpty(), at(clock.instant()), claim.item().id(), claim.token());
+                error.isEmpty(), at(clock.instant()), at(clock.instant()), claim.item().id(), claim.token());
         return owned(claim, updated);
     }
 
@@ -195,6 +197,19 @@ final class JdbcDurableQueue implements DurableQueue {
         OffsetDateTime oldest = jdbc.queryForObject("SELECT min(due_at) FROM " + table
                 + " WHERE status IN ('READY', 'IN_PROCESSING') AND due_at <= ?", OffsetDateTime.class, at(now));
         return oldest == null ? 0 : Duration.between(oldest.toInstant(), now).toMillis() / 1000.0;
+    }
+
+    /**
+     * Seconds since an item's processing last ended, whatever the outcome (done, failed, or returned to the
+     * queue); an item a worker holds is not progress. Counts from this queue's registration on this instance
+     * when no finished row is left, for example after retention deleted them (FR-037). D9: work waiting with
+     * no progress is a stalled billing run.
+     */
+    double lastProgressAgeSeconds() {
+        Instant now = clock.instant();
+        OffsetDateTime last = jdbc.queryForObject("SELECT max(finished_at) FROM " + table, OffsetDateTime.class);
+        Instant since = last == null ? registeredAt : last.toInstant();
+        return Math.max(0, Duration.between(since, now).toMillis() / 1000.0);
     }
 
     /** When the item with this key last succeeded, and when it was created. */

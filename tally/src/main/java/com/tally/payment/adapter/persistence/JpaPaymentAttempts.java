@@ -49,6 +49,11 @@ interface JpaPaymentAttempts extends JpaRepository<PaymentAttempt, UUID>, Paymen
     }
 
     @Override
+    default Optional<Instant> oldestUnknownSentAt() {
+        return Optional.ofNullable(findOldestSentAtInState(AttemptState.UNKNOWN));
+    }
+
+    @Override
     default Optional<Instant> oldestWaitingToBeSent() {
         return Optional.ofNullable(findOldestCreatedAtInState(AttemptState.REQUESTED));
     }
@@ -73,6 +78,9 @@ interface JpaPaymentAttempts extends JpaRepository<PaymentAttempt, UUID>, Paymen
 
     @Query("SELECT min(a.createdAt) FROM PaymentAttempt a WHERE a.state = :state")
     Instant findOldestCreatedAtInState(AttemptState state);
+
+    @Query("SELECT min(a.sentAt) FROM PaymentAttempt a WHERE a.state = :state")
+    Instant findOldestSentAtInState(AttemptState state);
 
     Optional<PaymentAttempt> findFirstByReferenceOrderByNumberDesc(String reference);
 

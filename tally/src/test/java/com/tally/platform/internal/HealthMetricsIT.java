@@ -34,6 +34,9 @@ class HealthMetricsIT extends AbstractIntegrationTest {
                 if (item.key().startsWith("bad")) {
                     throw new IllegalStateException("bad item");
                 }
+                if (item.key().startsWith("later")) {
+                    return Outcome.retryAt(item.dueAt().plus(Duration.ofHours(1)));
+                }
                 return Outcome.done();
             });
         }
@@ -101,7 +104,7 @@ class HealthMetricsIT extends AbstractIntegrationTest {
 
         assertThat(gauge("tally.queue.overdue", "queue", "test-health")).isZero();
 
-        // Nobody processes the queue: the oldest item keeps ageing, and is overdue past 5 minutes (D7).
+        // Nobody processes the queue: the oldest item keeps ageing, and is overdue past 5 minutes (FR-023).
         clock.advance(Duration.ofMinutes(5));
         assertThat(gauge("tally.queue.oldest_due_age_seconds", "queue", "test-health")).isEqualTo(420);
         assertThat(gauge("tally.queue.overdue", "queue", "test-health")).isEqualTo(1);
@@ -111,6 +114,35 @@ class HealthMetricsIT extends AbstractIntegrationTest {
         assertThat(gauge("tally.queue.waiting", "queue", "test-health")).isZero();
         assertThat(gauge("tally.queue.oldest_due_age_seconds", "queue", "test-health")).isZero();
         assertThat(gauge("tally.queue.failed", "queue", "test-health")).isEqualTo(1);
+    }
+
+    @Test
+    void lastProgressResetsWhenAnItemFinishesAndAgesWhileNothingFinishes() {
+        healthQueue.enqueue("a", clock.instant(), "p");
+        healthQueue.processDue();
+        assertThat(gauge("tally.queue.last_progress_age_seconds", "queue", "test-health")).isZero();
+        assertThat(meters.get("tally.queue.last_progress_age_seconds").tags("queue", "test-health", "money", "false")
+                .gauge()).isNotNull();
+
+        // Work waits and nothing finishes, not even an item a worker has claimed: progress keeps ageing (D9).
+        healthQueue.enqueue("b", clock.instant(), "p");
+        healthQueue.enqueue("c", clock.instant(), "p");
+        clock.advance(Duration.ofMinutes(4));
+        queues.queues().stream().filter(q -> q.name().equals("test-health")).findFirst().orElseThrow().claim(1);
+        assertThat(gauge("tally.queue.waiting", "queue", "test-health")).isEqualTo(2);
+        assertThat(gauge("tally.queue.last_progress_age_seconds", "queue", "test-health")).isEqualTo(240);
+
+        // Every outcome that ends an item's processing is progress: done, failed, and returned to the queue.
+        healthQueue.processDue();
+        assertThat(gauge("tally.queue.last_progress_age_seconds", "queue", "test-health")).isZero();
+        clock.advance(Duration.ofMinutes(1));
+        healthQueue.enqueue("bad-1", clock.instant(), "p");
+        healthQueue.processDue();
+        assertThat(gauge("tally.queue.last_progress_age_seconds", "queue", "test-health")).isZero();
+        clock.advance(Duration.ofMinutes(1));
+        healthQueue.enqueue("later-1", clock.instant(), "p");
+        healthQueue.processDue();
+        assertThat(gauge("tally.queue.last_progress_age_seconds", "queue", "test-health")).isZero();
     }
 
     @Test

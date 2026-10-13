@@ -61,6 +61,12 @@ class Reconciliation implements PeriodicJob {
                         + " reconciliation and a person (ADR-026 c). Runbook:"
                         + " docs/runbooks/unknown-payment-past-key-window.md")
                 .strongReference(true).register(meters);
+        Gauge.builder("tally.payment.unknown.oldest_age_seconds", attempts,
+                        a -> a.oldestUnknownSentAt()
+                                .map(sent -> Duration.between(sent, clock.instant()).toMillis() / 1000.0).orElse(0.0))
+                .description("Age of the oldest UNKNOWN attempt, from when it was sent; 0 if none."
+                        + " D2: an unknown outcome is resolved within 1 hour")
+                .baseUnit("seconds").strongReference(true).register(meters);
     }
 
     @Override
