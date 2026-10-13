@@ -14,7 +14,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 /**
  * Starts whole Tally instances by hand, for tests where a crash and a restart must be separate application
  * instances (Spike A, AT-7). Each has its own TestClock. The instances of one object share one database of their
- * own, copied from the migrated template (ADR-029, proposed): a test's instances compete for its rows only.
+ * own, copied from the migrated template (ADR-029): a test's instances compete for its rows only.
  */
 public final class TallyInstances implements AutoCloseable {
 

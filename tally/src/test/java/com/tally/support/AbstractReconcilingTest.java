@@ -47,7 +47,7 @@ public abstract class AbstractReconcilingTest extends AbstractProviderIntegratio
     protected JdbcTemplate jdbc;
 
     /**
-     * The class has a context and a database of its own (ADR-029, proposed): reconciliation runs once as the context
+     * The class has a context and a database of its own (ADR-029): reconciliation runs once as the context
      * starts, and its next run is set from the clock when that run ends. Let it end before a test moves time.
      */
     @BeforeEach

@@ -55,7 +55,7 @@ class AT08ListenerFailsIT extends AbstractProviderIntegrationTest {
 
     /**
      * Starts from no unfinished publications, and lets the resubmission job's first run, as the context starts, end
-     * before time moves: its next run is set from the clock when that run ends (ADR-029, proposed).
+     * before time moves: its next run is set from the clock when that run ends (ADR-029).
      */
     @BeforeEach
     void cleanSlate() {

@@ -45,7 +45,7 @@ class EventResubmissionIT extends AbstractIntegrationTest {
 
     /**
      * Starts from no unfinished publications, and lets the job's first run, as the context starts, end before time
-     * moves: its next run is set from the clock when that run ends (ADR-029, proposed).
+     * moves: its next run is set from the clock when that run ends (ADR-029).
      */
     @BeforeEach
     void cleanSlate() {

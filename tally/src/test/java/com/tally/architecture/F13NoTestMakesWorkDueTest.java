@@ -15,7 +15,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 /**
- * F13, ADR-029 (proposed): a test that waits on background work moves its clock to the work's due time; it never
+ * F13, ADR-029: a test that waits on background work moves its clock to the work's due time; it never
  * rewrites a job or queue row's due time or status to make the work due. Every test class has a database of its own,
  * so no row is stranded on another context's clock, and a rewrite would only hide a test that does not move time.
  * Only the platform's own tests, which test the queue itself, may write those columns; a test that needs a queue

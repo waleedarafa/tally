@@ -63,7 +63,7 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
 
     @Test
     void anInjectedDuplicateInvoiceRaisesTheViolationsMetric() {
-        // The class has a context and a database of its own (ADR-029, proposed), so the check runs once as the
+        // The class has a context and a database of its own (ADR-029), so the check runs once as the
         // context starts, and its next run is set from the clock when that run ends. Let it end before time moves.
         await().atMost(Duration.ofSeconds(10)).until(() -> lastRun() != null);
         long before = duplicateInvoices.violations();

@@ -3,7 +3,7 @@
 Tally is a subscription billing system built as a learning project, modelled loosely on Kill Bill.
 Architecture work happens outside this repository. Your job is to implement it faithfully, and to report back where reality differs from the design.
 
-Decision records are cited as `ADR-NNN` for the second design (`docs/architecture/v2/README.md`) and `FR-NNN` for the archived first run (`docs/architecture/archive/first-run/`). The two logs reuse numbers for different decisions, so always use the prefix. Slice 1 briefs and reports were written before the archive and use ADR-NNN for first-run records.
+Decision records are cited as `ADR-NNN` for the second design (`docs/architecture/v2/README.md`) and `FR-NNN` for the archived first run (`docs/architecture/archive/first-run/`). The two logs reuse numbers for different decisions, so always use the prefix. Slice 1 briefs and reports were written before the archive and use ADR-NNN for first-run records. Cite a decision record by its number only. Never write its status (proposed, accepted) in code, tests or comments: the status lives in docs/architecture/v2/README.md and changes; a comment that copies it goes stale.
 
 ## Read first
 - `docs/architecture/v2/README.md`: the decision log of the second design, and what happened to every first-run record.
@@ -37,7 +37,7 @@ Before adding any other dependency, or if unsure which version is compatible wit
 - `main` is the trunk. Work on a short-lived branch and merge through a pull request (FR-038, ADR-008).
 - Before acting on a decision the user pastes, post it verbatim as a comment on the PR it concerns, so the repository holds the decisions themselves.
 - Write the acceptance test for a scenario before its implementation, where practical.
-- Run `./mvnw verify` before every commit. It runs unit, integration and fitness-function tests.
+- Run `./mvnw verify` before every commit. It runs unit, integration and fitness-function tests. `./mvnw verify` must report BUILD SUCCESS with tests run before a commit is pushed; a failure at the Java version check is a failure, not a pass. The build needs JDK 25; cloud sessions get it from `.claude/hooks/session-start.sh`.
 - Small commits, each leaving the build green.
 - Prefer the simplest code that satisfies the scenario. Do not build for later slices.
 

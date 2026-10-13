@@ -14,8 +14,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 /**
- * Records what the provider's record, or a repeat with an attempt's key, showed (FR-018; proposed
- * ADR-026), settles the collection request, and publishes the matching event with the request's version
+ * Records what the provider's record, or a repeat with an attempt's key, showed (FR-018; ADR-026),
+ * settles the collection request, and publishes the matching event with the request's version
  * as its sequence (ADR-016). Called inside the transaction that changes the attempt. Every correction
  * increments {@code tally.payment.outcome_corrected{from,to}}.
  */

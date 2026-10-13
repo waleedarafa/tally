@@ -16,7 +16,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * (for example with a real port) and still inherit them.
  * One container is shared by every test class in the run (singleton container pattern); each test class gets
  * a database of its own in it, copied from a migrated template ({@link com.tally.support.PerContextDatabase},
- * ADR-029, proposed).
+ * ADR-029).
  */
 @SpringBootTest
 @TestPropertySource(properties = {

@@ -16,7 +16,7 @@ import org.springframework.test.context.ContextCustomizerFactory;
 import org.springframework.test.context.MergedContextConfiguration;
 
 /**
- * Test isolation (ADR-029, proposed): no test class meets a row it did not create. Every test class that extends
+ * Test isolation (ADR-029): no test class meets a row it did not create. Every test class that extends
  * {@link AbstractIntegrationTest} gets a Spring context and a PostgreSQL database of its own, and so does every
  * {@link TallyInstances}. Each database is a copy of a template migrated once per run
  * ({@code CREATE DATABASE ... TEMPLATE ...}, about 50 ms). The test class is part of the customizer's equality, so a
