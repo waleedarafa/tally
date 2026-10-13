@@ -3,7 +3,7 @@
 Tally is a subscription billing system built as a learning project, modelled loosely on Kill Bill.
 Architecture work happens outside this repository. Your job is to implement it faithfully, and to report back where reality differs from the design.
 
-Decision records are cited as `ADR-NNN` for the second design (`docs/architecture/v2/README.md`) and `FR-NNN` for the archived first run (`docs/architecture/archive/first-run/`). The two logs reuse numbers for different decisions, so always use the prefix. Slice 1 briefs and reports were written before the archive and use ADR-NNN for first-run records. Cite a decision record by its number only. Never write its status (proposed, accepted) in code, tests or comments: the status lives in docs/architecture/v2/README.md and changes; a comment that copies it goes stale.
+Decision records are cited as `ADR-NNN` for the second design (`docs/architecture/v2/README.md`) and `FR-NNN` for the archived first run (`docs/architecture/archive/first-run/`). The two logs reuse numbers for different decisions, so always use the prefix. Slice 1 briefs and reports were written before the archive and use ADR-NNN for first-run records. Cite a decision record by its number only. Never write its status (proposed, accepted) in code, tests or comments: the status lives in docs/architecture/v2/README.md and changes; a comment that copies it goes stale. A driver is cited as Dn from v2 drivers.md; a first-run driver only as FR-Dn.
 
 ## Read first
 - `docs/architecture/v2/README.md`: the decision log of the second design, and what happened to every first-run record.
