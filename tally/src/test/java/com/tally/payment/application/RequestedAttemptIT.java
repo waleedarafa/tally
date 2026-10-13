@@ -12,7 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * A REQUESTED attempt was never sent: the provider is called only after SENT commits (ADR-026).
- * However old, it never becomes UNKNOWN; a long wait means the queue is stuck, and job health says so (D9).
+ * However old, it never becomes UNKNOWN; a long wait means the queue is stuck, and job health says so (D2).
  */
 class RequestedAttemptIT extends AbstractReconcilingTest {
 

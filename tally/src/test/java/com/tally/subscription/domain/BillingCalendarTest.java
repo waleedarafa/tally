@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
-/** The D4 calendar edge cases (AT-3), as fast unit tests. */
+/** The D10 calendar edge cases (AT-3), as fast unit tests. */
 class BillingCalendarTest {
 
     static List<LocalDate> datesFrom(String start, int count) {

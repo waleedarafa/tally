@@ -74,7 +74,7 @@ class InvoicingListeners {
     }
 
     /**
-     * Every committed InvoiceIssued with something to pay leads to exactly one collection request (D2).
+     * Every committed InvoiceIssued with something to pay leads to exactly one collection request (D3).
      * Payment is idempotent per reference. A zero invoice is paid when issued and never reaches Payment.
      */
     @ApplicationModuleListener

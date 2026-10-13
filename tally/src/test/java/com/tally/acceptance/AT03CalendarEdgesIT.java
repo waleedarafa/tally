@@ -29,7 +29,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * AT-3. Calendar edges (D4). Pass when: day 31 bills on 30 April and on 28 or 29 February; billing
+ * AT-3. Calendar edges (D10). Pass when: day 31 bills on 30 April and on 28 or 29 February; billing
  * happens at local midnight in a non-UTC zone; and stays correct across daylight-saving changes.
  *
  * <p>Runs the real renewal path (billing queue, invoicing, payment, provider), moving the clock from

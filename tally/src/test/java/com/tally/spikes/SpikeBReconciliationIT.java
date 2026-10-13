@@ -78,7 +78,7 @@ class SpikeBReconciliationIT extends AbstractReconcilingTest {
         Result r = run("B1 TIMEOUT_AFTER_CHARGE", "SUCCEEDED", "(no answer: read timeout)", AttemptState.UNKNOWN,
                 "TIMEOUT_AFTER_CHARGE");
         assertThat(r.state()).isEqualTo(AttemptState.SUCCEEDED);
-        assertThat(r.taken()).isLessThanOrEqualTo(Duration.ofHours(1)); // D3: UNKNOWN resolved within 1 hour
+        assertThat(r.taken()).isLessThanOrEqualTo(Duration.ofHours(1)); // D2: UNKNOWN resolved within 1 hour
         assertThat(r.charges()).isEqualTo(1);
     }
 

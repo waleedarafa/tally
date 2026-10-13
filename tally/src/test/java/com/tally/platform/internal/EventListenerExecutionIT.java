@@ -18,7 +18,7 @@ import spike.modulith.SpikeEvent;
 import spike.modulith.SpikeListener;
 import spike.modulith.SpikeListener.Behaviour;
 
-/** D13, R3: asynchronous event listeners run on the platform's pool, which reports its health (FR-023). */
+/** R3: asynchronous event listeners run on the platform's pool, which reports its health (FR-023). */
 @Import(SpikeConfiguration.class)
 class EventListenerExecutionIT extends AbstractIntegrationTest {
 

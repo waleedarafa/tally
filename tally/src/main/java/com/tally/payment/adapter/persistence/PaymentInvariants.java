@@ -15,7 +15,7 @@ class PaymentInvariants {
 
     static final String JOBS = "payment.jobs";
 
-    /** D3: never charged twice. No reference has more than one successful attempt. */
+    /** D2: never charged twice. No reference has more than one successful attempt. */
     @Bean
     InvariantCheck duplicateSuccessfulCharges(JdbcTemplate jdbc) {
         return check("payment.duplicate-successful-charges", () -> jdbc.queryForObject("""
@@ -24,7 +24,7 @@ class PaymentInvariants {
                 """, Long.class));
     }
 
-    /** D3: no UNKNOWN outcome after 24 hours. */
+    /** D2: no UNKNOWN outcome after 24 hours. */
     @Bean
     InvariantCheck unknownOverADay(JdbcTemplate jdbc, Clock clock) {
         return check("payment.unknown-over-24h", () -> jdbc.queryForObject(

@@ -14,7 +14,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
- * AT-6. Lying provider (D3). Pass when: reconciliation corrects the outcome, and
+ * AT-6. Lying provider (D2). Pass when: reconciliation corrects the outcome, and
  * {@code tally.payment.outcome_corrected} increments.
  *
  * <p>The direction tested is the one the brief's reconciliation covers: the provider charged the card

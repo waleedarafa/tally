@@ -20,7 +20,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 /**
  * The platform owns the threads that run asynchronous event listeners (FR-027; slice 1 report
- * D13 and R3). Spring Modulith's {@code @ApplicationModuleListener} is {@code @Async}; the
+ * FR-023 and R3). Spring Modulith's {@code @ApplicationModuleListener} is {@code @Async}; the
  * {@link AsyncConfigurer} below hands every such listener to {@code eventListenerExecutor}. That
  * pool is the application's only {@code Executor} bean, so Spring Boot does not create its own.
  *

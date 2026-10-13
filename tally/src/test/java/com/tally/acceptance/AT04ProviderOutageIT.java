@@ -32,7 +32,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.client.RestClient;
 
 /**
- * AT-4. Provider outage mid-run (D3, D7). Pass when: the breaker opens; nothing is claimed while it
+ * AT-4. Provider outage mid-run (D2, D9). Pass when: the breaker opens; nothing is claimed while it
  * is open; invoices are still created; everything is charged after recovery; a sign-up during the
  * outage still answers at once, with the access promise (ADR-014; checkout's wait is gone since Slice 1R
  * PR-9). The breaker runs on its production settings (opens at 50% of at least 5 calls, 30 s).

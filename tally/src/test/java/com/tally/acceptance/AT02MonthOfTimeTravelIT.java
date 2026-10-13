@@ -25,7 +25,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * AT-2. One month of time travel, 100 accounts (D1, D4). Pass when: exactly one new invoice and one
+ * AT-2. One month of time travel, 100 accounts (D1, D10). Pass when: exactly one new invoice and one
  * new payment attempt per account, and the test takes under 2 minutes.
  *
  * <p>Pollers run on their production settings (1 s poll interval, 4 billing and 15 payment workers).

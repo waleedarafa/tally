@@ -158,7 +158,7 @@ class HealthMetricsIT extends AbstractIntegrationTest {
 
         assertThat(gauge("tally.job.overdue", "job", "test-health-job")).isZero();
 
-        // The job stops running: its last success ages (D13). Its interval is 1 minute, so it is
+        // The job stops running: its last success ages (FR-023). Its interval is 1 minute, so it is
         // overdue after the 5-minute minimum (FR-023), not after 2 minutes.
         clock.advance(Duration.ofMinutes(5));
         assertThat(gauge("tally.job.overdue", "job", "test-health-job")).isZero();

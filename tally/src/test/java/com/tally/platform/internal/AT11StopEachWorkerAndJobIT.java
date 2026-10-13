@@ -20,7 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * AT-11. Stop each worker and job (D7, D13, FR-023). Pass when: each one's metric shows it overdue
+ * AT-11. Stop each worker and job (D9, FR-023). Pass when: each one's metric shows it overdue
  * within its threshold: twice its interval, and at least 5 minutes.
  *
  * <p>Covers every job the running application has: each queue's poller (the workers) and reaper, and
@@ -97,7 +97,7 @@ class AT11StopEachWorkerAndJobIT extends AbstractIntegrationTest {
             assertThat(meters.get("tally.queue.overdue").tag("queue", "payment-collection").gauge().value()).isZero();
 
             // Just past 5 minutes: every job whose threshold is 5 minutes is overdue, and so is the waiting
-            // payment (D7); jobs with longer intervals (hourly retention, daily invariant checks) are not, yet.
+            // payment (D9); jobs with longer intervals (hourly retention, daily invariant checks) are not, yet.
             Duration stopped = Duration.ofMinutes(5).plusSeconds(1);
             clock.advance(Duration.ofMinutes(1).plusSeconds(1));
             Map<String, Double> afterFiveMinutes = overdueByJob();

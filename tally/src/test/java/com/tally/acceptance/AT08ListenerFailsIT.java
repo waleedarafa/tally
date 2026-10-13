@@ -25,7 +25,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * AT-8. Listener fails (D2, FR-022). Pass when: the failed publication is resubmitted within the
+ * AT-8. Listener fails (D3, FR-022). Pass when: the failed publication is resubmitted within the
  * configured limit, and its effect happens exactly once.
  *
  * <p>The failure is a real one: the account has no payment token yet, so Invoicing's InvoiceIssued
