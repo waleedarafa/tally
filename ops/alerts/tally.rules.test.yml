@@ -1,0 +1,517 @@
+# Unit tests for tally.rules.yml (ADR-030): promtool test rules tally.rules.test.yml
+# Every alert has a test where it fires, at the expected time, and one just below its threshold or `for`
+# where it does not. Samples every 30 s: the scrape interval the D9 budget assumes.
+rule_files:
+- tally.rules.yml
+evaluation_interval: 30s
+tests:
+- name: TallyDown fires when the scrape fails for 2 minutes
+  interval: 30s
+  input_series:
+  - series: up{job="tally", instance="tally-1"}
+    values: 1 1 0x10
+  alert_rule_test:
+  - eval_time: 2m30s
+    alertname: TallyDown
+    exp_alerts: []
+  - eval_time: 3m
+    alertname: TallyDown
+    exp_alerts:
+    - exp_labels:
+        job: tally
+        instance: tally-1
+        severity: page
+        driver: G9
+      exp_annotations:
+        summary: Prometheus cannot scrape Tally; it is down, hung or unreachable.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/tally-down.md
+- name: TallyDown fires when the target is absent for 2 minutes
+  interval: 30s
+  input_series:
+  - series: tally_events_unreadable{job="other"}
+    values: '0x10'
+  alert_rule_test:
+  - eval_time: 1m30s
+    alertname: TallyDown
+    exp_alerts: []
+  - eval_time: 2m
+    alertname: TallyDown
+    exp_alerts:
+    - exp_labels:
+        job: tally
+        severity: page
+        driver: G9
+      exp_annotations:
+        summary: Prometheus cannot scrape Tally; it is down, hung or unreachable.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/tally-down.md
+- name: TallyDown stays quiet while scrapes succeed
+  interval: 30s
+  input_series:
+  - series: up{job="tally", instance="tally-1"}
+    values: 1x20
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: TallyDown
+    exp_alerts: []
+- name: 'D9 budget: a money queue stalls at 0 (work due, nothing finishes); BillingStalled fires by 4m30s'
+  interval: 30s
+  input_series:
+  - series: tally_queue_last_progress_age_seconds{queue="renewals", money="true"}
+    values: 0+30x20
+  - series: tally_queue_oldest_due_age_seconds{queue="renewals", money="true"}
+    values: 0+30x20
+  alert_rule_test:
+  - eval_time: 4m
+    alertname: BillingStalled
+    exp_alerts: []
+  - eval_time: 4m30s
+    alertname: BillingStalled
+    exp_alerts:
+    - exp_labels:
+        queue: renewals
+        money: 'true'
+        severity: page
+        driver: D9
+      exp_annotations:
+        summary: Money queue renewals has work due and has finished nothing for over 3 minutes.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
+- name: 'A busy billing run (D6): hours of backlog, items finishing every few seconds; BillingStalled never fires'
+  interval: 30s
+  input_series:
+  - series: tally_queue_last_progress_age_seconds{queue="renewals", money="true"}
+    values: 2 1 3 0 2 1 4 0 1 2 3 1 0 2 1 3 2 0 1 2 1
+  - series: tally_queue_oldest_due_age_seconds{queue="renewals", money="true"}
+    values: 7200+30x20
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: BillingStalled
+    exp_alerts: []
+  - eval_time: 10m
+    alertname: BillingStalled
+    exp_alerts: []
+- name: A queue idle for 2 hours gets one due item, finished after 90 s; BillingStalled does not fire
+  interval: 30s
+  input_series:
+  - series: tally_queue_last_progress_age_seconds{queue="payment-collection", money="true"}
+    values: 7200 7230 7260 0+30x17
+  - series: tally_queue_oldest_due_age_seconds{queue="payment-collection", money="true"}
+    values: 0 30 60 0x17
+  alert_rule_test:
+  - eval_time: 1m30s
+    alertname: BillingStalled
+    exp_alerts: []
+  - eval_time: 5m
+    alertname: BillingStalled
+    exp_alerts: []
+  - eval_time: 10m
+    alertname: BillingStalled
+    exp_alerts: []
+- name: BillingStalled ignores a stalled queue that does not move money
+  interval: 30s
+  input_series:
+  - series: tally_queue_last_progress_age_seconds{queue="jobs-platform-jobs", money="false"}
+    values: 0+30x20
+  - series: tally_queue_oldest_due_age_seconds{queue="jobs-platform-jobs", money="false"}
+    values: 0+30x20
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: BillingStalled
+    exp_alerts: []
+- name: 'D9 budget: the listener pool stalls at 0 (publications wait, no listener succeeds); fires by 4m30s'
+  interval: 30s
+  input_series:
+  - series: tally_events_listeners_last_success_age_seconds
+    values: 0+30x20
+  - series: tally_events_oldest_incomplete_age_seconds
+    values: 0+30x20
+  alert_rule_test:
+  - eval_time: 4m
+    alertname: ListenersStalled
+    exp_alerts: []
+  - eval_time: 4m30s
+    alertname: ListenersStalled
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        driver: D9
+      exp_annotations:
+        summary: Event publications are waiting and no event listener has succeeded for over 3 minutes.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
+- name: 'Busy listeners: publications always waiting, listeners succeeding every few seconds; never fires'
+  interval: 30s
+  input_series:
+  - series: tally_events_listeners_last_success_age_seconds
+    values: 1 0 2 1 0 3 1 0 2 1 0 1 2 0 1 0 2 1 0 1 0
+  - series: tally_events_oldest_incomplete_age_seconds
+    values: 5 8 4 9 6 7 5 8 4 9 6 7 5 8 4 9 6 7 5 8 4
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: ListenersStalled
+    exp_alerts: []
+  - eval_time: 10m
+    alertname: ListenersStalled
+    exp_alerts: []
+- name: Listeners idle for 2 hours get one publication, completed after 90 s; ListenersStalled does not fire
+  interval: 30s
+  input_series:
+  - series: tally_events_listeners_last_success_age_seconds
+    values: 7200 7230 7260 0+30x17
+  - series: tally_events_oldest_incomplete_age_seconds
+    values: 0 30 60 0x17
+  alert_rule_test:
+  - eval_time: 1m30s
+    alertname: ListenersStalled
+    exp_alerts: []
+  - eval_time: 5m
+    alertname: ListenersStalled
+    exp_alerts: []
+  - eval_time: 10m
+    alertname: ListenersStalled
+    exp_alerts: []
+- name: 'A 3-hour backlog that is still progressing: BillingBehind does not fire'
+  interval: 30s
+  input_series:
+  - series: tally_queue_oldest_due_age_seconds{queue="renewals", money="true"}
+    values: 10800+30x20
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: BillingBehind
+    exp_alerts: []
+- name: 'The oldest due item passes 4 hours: BillingBehind fires'
+  interval: 30s
+  input_series:
+  - series: tally_queue_oldest_due_age_seconds{queue="renewals", money="true"}
+    values: 14370+30x5
+  alert_rule_test:
+  - eval_time: 30s
+    alertname: BillingBehind
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: BillingBehind
+    exp_alerts:
+    - exp_labels:
+        queue: renewals
+        money: 'true'
+        severity: page
+        driver: D6
+      exp_annotations:
+        summary: 'Money queue renewals is over 4 hours behind: its oldest due item is older than D6 allows.'
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
+- name: JobOverdue fires after a job is overdue for 5 minutes
+  interval: 30s
+  input_series:
+  - series: tally_job_overdue{exported_job="payment-reconciliation"}
+    values: 0 0 1x14
+  alert_rule_test:
+  - eval_time: 5m30s
+    alertname: JobOverdue
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: JobOverdue
+    exp_alerts:
+    - exp_labels:
+        exported_job: payment-reconciliation
+        severity: ticket
+        driver: FR-023
+      exp_annotations:
+        summary: Background job payment-reconciliation has not succeeded within twice its interval (at least 5 minutes).
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/job-overdue.md
+- name: JobOverdue stays quiet while the job is on time
+  interval: 30s
+  input_series:
+  - series: tally_job_overdue{exported_job="payment-reconciliation"}
+    values: '0x20'
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: JobOverdue
+    exp_alerts: []
+- name: PaymentRequestedStuck fires when an attempt has waited 15 minutes to be sent
+  interval: 30s
+  input_series:
+  - series: tally_payment_requested_stuck
+    values: 0 1x5
+  alert_rule_test:
+  - eval_time: 0s
+    alertname: PaymentRequestedStuck
+    exp_alerts: []
+  - eval_time: 30s
+    alertname: PaymentRequestedStuck
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        driver: D2
+      exp_annotations:
+        summary: A payment attempt has waited over 15 minutes to be sent (ADR-018); its collection is stuck.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
+- name: PaymentRequestedStuck stays quiet below 15 minutes
+  interval: 30s
+  input_series:
+  - series: tally_payment_requested_stuck
+    values: '0x10'
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: PaymentRequestedStuck
+    exp_alerts: []
+- name: A failed item in a money queue pages at once
+  interval: 30s
+  input_series:
+  - series: tally_queue_failed{queue="payment-collection", money="true"}
+    values: 0 1x5
+  alert_rule_test:
+  - eval_time: 0s
+    alertname: MoneyQueueItemsFailed
+    exp_alerts: []
+  - eval_time: 30s
+    alertname: MoneyQueueItemsFailed
+    exp_alerts:
+    - exp_labels:
+        queue: payment-collection
+        money: 'true'
+        severity: page
+        driver: D1, D2
+      exp_annotations:
+        summary: Money queue payment-collection has failed items; each waits for a person.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/queue-items-failed.md
+  - eval_time: 30s
+    alertname: QueueItemsFailed
+    exp_alerts: []
+- name: A failed item in another queue opens a ticket after 10 minutes, and never pages
+  interval: 30s
+  input_series:
+  - series: tally_queue_failed{queue="jobs-platform-jobs", money="false"}
+    values: 1x30
+  alert_rule_test:
+  - eval_time: 9m30s
+    alertname: QueueItemsFailed
+    exp_alerts: []
+  - eval_time: 10m
+    alertname: QueueItemsFailed
+    exp_alerts:
+    - exp_labels:
+        queue: jobs-platform-jobs
+        money: 'false'
+        severity: ticket
+        driver: FR-017
+      exp_annotations:
+        summary: Queue jobs-platform-jobs has failed items; each waits for a person.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/queue-items-failed.md
+  - eval_time: 10m
+    alertname: MoneyQueueItemsFailed
+    exp_alerts: []
+- name: EventsStuck fires when the oldest incomplete publication is over 15 minutes old
+  interval: 30s
+  input_series:
+  - series: tally_events_oldest_incomplete_age_seconds
+    values: 870+30x5
+  alert_rule_test:
+  - eval_time: 30s
+    alertname: EventsStuck
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: EventsStuck
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        driver: D3
+      exp_annotations:
+        summary: An event publication has been incomplete for over 15 minutes; its work has not happened.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/events-stuck.md
+- name: EventUnreadable fires on the first unreadable publication
+  interval: 30s
+  input_series:
+  - series: tally_events_unreadable
+    values: 0 1x5
+  alert_rule_test:
+  - eval_time: 0s
+    alertname: EventUnreadable
+    exp_alerts: []
+  - eval_time: 30s
+    alertname: EventUnreadable
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        driver: D3
+      exp_annotations:
+        summary: Event publications cannot be read, so they are never resubmitted.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/unreadable-event-publication.md
+- name: EventUnreadable stays quiet when every publication is readable
+  interval: 30s
+  input_series:
+  - series: tally_events_unreadable
+    values: '0x10'
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: EventUnreadable
+    exp_alerts: []
+- name: ListenerFailing fires when the failure counter grows
+  interval: 30s
+  input_series:
+  - series: tally_events_listeners_failed_total
+    values: 0 0 1x10
+  alert_rule_test:
+  - eval_time: 30s
+    alertname: ListenerFailing
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: ListenerFailing
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+        driver: D3
+      exp_annotations:
+        summary: An event listener failed in the last 15 minutes; resubmission retries it.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/events-stuck.md
+- name: ListenerFailing stays quiet once the last failure is more than 15 minutes old
+  interval: 30s
+  input_series:
+  - series: tally_events_listeners_failed_total
+    values: 0 1x60
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: ListenerFailing
+    exp_alerts: []
+- name: PaymentUnknownTooLong fires when the oldest UNKNOWN attempt passes 1 hour
+  interval: 30s
+  input_series:
+  - series: tally_payment_unknown_oldest_age_seconds
+    values: 3570+30x5
+  alert_rule_test:
+  - eval_time: 30s
+    alertname: PaymentUnknownTooLong
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: PaymentUnknownTooLong
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        driver: D2
+      exp_annotations:
+        summary: A payment outcome has been UNKNOWN for over an hour.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/unknown-payment.md
+- name: PaymentUnknownPastKeyWindow fires on the first attempt past the key window
+  interval: 30s
+  input_series:
+  - series: tally_payment_unknown_past_key_window
+    values: 0 1x5
+  alert_rule_test:
+  - eval_time: 0s
+    alertname: PaymentUnknownPastKeyWindow
+    exp_alerts: []
+  - eval_time: 30s
+    alertname: PaymentUnknownPastKeyWindow
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        driver: D2
+      exp_annotations:
+        summary: An UNKNOWN payment is past the key window; Tally will not repeat it, and a person must decide.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/unknown-payment-past-key-window.md
+- name: PaymentUnknownPastKeyWindow stays quiet when no attempt is past the window
+  interval: 30s
+  input_series:
+  - series: tally_payment_unknown_past_key_window
+    values: '0x10'
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: PaymentUnknownPastKeyWindow
+    exp_alerts: []
+- name: ProviderBreakerOpen fires when the breaker alternates open and half-open for 10 minutes
+  interval: 30s
+  input_series:
+  - series: tally_payment_breaker_state
+    values: 1 2 1 2 1 2 1 2 1 2 1 2 1 2 1 2 1 2 1 2 1 2
+  alert_rule_test:
+  - eval_time: 9m30s
+    alertname: ProviderBreakerOpen
+    exp_alerts: []
+  - eval_time: 10m
+    alertname: ProviderBreakerOpen
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+        driver: ADR-013
+      exp_annotations:
+        summary: The payment provider breaker has not closed for 10 minutes; collection is paused.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/provider-outage.md
+- name: One closed sample resets ProviderBreakerOpen
+  interval: 30s
+  input_series:
+  - series: tally_payment_breaker_state
+    values: 1 2 1 2 1 2 1 2 1 2 0 1 2 1 2 1 2 1 2 1 2 1 2 1 2 1 2 1 2 1 2 1 2
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: ProviderBreakerOpen
+    exp_alerts: []
+  - eval_time: 15m
+    alertname: ProviderBreakerOpen
+    exp_alerts: []
+  - eval_time: 15m30s
+    alertname: ProviderBreakerOpen
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+        driver: ADR-013
+      exp_annotations:
+        summary: The payment provider breaker has not closed for 10 minutes; collection is paused.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/provider-outage.md
+- name: ProviderFalseDecline fires when a declined attempt is corrected to succeeded
+  interval: 30s
+  input_series:
+  - series: tally_payment_outcome_corrected_total{from="DECLINED", to="SUCCEEDED"}
+    values: 0 0 1x10
+  - series: tally_payment_outcome_corrected_total{from="UNKNOWN", to="SUCCEEDED"}
+    values: '0x12'
+  alert_rule_test:
+  - eval_time: 30s
+    alertname: ProviderFalseDecline
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: ProviderFalseDecline
+    exp_alerts:
+    - exp_labels:
+        from: DECLINED
+        to: SUCCEEDED
+        severity: ticket
+        driver: D2
+      exp_annotations:
+        summary: The provider reported a charge as declined that it had made; Tally corrected it.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/provider-false-decline.md
+- name: ProviderFalseDecline ignores other corrections
+  interval: 30s
+  input_series:
+  - series: tally_payment_outcome_corrected_total{from="DECLINED", to="SUCCEEDED"}
+    values: '0x12'
+  - series: tally_payment_outcome_corrected_total{from="UNKNOWN", to="SUCCEEDED"}
+    values: 0 0 1 2 3x9
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: ProviderFalseDecline
+    exp_alerts: []
+- name: InvariantViolated fires on the first violation
+  interval: 30s
+  input_series:
+  - series: tally_invariant_violations{check="payment.duplicate-successful-charges"}
+    values: 0 1x5
+  alert_rule_test:
+  - eval_time: 0s
+    alertname: InvariantViolated
+    exp_alerts: []
+  - eval_time: 30s
+    alertname: InvariantViolated
+    exp_alerts:
+    - exp_labels:
+        check: payment.duplicate-successful-charges
+        severity: page
+        driver: D1, D2
+      exp_annotations:
+        summary: Invariant check payment.duplicate-successful-charges found violations.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/invariant-violated.md
+- name: InvariantViolated stays quiet when every check passes
+  interval: 30s
+  input_series:
+  - series: tally_invariant_violations{check="payment.duplicate-successful-charges"}
+    values: '0x10'
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: InvariantViolated
+    exp_alerts: []

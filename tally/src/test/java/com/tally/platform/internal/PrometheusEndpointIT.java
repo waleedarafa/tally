@@ -42,4 +42,20 @@ class PrometheusEndpointIT extends AbstractIntegrationTest {
         assertThat(types).contains("# TYPE tally_payment_unknown_oldest_age_seconds gauge",
                 "# TYPE tally_queue_last_progress_age_seconds gauge");
     }
+
+    /**
+     * Every correction Payment can record is exported from startup, at 0. Prometheus's {@code increase()} cannot
+     * see a counter's first step when its series first appears at 1, so ProviderFalseDecline would miss the first
+     * false decline (#46 review, 5a).
+     */
+    @Test
+    void everyOutcomeCorrectionIsExportedFromStartAtZero() {
+        String scrape = RestClient.create("http://localhost:" + port).get().uri("/actuator/prometheus")
+                .retrieve().body(String.class);
+        assertThat(scrape.lines().filter(line -> line.startsWith("tally_payment_outcome_corrected_total{")))
+                .anySatisfy(line -> assertThat(line).contains("from=\"SENT\"", "to=\"UNKNOWN\"").endsWith(" 0.0"))
+                .anySatisfy(line -> assertThat(line).contains("from=\"UNKNOWN\"", "to=\"SUCCEEDED\"").endsWith(" 0.0"))
+                .anySatisfy(line -> assertThat(line).contains("from=\"DECLINED\"", "to=\"SUCCEEDED\"").endsWith(" 0.0"))
+                .anySatisfy(line -> assertThat(line).contains("from=\"UNKNOWN\"", "to=\"DECLINED\"").endsWith(" 0.0"));
+    }
 }
