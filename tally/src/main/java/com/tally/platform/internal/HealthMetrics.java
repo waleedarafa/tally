@@ -7,7 +7,7 @@ import java.time.Clock;
 import org.springframework.stereotype.Component;
 
 /**
- * Health of every queue and background job, as Micrometer gauges (FR-023, D9, D13).
+ * Health of every queue and background job, as Micrometer gauges (FR-023, D9).
  * Values are read when scraped, from the database where they are shared across instances,
  * so a stopped poller or job keeps ageing in its metric instead of freezing.
  * <ul>

@@ -47,7 +47,7 @@ class ArchitectureRulesTest {
     static final String ROOT = "com.tally";
     static final String PLATFORM = "com.tally.platform..";
 
-    /** The one class allowed to read the system clock (D4). Created with the platform in step 4. */
+    /** The one class allowed to read the system clock (D10). Created with the platform in step 4. */
     static final String CLOCK_CONFIGURATION = "com.tally.platform.ClockConfiguration";
 
     static final JavaClasses CLASSES = new ClassFileImporter()
@@ -68,7 +68,7 @@ class ArchitectureRulesTest {
         rule.check(CLASSES);
     }
 
-    /** D4, FR-003: time comes from the injected Clock, so tests can move it. */
+    /** D10, FR-003: time comes from the injected Clock, so tests can move it. */
     @Test
     void noDirectReadsOfTheSystemClock() {
         ArchRule rule = noClasses()
@@ -76,7 +76,7 @@ class ArchitectureRulesTest {
                 .should().callMethodWhere(isNoArgumentNowOnJavaTime())
                 .orShould().callMethod(System.class, "currentTimeMillis")
                 .orShould().callMethodWhere(readsTheSystemClockThroughClock())
-                .because("time must come from the injected java.time.Clock (D4)");
+                .because("time must come from the injected java.time.Clock (D10)");
 
         rule.check(CLASSES);
     }

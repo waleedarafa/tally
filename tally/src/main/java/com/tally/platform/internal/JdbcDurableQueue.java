@@ -23,7 +23,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 /**
  * A durable queue on one table (FR-017). Every statement runs on its own and commits at once:
  * the claim is committed before a handler runs, so no transaction is open while it works (FR-005).
- * All times come from the injected clock, never from the database (D4).
+ * All times come from the injected clock, never from the database (D10).
  */
 final class JdbcDurableQueue implements DurableQueue {
 

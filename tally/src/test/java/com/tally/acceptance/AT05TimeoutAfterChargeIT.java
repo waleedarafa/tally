@@ -13,7 +13,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
- * AT-5. Timeout after charge (D3). Pass when: the attempt is UNKNOWN and not retried; it is
+ * AT-5. Timeout after charge (D2). Pass when: the attempt is UNKNOWN and not retried; it is
  * reconciled to SUCCEEDED; the invoice is PAID; the provider's charge count is 1.
  */
 class AT05TimeoutAfterChargeIT extends AbstractReconcilingTest {

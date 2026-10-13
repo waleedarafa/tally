@@ -7,7 +7,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** A clock tests can set and advance (D4). Thread-safe, so pollers and tests can share it. */
+/** A clock tests can set and advance (D10). Thread-safe, so pollers and tests can share it. */
 public final class TestClock extends Clock {
 
     /** A fixed, arbitrary starting point, so tests never depend on the real date. */

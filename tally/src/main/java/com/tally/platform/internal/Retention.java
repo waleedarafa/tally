@@ -22,7 +22,8 @@ import org.springframework.stereotype.Component;
  *   <li>Queue items with status {@code DONE}, in every registered queue, claimed before the cutoff.
  *       The claim time is when the item was last taken for processing, so at most moments before
  *       it finished. {@code READY}, {@code IN_PROCESSING} and {@code FAILED} items are never
- *       deleted; failed items wait for a person (D12). Periodic job rows never become {@code DONE}.</li>
+ *       deleted; failed items wait for a person (slice 1 review, D12). Periodic job rows never become
+ *       {@code DONE}.</li>
  *   <li>Completed event publications, through Spring Modulith's {@link CompletedEventPublications}.
  *       Incomplete publications are never deleted; FR-022's resubmission owns them.</li>
  * </ul>

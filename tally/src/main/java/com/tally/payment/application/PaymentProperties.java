@@ -10,7 +10,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param workers   worker threads for collection attempts on each instance (the bulkhead)
  * @param instances how many Tally instances share the provider's rate limit
  * @param requestedAlertAfter how long an attempt may wait REQUESTED before
- *                  {@code tally.payment.requested.stuck} alerts: the collection queue is stuck (D9)
+ *                  {@code tally.payment.requested.stuck} alerts: the collection queue is stuck (D2)
  */
 @ConfigurationProperties("tally.payment")
 public record PaymentProperties(

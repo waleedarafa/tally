@@ -10,7 +10,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Base class for integration tests: the full application against a real PostgreSQL, with a
- * {@link TestClock} in place of the system clock (D4). Pollers are off: tests drive queues
+ * {@link TestClock} in place of the system clock (D10). Pollers are off: tests drive queues
  * directly, unless a test switches polling on. Test-only tables come from {@code db/testmigration}.
  * The settings sit on {@code @TestPropertySource}, so a subclass can redeclare {@code @SpringBootTest}
  * (for example with a real port) and still inherit them.
