@@ -1,0 +1,4 @@
+# Raw Maven logs stay local; runs.csv and failures.txt are the record.
+*.log
+*.log.gz
+keys-*.txt

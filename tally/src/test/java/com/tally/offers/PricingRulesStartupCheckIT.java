@@ -31,8 +31,8 @@ class PricingRulesStartupCheckIT {
         sql("DELETE FROM offers.offer_kind WHERE id = 'mystery'");
     }
 
-    static void sql(String statement) throws SQLException {
-        try (Connection c = DriverManager.getConnection(AbstractIntegrationTest.POSTGRES.getJdbcUrl(),
+    void sql(String statement) throws SQLException {
+        try (Connection c = DriverManager.getConnection(instances.url(),
                 AbstractIntegrationTest.POSTGRES.getUsername(), AbstractIntegrationTest.POSTGRES.getPassword())) {
             c.createStatement().execute(statement);
         }
@@ -40,7 +40,7 @@ class PricingRulesStartupCheckIT {
 
     @Test
     void refusesToStartWhileAnApprovedKindHasNoRule() throws SQLException {
-        // Migrates the shared database, and shows the seeded kinds all have rules.
+        // Starts on this test's own database, and shows the seeded kinds all have rules.
         instances.stop(instances.start("startup-check-before", NothingExtra.class));
         sql("INSERT INTO offers.offer_kind (id, status) VALUES ('mystery', 'APPROVED')");
 

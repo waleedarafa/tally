@@ -12,17 +12,27 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 
 /**
- * Starts whole Tally instances by hand on the shared test database, for tests where a crash and a
- * restart must be separate application instances (Spike A, AT-7). Each has its own TestClock.
+ * Starts whole Tally instances by hand, for tests where a crash and a restart must be separate application
+ * instances (Spike A, AT-7). Each has its own TestClock. The instances of one object share one database of their
+ * own, copied from the migrated template (ADR-029, proposed): a test's instances compete for its rows only.
  */
 public final class TallyInstances implements AutoCloseable {
 
     private final List<ConfigurableApplicationContext> running = new ArrayList<>();
+    private String url;
+
+    /** The database the instances of this object share, copied from the template on first use (ADR-029). */
+    public synchronized String url() {
+        if (url == null) {
+            url = PerContextDatabase.newDatabase("tally_instances");
+        }
+        return url;
+    }
 
     public ConfigurableApplicationContext start(String name, Class<?> extraConfiguration, String... properties) {
         AbstractIntegrationTest.POSTGRES.start();
         Map<String, String> props = new LinkedHashMap<>();
-        props.put("spring.datasource.url", AbstractIntegrationTest.POSTGRES.getJdbcUrl());
+        props.put("spring.datasource.url", url());
         props.put("spring.datasource.username", AbstractIntegrationTest.POSTGRES.getUsername());
         props.put("spring.datasource.password", AbstractIntegrationTest.POSTGRES.getPassword());
         props.put("spring.flyway.locations", "classpath:db/migration,classpath:db/testmigration");

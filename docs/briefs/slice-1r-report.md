@@ -329,7 +329,16 @@ These changes were made after the report, in the close-out PR. The user's decisi
 
 ### Test-infrastructure debt: one database, many clocks
 
-**Root cause.** Integration tests share one database. Spring caches several test contexts, and each runs its own job runner on its own `TestClock`. A scheduled job's row (`payment.jobs`, `platform.jobs`, `invoicing.jobs`) is shared by all of them. So a context whose clock is ahead can claim the row and reschedule it into its own future, where another context's runner never sees it due. Its run also acts on the shared rows with its own clock.
+**Root cause, as corrected by the Slice 2 step 0 spike** (`docs/briefs/slice-2-spike-test-isolation.md`, section 1). This paragraph first said that several cached test contexts ran their job runners at the same time. They never did:
+- `spring.test.context.cache.maxSize=1`, set since Slice 1 step 7.
+- spring-test 7.0.9 closes the least recently used context before it loads the next one; every context switch in the logs shows it.
+
+What did share was the database. Integration tests used one database, and each test context ran on its own `TestClock`. So:
+- **Rows left behind under another clock.** A context whose clock ran ahead (AT-3 runs to 2028) rescheduled a scheduled job's row (`payment.jobs`, `platform.jobs`, `invoicing.jobs`) into its own future. Every later context, starting at 2026-01-15, never saw it due. This was in sequence, not at the same time.
+- **A context's own runners.** Its own scheduled jobs could act between a test's direct calls. This is an inference for `InconsistentLookupIT` and `ReconciliationIT`; the spike could not show it.
+- **Hand-started instances.** `TallyInstances` ran beside the test context on the same database, each on its own clock.
+
+The "another context" in the table below is therefore the previous context's leftover row, or the test's own context, never a second live context. AT-12's 11 October failure (#36) is still unexplained.
 
 **Three flakes so far came from it:**
 
@@ -339,6 +348,4 @@ These changes were made after the report, in the close-out PR. The user's decisi
 | `ReconciliationIT` | #23 | The shared job changed the counters the test checked | The job parked in the year 9999, restored after each test |
 | AT-15 | #32 run 38153130900 | The reconciliation job sat in another context's future; the attempt was never resolved within 15 s | `SharedJob` re-arms the row at the waiting context's clock on every poll (AT-5, AT-6, AT-8, AT-12, AT-15, `EventSequenceIT`, `EventResubmissionIT`, Spike B); `SharedJobIT` reproduces the stranded job |
 
-**The mitigations narrow the race; they do not remove it.** A foreign context that claims the job still runs it on its own clock.
-
-**Candidate fix for Slice 2, step 0, to be spiked:** one test clock shared by every context.
+**What replaced the mitigations:** the spike measured five options. The rollout of option B2 (ADR-029, proposed) gives every test class, and every set of hand-started instances, a database of its own, copied from a migrated template. It removes every mitigation above. A test that waits on a periodic job now waits for the job's first run, then moves its clock to the job's next run. Fitness function F13 forbids rewriting a job or queue row to make work due.

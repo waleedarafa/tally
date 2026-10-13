@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.account.AccountApi;
+import com.tally.platform.internal.QueueFaults;
 import com.tally.invoicing.InvoiceStatus;
 import com.tally.invoicing.InvoiceView;
 import com.tally.invoicing.InvoicingApi;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
@@ -32,6 +34,9 @@ import org.springframework.test.context.TestPropertySource;
         "tally.test.context=renewal"
 })
 class RenewalIT extends AbstractProviderIntegrationTest {
+
+    @Autowired
+    ApplicationContext context;
 
     @Autowired
     AccountApi accounts;
@@ -98,8 +103,7 @@ class RenewalIT extends AbstractProviderIntegrationTest {
         Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(10));
 
         // As if the instance crashed after committing the renewal, before marking the item done.
-        jdbc.update("UPDATE subscription.renewal SET status = 'READY' WHERE queue_key = ?",
-                account + ":" + renewal);
+        QueueFaults.of(context).redeliver("renewals", account + ":" + renewal);
 
         await().atMost(Duration.ofSeconds(10)).until(() -> "DONE".equals(jdbc.queryForObject(
                 "SELECT status FROM subscription.renewal WHERE queue_key = ?", String.class, account + ":" + renewal)));

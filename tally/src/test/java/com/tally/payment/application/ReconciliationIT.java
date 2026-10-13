@@ -11,21 +11,21 @@ import com.tally.support.FakeProvider;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * FR-018: unknown outcomes are reconciled, never retried; recent failures are re-checked.
  *
- * <p>The scheduled reconciliation job is stopped for these tests, in every test context at once: its row in
- * {@code payment.jobs} is shared, and is set due in the year 9999. Each check is then a direct call, so the
- * attempt's checks, its next check time and this context's correction counters change only when the test
- * says so (PR #23 review). After each test the job is made due again.
+ * <p>Each check is a direct call, so this class's scheduled reconciliation must not run between two of them: it did
+ * in 3 of 10 runs of the test-isolation rollout, once the job was no longer parked in the year 9999 (PR #23 review).
+ * Its context schedules reconciliation every ten years instead: the job runs once as the context starts (the base
+ * class waits for that run), then never within the few days these tests move the clock. A setting, not a rewrite of
+ * the job's row (ADR-029, proposed; F13).
  */
+@TestPropertySource(properties = "tally.payment.reconciliation.interval=3650d")
 class ReconciliationIT extends AbstractReconcilingTest {
 
     @Autowired
@@ -33,24 +33,6 @@ class ReconciliationIT extends AbstractReconcilingTest {
 
     @Autowired
     PaymentAttempts attempts;
-
-    /** Runs after the base class makes the job due: waits for any run in progress, then parks the job. */
-    @BeforeEach
-    void stopTheScheduledJob() {
-        await().atMost(Duration.ofSeconds(10)).until(() -> jdbc.update("UPDATE payment.jobs"
-                + " SET due_at = TIMESTAMPTZ '9999-01-01 00:00:00Z' WHERE queue_key = 'payment-reconciliation'"
-                + " AND status = 'READY'") == 1);
-    }
-
-    /**
-     * Makes the shared job due again, so a later test that relies on scheduled reconciliation (AT-5, AT-6,
-     * AT-15) never meets it parked until 9999.
-     */
-    @AfterEach
-    void restartTheScheduledJob() {
-        jdbc.update("UPDATE payment.jobs SET status = 'READY', claim_token = NULL, due_at = ?"
-                + " WHERE queue_key = 'payment-reconciliation'", clock.instant().atOffset(ZoneOffset.UTC));
-    }
 
     String collect() {
         String reference = "REC-" + UUID.randomUUID();

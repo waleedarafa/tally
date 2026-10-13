@@ -11,12 +11,10 @@ import com.tally.subscription.SubscriptionApi;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
-import com.tally.support.SharedJob;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
@@ -55,12 +53,14 @@ class AT08ListenerFailsIT extends AbstractProviderIntegrationTest {
     @Autowired
     JdbcTemplate jdbc;
 
-    /** The registry and the job row are shared by every test context: start from a known state. */
+    /**
+     * Starts from no unfinished publications, and lets the resubmission job's first run, as the context starts, end
+     * before time moves: its next run is set from the clock when that run ends (ADR-029, proposed).
+     */
     @BeforeEach
     void cleanSlate() {
         jdbc.update("DELETE FROM event_publication WHERE completion_date IS NULL");
-        jdbc.update("UPDATE platform.jobs SET status = 'READY', claim_token = NULL, due_at = ?, last_success_at = NULL"
-                + " WHERE queue_key = 'event-resubmission'", clock.instant().atOffset(ZoneOffset.UTC));
+        await().atMost(Duration.ofSeconds(10)).until(() -> !jobLastSuccess().equals(Instant.EPOCH));
     }
 
     String publicationStatus(String reference) {
@@ -100,7 +100,7 @@ class AT08ListenerFailsIT extends AbstractProviderIntegrationTest {
                 && Duration.between(failedAt, clock.instant()).compareTo(LIMIT.plusMinutes(5)) < 0) {
             clock.advance(Duration.ofMinutes(1));
             Instant now = clock.instant();
-            SharedJob.EVENT_RESUBMISSION.await(jdbc, clock, Duration.ofSeconds(10), () -> !jobLastSuccess().isBefore(now));
+            await().atMost(Duration.ofSeconds(10)).until(() -> !jobLastSuccess().isBefore(now));
             // The job marks a publication RESUBMITTED, then its listener runs on the listener pool. Wait for
             // the listener to settle it (COMPLETED, or FAILED again) before reading its effects: otherwise
             // "no attempt yet" passes before the listener has run, and the clock moves on a minute early.
@@ -121,7 +121,7 @@ class AT08ListenerFailsIT extends AbstractProviderIntegrationTest {
         // Exactly once in effect, also after more resubmission runs.
         clock.advance(Duration.ofMinutes(10));
         Instant later = clock.instant();
-        SharedJob.EVENT_RESUBMISSION.await(jdbc, clock, Duration.ofSeconds(10), () -> !jobLastSuccess().isBefore(later));
+        await().atMost(Duration.ofSeconds(10)).until(() -> !jobLastSuccess().isBefore(later));
         assertThat(attempts(reference)).isEqualTo(1);
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
         System.out.printf("AT-8: resubmitted and paid %d min after the listener failed (limit %d min)%n",

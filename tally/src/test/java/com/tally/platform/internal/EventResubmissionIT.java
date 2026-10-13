@@ -4,12 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.AbstractIntegrationTest;
-import com.tally.support.SharedJob;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,12 +43,14 @@ class EventResubmissionIT extends AbstractIntegrationTest {
     @Autowired
     MeterRegistry meters;
 
-    /** The registry and the job row are shared by every test context: start from a known state. */
+    /**
+     * Starts from no unfinished publications, and lets the job's first run, as the context starts, end before time
+     * moves: its next run is set from the clock when that run ends (ADR-029, proposed).
+     */
     @BeforeEach
     void cleanSlate() {
         jdbc.update("DELETE FROM event_publication WHERE completion_date IS NULL");
-        jdbc.update("UPDATE platform.jobs SET status = 'READY', claim_token = NULL, due_at = ?, last_success_at = NULL"
-                + " WHERE queue_key = 'event-resubmission'", clock.instant().atOffset(ZoneOffset.UTC));
+        await().atMost(Duration.ofSeconds(10)).until(() -> !jobLastSuccess().equals(Instant.EPOCH));
     }
 
     double gauge(String name) {
@@ -67,7 +67,7 @@ class EventResubmissionIT extends AbstractIntegrationTest {
     void advanceAndRunJob(Duration by) {
         clock.advance(by);
         Instant now = clock.instant();
-        SharedJob.EVENT_RESUBMISSION.await(jdbc, clock, Duration.ofSeconds(10), () -> !jobLastSuccess().isBefore(now));
+        await().atMost(Duration.ofSeconds(10)).until(() -> !jobLastSuccess().isBefore(now));
     }
 
     @Test
