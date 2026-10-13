@@ -20,10 +20,10 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Characterisation, not a specification: when reconciliation checks an UNKNOWN attempt whose checks change nothing,
- * as ReconciliationSchedule sets it today (5 minutes, then 1 hour later, then daily). Evidence for the schedule's
- * decision (#50, item 3); D2 expects an unknown outcome resolved within 1 hour, and ADR-026's repeat by key is only
- * allowed for 20 hours.
+ * ADR-031: when reconciliation checks an UNKNOWN attempt whose checks change nothing. At 5, 15, 30 and 45 minutes
+ * after it became UNKNOWN, then hourly until its key window ends (20 hours after it was sent), then daily, every time
+ * counted from when it became UNKNOWN. So it is checked at least four times inside D2's hour, and every check inside
+ * the window may repeat with the key (ADR-026 b).
  *
  * <p>The fake provider cannot fail a lookup (CONTRACT.md A14: its outage covers charges only). So every check here
  * takes the same "nothing changed" path a failed lookup takes, another way: the lookup lags and shows nothing
@@ -54,7 +54,7 @@ class UnknownCheckScheduleIT extends AbstractReconcilingTest {
     }
 
     @Test
-    void anUnknownAttemptWhoseFirstCheckFailsIsNextCheckedAt65MinutesAndThenNotUntilAfterTheKeyWindow() {
+    void anUnknownAttemptIsCheckedFourTimesInItsFirstHourThenHourlyToTheEndOfItsKeyWindowThenDaily() {
         reference = "SCHED-" + UUID.randomUUID();
         Instant t0 = clock.instant();
         // Becomes UNKNOWN the way a timed-out call makes it: sent at t0, its call timed out at t0. No collection
@@ -91,12 +91,19 @@ class UnknownCheckScheduleIT extends AbstractReconcilingTest {
         Instant nextCheck = jdbc.queryForObject("SELECT reconcile_at FROM payment.payment_attempt WHERE id = ?",
                 OffsetDateTime.class, id).toInstant();
 
-        // (a) The first check, at 5 minutes, changes nothing; the next is 1 hour later, so D2's hour passes.
-        assertThat(checks).startsWith(Duration.ofMinutes(5), Duration.ofMinutes(65));
+        List<Duration> expected = new ArrayList<>(List.of(Duration.ofMinutes(5), Duration.ofMinutes(15),
+                Duration.ofMinutes(30), Duration.ofMinutes(45)));
+        for (int hour = 1; hour < 20; hour++) {
+            expected.add(Duration.ofHours(hour));
+        }
+        // D2: four checks before 60 minutes, so one failed check no longer loses the hour.
+        assertThat(checks.stream().filter(at -> at.compareTo(Duration.ofMinutes(60)) < 0))
+                .hasSizeGreaterThanOrEqualTo(4);
+        // At 5, 15, 30, 45 and 60 minutes, then hourly while the key may be repeated (it was sent at 0).
+        assertThat(checks).containsExactlyElementsOf(expected);
         assertThat(stateAt60Minutes).isEqualTo("UNKNOWN");
-        // (b) Nothing checks it again before the key window ends at 20 hours: the next check is a day later.
-        assertThat(checks).containsExactly(Duration.ofMinutes(5), Duration.ofMinutes(65));
-        assertThat(Duration.between(t0, nextCheck)).isEqualTo(Duration.ofMinutes(65).plusDays(1));
+        // After the window: daily, counted from when it became UNKNOWN, so the next check is a day after that.
+        assertThat(Duration.between(t0, nextCheck)).isEqualTo(Duration.ofDays(1));
         assertThat(state(id)).isEqualTo("UNKNOWN");
     }
 

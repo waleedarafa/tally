@@ -188,7 +188,7 @@ class Reconciliation implements PeriodicJob {
 
     private void checkedWithoutChange(PaymentAttempt due) {
         transactions.executeWithoutResult(tx -> attempts.find(due.id()).orElseThrow()
-                .checkedWithoutChange(clock.instant()));
+                .checkedWithoutChange(properties.provider().keyRepeatWindow(), clock.instant()));
     }
 
 }

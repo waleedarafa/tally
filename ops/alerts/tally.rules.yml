@@ -124,13 +124,15 @@ groups:
           summary: An event listener failed in the last 15 minutes; resubmission retries it.
           runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/events-stuck.md
 
+      # 50 minutes: just after the 45-minute check, the last one before D2's hour ends (ADR-031 checks at 5, 15, 30,
+      # 45 and 60 minutes), so a person is paged while the hour can still be kept.
       - alert: PaymentUnknownTooLong
-        expr: tally_payment_unknown_oldest_age_seconds > 3600
+        expr: tally_payment_unknown_oldest_age_seconds > 3000
         labels:
           severity: page
           driver: D2
         annotations:
-          summary: A payment outcome has been UNKNOWN for over an hour.
+          summary: A payment outcome has been UNKNOWN for over 50 minutes; D2 allows an hour.
           runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/unknown-payment.md
 
       - alert: PaymentUnknownPastKeyWindow

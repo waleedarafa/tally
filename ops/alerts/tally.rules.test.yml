@@ -388,11 +388,11 @@ tests:
   - eval_time: 20m
     alertname: ListenerFailing
     exp_alerts: []
-- name: PaymentUnknownTooLong fires when the oldest UNKNOWN attempt passes 1 hour
+- name: PaymentUnknownTooLong fires when the oldest UNKNOWN attempt passes 50 minutes
   interval: 30s
   input_series:
   - series: tally_payment_unknown_oldest_age_seconds
-    values: 3570+30x5
+    values: 2970+30x5
   alert_rule_test:
   - eval_time: 30s
     alertname: PaymentUnknownTooLong
@@ -404,7 +404,7 @@ tests:
         severity: page
         driver: D2
       exp_annotations:
-        summary: A payment outcome has been UNKNOWN for over an hour.
+        summary: A payment outcome has been UNKNOWN for over 50 minutes; D2 allows an hour.
         runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/unknown-payment.md
 - name: PaymentUnknownPastKeyWindow fires on the first attempt past the key window
   interval: 30s
