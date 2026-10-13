@@ -58,7 +58,9 @@ class Renewals implements QueueHandler {
 
     /**
      * Schedules the renewal into the period after the current one, at local midnight of the day it
-     * starts. Keyed by account and billing date, so it is scheduled once while the row exists.
+     * starts. Keyed by account and billing date, so it is scheduled once while the row exists. The payload,
+     * {@code <subscription id>,<period number>}, is also read by the invariant check
+     * {@code subscription.next-renewal-scheduled}; change both together.
      */
     void scheduleNext(Subscription subscription, ZoneId zone) {
         SubscriptionPeriod current = subscription.currentPeriod();
