@@ -1,5 +1,6 @@
 # The deployment pipeline, in two stages, run once per change.
-#   1. Commit stage: unit, fitness-function and module integration tests (about 2 minutes), then
+#   1. Commit stage: the alert rules' checks and unit tests (promtool), unit, fitness-function and module
+#      integration tests (about 2 minutes), then
 #      one container image per commit to main, tagged with the commit ID. Fast feedback on every change.
 #   2. Acceptance stage: the brief's acceptance tests and the spikes' behaviour tests, on the same
 #      commit. When they pass on main, the image gets a second tag, accepted-<commit>: only accepted
@@ -46,6 +47,15 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+
+      # A2 and A3 (ADR-030): the alert rules are valid, and each alert fires, and stays quiet, when its unit
+      # tests say. promtool from the official Prometheus image, pinned by tag and digest.
+      - name: Alert rules
+        env:
+          PROMETHEUS: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+        run: |
+          docker run --rm -v "$PWD/ops/alerts:/rules:ro" -w /rules --entrypoint promtool "$PROMETHEUS" check rules tally.rules.yml
+          docker run --rm -v "$PWD/ops/alerts:/rules:ro" -w /rules --entrypoint promtool "$PROMETHEUS" test rules tally.rules.test.yml
 
       - name: Commit tests
         run: ./mvnw -B -P commit-stage verify
