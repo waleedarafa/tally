@@ -44,12 +44,13 @@ First-run records are archived under `docs/architecture/archive/first-run/` as `
 | 028 | A listener is pinned like an event class: its identity (class, method, parameter types) is stored with each pending publication, so it is never renamed or moved while it may have incomplete publications. To move one: deploy the new listener, wait until the old one has none, then remove it. Extends 016 | D3 | `PinnedListenersTest` |
 | **Accepted in Slice 2** | | | |
 | 029 | Test isolation. No test class meets a row it did not create. Every test class, and every set of instances a test starts by hand, gets its own PostgreSQL database copied from a template migrated once per run (`CREATE DATABASE ... TEMPLATE`). A test that needs instances competing for rows starts them on one database it owns (AT-9, AT-10, `PeriodicJobIT`). A test that waits on a periodic job moves its clock to the job's next run; no test rewrites a job row to make it due | D10 (30 days of renewal and failed payment in a test, under a minute); the suite's reliability | F13 (`F13NoTestMakesWorkDueTest`); `PerContextDatabase` |
+| 030 | Alert rules as code. Prometheus alerting rules live in the repository (`ops/alerts/tally.rules.yml`); every rule names a severity (page or ticket), a driver and a runbook; every rule has a `promtool` unit test where it fires and one where it stays quiet (`ops/alerts/tally.rules.test.yml`). D9 is measured as progress (work due and nothing finished), not as age. Where rules are evaluated and who is paged is decided with the first deployed environment | D9 (on-call alerted within 5 minutes of a stalled billing run); D2, D3, D6 | CI commit stage, step "Alert rules" (`promtool check rules`, `test rules`); F14 (`F14AlertRulesAgreeIT`) |
 
 §-numbers refer to sections of the Design Record where the decision has no separate ADR number.
 
 ## Proposed
 
-The second design missed these, or Slice 1R raised them. They are proposed here, to be confirmed in the Design Record. 024 and 026 were accepted in Slice 1R, and 029 in Slice 2; they moved to the decision table.
+The second design missed these, or Slice 1R raised them. They are proposed here, to be confirmed in the Design Record. 024 and 026 were accepted in Slice 1R, and 029 and 030 in Slice 2; they moved to the decision table.
 
 | # | Proposal | From |
 |---|---|---|
@@ -57,7 +58,7 @@ The second design missed these, or Slice 1R raised them. They are proposed here,
 | 022 | What happens to an invoice and to access when a recorded success proves false; needs finance | FR-032 |
 | 023 | Renewals are merchant-initiated; an authentication demand is a distinct outcome and reaches the customer (D15) | first-run D15 |
 | 025 | A decline on the first invoice ends the subscription at once; for finance and product, not in Slice 1R | Slice 1R PR #13 review (access at sign-up) |
-| 030 | Alert rules as code. Prometheus alerting rules live in the repository (`ops/alerts/tally.rules.yml`); every rule names a severity (page or ticket), a driver and a runbook; every rule has a `promtool` unit test (`ops/alerts/tally.rules.test.yml`); a fitness function (F14) checks rules, runbooks and exported metric names against each other. D9 is measured as progress (work due and nothing finished), not as age. Where rules are evaluated and who is paged is decided with the first deployed environment | Slice 2 step 0, `docs/briefs/slice-2-step-0-alerts.md` (amended in #45) |
+| 031 | Unknown-payment checks keep D2's hour: check at 5, 15, 30 and 45 minutes, then hourly until the key window ends, then daily; `PaymentUnknownTooLong` moves to 50 minutes. Today's schedule (5 minutes, 1 hour later, then daily) breaks D2 after one failed check, and gives the key repeat (ADR-026 b) two chances in 20 hours. **Required before production** | Slice 2 step 0 close (#50 review); Design Record, "Proposed decision, from step 0" |
 
 ## Mapping of first-run records
 
