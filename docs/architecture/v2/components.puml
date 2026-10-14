@@ -1,0 +1,56 @@
+@startuml
+title <size:24>TallyApplication</size>
+
+set separator none
+top to bottom direction
+
+<style>
+  root {
+    BackgroundColor: #ffffff
+    FontColor: #444444
+  }
+</style>
+
+!include <C4/C4>
+!include <C4/C4_Context>
+!include <C4/C4_Component>
+
+System_Boundary("TallyApplication_boundary", "TallyApplication", $tags="") {
+  Container_Boundary("TallyApplication.TallyApplication_boundary", "TallyApplication", $tags="") {
+    Component(TallyApplication.TallyApplication.Access, "Access", $techn="Module", $descr="", $tags="", $link="")
+    Component(TallyApplication.TallyApplication.Account, "Account", $techn="Module", $descr="", $tags="", $link="")
+    Component(TallyApplication.TallyApplication.Collections, "Collections", $techn="Module", $descr="", $tags="", $link="")
+    Component(TallyApplication.TallyApplication.Invoicing, "Invoicing", $techn="Module", $descr="", $tags="", $link="")
+    Component(TallyApplication.TallyApplication.OffersandPricing, "Offers and Pricing", $techn="Module", $descr="", $tags="", $link="")
+    Component(TallyApplication.TallyApplication.Payment, "Payment", $techn="Module", $descr="", $tags="", $link="")
+    Component(TallyApplication.TallyApplication.Platform, "Platform", $techn="Module", $descr="", $tags="", $link="")
+    Component(TallyApplication.TallyApplication.Sharedkernel, "Shared kernel", $techn="Module", $descr="", $tags="", $link="")
+    Component(TallyApplication.TallyApplication.Subscription, "Subscription", $techn="Module", $descr="", $tags="", $link="")
+  }
+
+}
+
+Rel(TallyApplication.TallyApplication.Access, TallyApplication.TallyApplication.Subscription, "listens to", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Account, TallyApplication.TallyApplication.Platform, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Collections, TallyApplication.TallyApplication.Invoicing, "listens to", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Collections, TallyApplication.TallyApplication.Invoicing, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Collections, TallyApplication.TallyApplication.Platform, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Account, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.OffersandPricing, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Payment, "listens to", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Payment, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Platform, "depends on", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Sharedkernel, "depends on", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Subscription, "listens to", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.OffersandPricing, TallyApplication.TallyApplication.Account, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.OffersandPricing, TallyApplication.TallyApplication.Sharedkernel, "depends on", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Payment, TallyApplication.TallyApplication.Platform, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Payment, TallyApplication.TallyApplication.Sharedkernel, "depends on", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Subscription, TallyApplication.TallyApplication.Account, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Subscription, TallyApplication.TallyApplication.OffersandPricing, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Subscription, TallyApplication.TallyApplication.Platform, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Subscription, TallyApplication.TallyApplication.Sharedkernel, "depends on", $techn="", $tags="", $link="")
+
+SHOW_LEGEND(true)
+hide stereotypes
+@enduml

@@ -60,6 +60,26 @@ access: shared, platform, subscription, account    # TEMPORARY until Slice 2: ev
 Named interfaces: `account` exposes a read API to every module that lists it, and `AccountStanding.set` to `collections` only (F3).
 `support` joins in a later slice: `support: shared, account, invoicing, collections`.
 
+**Context map** (Design Record Step 6, relationships table, drawn as one picture). Upstream at the top; each label is the pattern on that relationship. Code dependencies above point the other way: downstream depends on upstream.
+
+```
+Layer 1   Account ──CF──► every context          Payment ◄──ACL── Card provider
+             │ OHS: set standing (Collections only)  │ OHS+PL: collect by reference
+Layer 2   Offers & Pricing                            │
+             │ OHS+PL: PriceQuote ──► Subscription and Invoicing
+Layer 3   Subscription                                │
+             │ PL: started, plan changed, period renewed, cancelled ──► Access, Invoicing
+             │ OHS: cancel an account's subscriptions ◄── Collections
+Layer 4   Access ◄──ACL── Telecom partners       Invoicing ◄──ACL── Tax service
+                                                      │ PL+OHS: issued, payment failed, paid; request payment again
+Layer 5                                          Collections
+Layer 6   Support view ◄──CF── published events of Invoicing, Access, Collections, Account
+
+Money: shared kernel (SK), used by every context. Email service and ledger: CF, used by Invoicing and Collections.
+```
+
+What the picture shows: one hub (Account, conformed to by every context), no cycles (the first draft had one, Step 6 "Cycle found and fixed"), and every outside system behind an anti-corruption layer.
+
 ## 4. Public APIs and events
 
 | Module | Public API | Events |
