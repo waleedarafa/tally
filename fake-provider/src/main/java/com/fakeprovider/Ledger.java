@@ -1,6 +1,7 @@
 package com.fakeprovider;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -18,6 +19,8 @@ class Ledger {
     private final Set<String> tokens = ConcurrentHashMap.newKeySet();
     private final List<Charge> charges = new CopyOnWriteArrayList<>();
     private final Map<String, AtomicInteger> requests = new ConcurrentHashMap<>();
+    private final List<SettlementBatch> batches = new CopyOnWriteArrayList<>();
+    private int settledUpTo;
 
     String issueToken() {
         String token = "tok_" + UUID.randomUUID();
@@ -55,5 +58,30 @@ class Ledger {
     int requestsFor(String reference) {
         AtomicInteger count = requests.get(reference);
         return count == null ? 0 : count.get();
+    }
+
+    /**
+     * Closes a settlement batch, as a real provider does at its daily cut-off: every successful charge not yet in a
+     * batch goes into the next one, numbered from 1. A batch may be empty. Declines move no money, so they are never
+     * settled.
+     */
+    synchronized SettlementBatch closeBatch() {
+        List<Charge> all = List.copyOf(charges);
+        List<SettlementBatch.Line> lines = new ArrayList<>();
+        for (Charge charge : all.subList(settledUpTo, all.size())) {
+            if (charge.outcome() == Charge.Outcome.SUCCEEDED) {
+                lines.add(new SettlementBatch.Line(charge.chargeId(), charge.reference(), charge.amount(),
+                        charge.currency()));
+            }
+        }
+        settledUpTo = all.size();
+        SettlementBatch batch = new SettlementBatch(batches.size() + 1, List.copyOf(lines));
+        batches.add(batch);
+        return batch;
+    }
+
+    /** Closed batches numbered above {@code number}, oldest first. */
+    List<SettlementBatch> batchesAfter(long number) {
+        return batches.stream().filter(b -> b.number() > number).toList();
     }
 }

@@ -165,6 +165,17 @@ groups:
           summary: The provider reported a charge as declined that it had made; Tally corrected it.
           runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/provider-false-decline.md
 
+      # D14 and proposed 021: Tally's payments and the provider's settlement batches disagree. The gauge is read from
+      # the database, so every instance exports the same value: max, not sum.
+      - alert: SettlementMismatch
+        expr: max by (kind) (tally_payment_settlement_mismatches) > 0
+        labels:
+          severity: ticket
+          driver: D14
+        annotations:
+          summary: "Settlement reconciliation has an open {{ $labels.kind }} mismatch; a person must look."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/settlement-mismatch.md
+
       - alert: InvariantViolated
         expr: tally_invariant_violations > 0
         labels:

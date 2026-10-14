@@ -127,10 +127,23 @@ These decide rule 9 ("unknown outcomes are never retried") and decision D7 of th
 - **Gap:** the fake has no mode in which the lookup itself fails, once or for a while. So no test can show what Tally does when a lookup is refused or times out. `UnknownCheckScheduleIT` reaches the same "checked, nothing changed" path through `LOOKUP_LAG` and `OUTAGE` together: the lookup shows nothing, and the repeat with the key gets a 503. Listed here rather than added: ADR-031's schedule needs no new provider behaviour.
 - **Check:** see the provider's status history for partial outages.
 
-**A15. There is no settlement report.**
-- **Fake:** none. Only per-reference lookups.
-- **Tally relies on it in:** nothing yet. The daily totals check (D3) and report R2 need one.
-- **Check:** confirm the report's format, delivery time and time zone (cut-off).
+**A15. The provider settles charges in numbered batches, and a batch can be read by number.** (critical)
+- **Fake:**
+  - `GET /settlement-batches?after={n}` returns every closed batch numbered above `n`, oldest first: `[{number, lines: [{chargeId, reference, amount, currency}]}]`.
+  - A batch holds every successful charge not settled in an earlier batch. A charge settles once. Declines move no money and are never settled. A batch may be empty.
+  - A batch closes only when a test calls `POST /admin/settlement-batches/close`, as a real provider closes one at its daily cut-off.
+  - A batch carries no time. Tally reads batches by number, never by the provider's clock (section 7).
+- **Tally relies on it in:** `HttpPaymentGateway.settlementBatchesAfter` and `SettlementReconciliation` (proposed 021, decided 2026-10-14):
+  - a charge in a batch for the reference of an UNKNOWN attempt, with the attempt's amount, decides it: SUCCEEDED;
+  - a SUCCEEDED attempt whose charge no batch shows `tally.payment.settlement.expected-within` (3 days) after it was sent is a mismatch; so is an UNKNOWN attempt with no charge for its reference. Absence never decides an attempt;
+  - the next read starts after the highest batch imported, so a batch must never be renumbered or reopened.
+  - Tests: `SettlementReconciliationIT`; the fake's own `ProviderControllerTest.aClosedBatchHoldsEachSuccessfulChargeOnceAndNoDecline`.
+- **If a real provider differs:**
+  - Most deliver a daily report per payout or batch: Adyen numbers its settlement batches; Stripe groups balance transactions by payout. Few offer "after batch n" directly; the adapter must keep its own cursor over whatever key the provider has.
+  - Settlement can take one to several days, and can depend on the card scheme. A charge settled later than `expected-within` raises a false mismatch, which closes by itself when the charge settles.
+  - Reports carry fees, refunds and chargebacks as well as charges, and a net amount. Tally reads charges only, gross: fees would make every amount differ.
+  - A report can be corrected and reissued. Tally imports a batch once and never reads it again.
+- **Check:** the report's format and delivery (API, file, or both); its key and order; when it closes (cut-off, time zone); the settlement delay per scheme; whether amounts are gross; whether a report can be reissued.
 
 ## 4. Tokens and cards
 
@@ -216,7 +229,7 @@ None of the following exist in the fake, so no test covers them. Each needs a de
 - **Key retention in real time**: the fake keeps keys for 24 hours of its own wall clock; tests prune them instead of waiting (A22).
 - **Provider-side retries** (for example "smart retries"), which would conflict with Tally's dunning.
 - **Persistence**: the fake loses everything on restart, so a test cannot restart the provider mid-run.
-- **Clock**: the fake stamps charges with its own wall clock (`Instant.now()`), not Tally's test clock. Tally never reads that timestamp, and must not start to without a provider-side clock contract.
+- **Clock**: the fake stamps charges with its own wall clock (`Instant.now()`), not Tally's test clock. Tally never reads that timestamp, and must not start to without a provider-side clock contract. Settlement batches carry no time for the same reason (A15).
 
 ## Sources
 - Stripe, Advanced error handling: https://docs.stripe.com/error-low-level
@@ -233,3 +246,4 @@ These belong to the fake, not to any real provider. Tally's production code must
 - `GET /admin/requests/count`
 - `GET /admin/stats`
 - `POST /admin/idempotency-keys/prune`
+- `POST /admin/settlement-batches/close`

@@ -533,3 +533,35 @@ tests:
   - eval_time: 5m
     alertname: InvariantViolated
     exp_alerts: []
+- name: SettlementMismatch fires once per kind, however many instances export it
+  interval: 30s
+  input_series:
+  - series: tally_payment_settlement_mismatches{kind="UNKNOWN_NOT_SETTLED", instance="a"}
+    values: 0 1x10
+  - series: tally_payment_settlement_mismatches{kind="UNKNOWN_NOT_SETTLED", instance="b"}
+    values: 0 1x10
+  - series: tally_payment_settlement_mismatches{kind="CHARGED_NOT_RECORDED", instance="a"}
+    values: '0x11'
+  alert_rule_test:
+  - eval_time: 0s
+    alertname: SettlementMismatch
+    exp_alerts: []
+  - eval_time: 30s
+    alertname: SettlementMismatch
+    exp_alerts:
+    - exp_labels:
+        kind: UNKNOWN_NOT_SETTLED
+        severity: ticket
+        driver: D14
+      exp_annotations:
+        summary: Settlement reconciliation has an open UNKNOWN_NOT_SETTLED mismatch; a person must look.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/settlement-mismatch.md
+- name: SettlementMismatch stays quiet when every mismatch is closed
+  interval: 30s
+  input_series:
+  - series: tally_payment_settlement_mismatches{kind="RECORDED_NOT_SETTLED", instance="a"}
+    values: 1 1 0x10
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: SettlementMismatch
+    exp_alerts: []

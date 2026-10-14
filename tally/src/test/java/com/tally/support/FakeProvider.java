@@ -89,6 +89,11 @@ public final class FakeProvider {
         http().post().uri("/admin/idempotency-keys/prune").retrieve().toBodilessEntity();
     }
 
+    /** The provider's daily cut-off, now: every successful charge not yet settled goes into a new batch (A15). */
+    public static void closeSettlementBatch() {
+        http().post().uri("/admin/settlement-batches/close").retrieve().toBodilessEntity();
+    }
+
     /** How many charges the provider recorded for a reference. */
     public static int chargeCount(String reference) {
         return http().get().uri("/admin/charges/count?reference={r}", reference).retrieve()

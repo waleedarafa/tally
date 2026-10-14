@@ -3,6 +3,7 @@ package com.tally.payment.adapter.provider;
 import com.tally.payment.FailureReason;
 import com.tally.payment.application.PaymentProperties;
 import com.tally.payment.domain.PaymentGateway;
+import com.tally.payment.domain.SettlementBatch;
 import com.tally.shared.Money;
 import java.net.ConnectException;
 import java.net.http.HttpClient;
@@ -35,6 +36,12 @@ class HttpPaymentGateway implements PaymentGateway {
     }
 
     record ChargeRecord(String chargeId, String reference, String outcome) {
+    }
+
+    record BatchRecord(long number, List<LineRecord> lines) {
+    }
+
+    record LineRecord(String chargeId, String reference, long amount, String currency) {
     }
 
     private final RestClient http;
@@ -86,6 +93,18 @@ class HttpPaymentGateway implements PaymentGateway {
                 .body(ChargeRecord[].class);
         return records == null ? List.of() : Arrays.stream(records)
                 .map(r -> new RecordedCharge(r.chargeId(), result(r.chargeId(), r.outcome())))
+                .toList();
+    }
+
+    @Override
+    public List<SettlementBatch> settlementBatchesAfter(long number) {
+        BatchRecord[] records = http.get().uri("/settlement-batches?after={number}", number).retrieve()
+                .body(BatchRecord[].class);
+        return records == null ? List.of() : Arrays.stream(records)
+                .map(b -> new SettlementBatch(b.number(), b.lines() == null ? List.of() : b.lines().stream()
+                        .map(l -> new SettlementBatch.Line(l.chargeId(), l.reference(),
+                                Money.of(l.amount(), l.currency())))
+                        .toList()))
                 .toList();
     }
 

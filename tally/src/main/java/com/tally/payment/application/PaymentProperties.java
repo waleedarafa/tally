@@ -19,7 +19,8 @@ public record PaymentProperties(
         @DefaultValue("15m") Duration requestedAlertAfter,
         @DefaultValue Provider provider,
         @DefaultValue Breaker breaker,
-        @DefaultValue Reconciliation reconciliation) {
+        @DefaultValue Reconciliation reconciliation,
+        @DefaultValue Settlement settlement) {
 
     /**
      * @param baseUrl            the provider's address
@@ -70,5 +71,19 @@ public record PaymentProperties(
 
     /** @param interval how often the reconciliation job runs (FR-018) */
     public record Reconciliation(@DefaultValue("1m") Duration interval) {
+    }
+
+    /**
+     * Settlement reconciliation (proposed 021).
+     *
+     * @param interval       how often the provider's new settlement batches are read. Hourly, so a batch closed at
+     *                       the provider's daily cut-off is read within the hour (D14: every mismatch within 24 hours)
+     * @param expectedWithin how long after an attempt is sent its charge may take to appear in a batch (CONTRACT.md
+     *                       A15). Past it, a recorded success with no settlement, or an UNKNOWN attempt with none, is
+     *                       a mismatch for a person
+     */
+    public record Settlement(
+            @DefaultValue("1h") Duration interval,
+            @DefaultValue("3d") Duration expectedWithin) {
     }
 }

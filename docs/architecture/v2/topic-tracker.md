@@ -28,14 +28,14 @@ Drivers are the D-numbers of [`drivers.md`](drivers.md). The course review used 
 | A Domain | 15 | 1 |  | 2 | 8 | 4 |  |
 | B Architecture styles | 8 |  | 1 | 1 | 4 | 1 | 1 |
 | C Inside a module | 6 | 1 |  | 2 |  | 3 |  |
-| D Data and reliability | 27 | 5 | 4 | 5 | 5 | 7 | 1 |
+| D Data and reliability | 27 | 5 | 4 | 4 | 5 | 8 | 1 |
 | D2 Distributed coordination | 11 | 3 | 4 | 1 | 3 |  |  |
 | E Evolution and governance | 15 | 3 | 1 | 2 | 4 | 4 | 1 |
 | F Delivery | 17 | 4 | 5 | 5 | 3 |  |  |
 | G Teams | 8 | 3 | 3 |  | 1 |  | 1 |
 | H Runtime infrastructure | 11 | 4 | 4 | 2 |  | 1 |  |
 | I Security | 13 | 6 | 3 | 1 | 1 |  | 2 |
-| **All** | **140** | **30** | **25** | **23** | **36** | **20** | **6** |
+| **All** | **140** | **30** | **25** | **22** | **36** | **21** | **6** |
 
 Before this check the course table had 24 topics built or checked. After it, 54. 78 of 138 statuses changed.
 
@@ -67,7 +67,6 @@ Before this check the course table had 24 topics built or checked. After it, 54.
 - D-09 Upgrade saga with pivot ordering: not started. Conflict: Design Record §3 upgrades access at once, before payment, and Slice 1R gives access at sign-up. The course review recommended unlocking after the charge. Needs a decision, not a status.
 - D-10 Saga countermeasures: not started. renew(n) plus the version check already stops a repeated renewal; no semantic locks.
 - D-11 Event-carried state transfer vs notification: designed. ADR-016 (events carry what the listener needs); ADR-012 (compacted access facts)
-- D-23 Reconciliation: partly built. Settlement reconciliation (proposed 021) is not built and is required before production.
 - D-27 Command for a person's decision on an unknown payment past the key window: partly built. Alert and runbook exist; the runbook says to change the database by hand.
 - D2-01 Static vs dynamic coupling; coupling-point map: partly built. No explicit static vs dynamic coupling map for tax and payment.
 - D2-03 Invoice state machine with tax: not started. Tax is not built.
@@ -86,7 +85,7 @@ Before this check the course table had 24 topics built or checked. After it, 54.
 - I-04 Object-level authorisation + cross-account test: designed (proposed 032), not built. Was "cross-tenant". Subscriber A must not read subscriber B's invoice.
 - I-05 One database user per module: not started. Was "row-level security + DB user per module". Row-level security for tenants does not apply.
 
-The Design Record lists four items as required before production: settlement reconciliation (D-23, proposed 021), authentication (I-02), a command to record a person's decision on an unknown payment past the key window (D-27), and the destructive-migration check (E-06, now checked). D-23 was raised to high priority for that reason. The first version of this tracker named only three; D-27 was missing.
+The Design Record lists four items as required before production: settlement reconciliation (D-23, proposed 021, now checked), authentication (I-02), a command to record a person's decision on an unknown payment past the key window (D-27), and the destructive-migration check (E-06, now checked). D-23 was raised to high priority for that reason. The first version of this tracker named only three; D-27 was missing.
 
 **7. One subscription per account is a scope limit, not a rule.** `subscription_one_per_account` (A-14) comes from the Slice 1 brief. The Design Record assumes the opposite: one account can pay for several subscriptions. The renewal queue key is per account (D-26), so lifting the limit as it stands would drop a second subscription's renewal. Fix D-26 first.
 
@@ -174,7 +173,7 @@ The Design Record lists four items as required before production: settlement rec
 | D-20 | Dead-letter queue with alert | Partly built ◆ | Not started | Medium | D3, D9 | FAILED queue rows keep last_error and are never deleted (Retention); money queues carry money="true" on their health metrics (QueueDefinition.asMoneyQueue); tally.queue.failed; tally.events.unreadable | The queue table is the dead-letter store: a failed item waits there for a person. Missing: the alert rule on money queues (Slice 2 step 0 alerts brief). |
 | D-21 | API composition | Designed ◆ | Not started | Low | — | Design Record §6: support view as a read model over published events | Not built. |
 | D-22 | Catalogue cache by version | Not started | Not started | Low | — | — | — |
-| D-23 | Reconciliation | Partly built ◆ | Not started | High | D2, D14 | payment/application/Reconciliation (unknown resolution, ADR-026); InvariantJobs with InvoicedVersusCollected (AT-12) | Settlement reconciliation (proposed 021) is not built and is required before production. Decided 2026-10-14: the provider's daily settlement report; a charge found resolves an UNKNOWN attempt; no charge found only alerts a person. |
+| D-23 | Reconciliation | Checked ◆ | Not started | High | D2, D14 | payment/application/Reconciliation (unknown resolution, ADR-026); SettlementReconciliation (proposed 021: settlement batches, both directions, V31); InvariantJobs with InvoicedVersusCollected (AT-12); UnknownResolutionIT, SettlementReconciliationIT; alert SettlementMismatch | A charge in a settlement batch resolves an UNKNOWN attempt; every other disagreement is a mismatch for a person (runbook settlement-mismatch.md). The fake's batch format is an assumption (CONTRACT.md A15) until a provider is chosen. |
 | D-24 | RPO, RTO and tested restore | Designed ◆ | Not started | Medium | D8 | ADR-020: 7-day point-in-time recovery, 25-day snapshots, deletion log | No restore drill yet. |
 | D-25 | Every active subscription has its next renewal scheduled (invariant check) | Checked ◆ | New | High | D1, D9 | subscription/adapter/persistence/SubscriptionInvariants (check subscription.next-renewal-scheduled, a daily job in subscription.jobs, V30); NextRenewalScheduledIT | Counts subscriptions with no unfinished renewal row for the period after their latest. A FAILED row counts as scheduled, because tally.queue.failed already reports it. Reads the renewal payload format written by Renewals.scheduleNext. |
 | D-26 | Renewal queue key per subscription | Not started ◆ | New | Medium | D1 | Renewals.scheduleNext keys a renewal as <account>:<period end>; V5 subscription_one_per_account | Safe today only because of A-14's limit. With two subscriptions on one account, both periods end on the account's billing day (S5), so both renewals get the same key, and the second is dropped by ON CONFLICT DO NOTHING. D-25 would report it the next day. |

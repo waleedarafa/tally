@@ -68,6 +68,37 @@ class ProviderControllerTest {
                 .body(new ParameterizedTypeReference<Map<String, Integer>>() { }).get("count");
     }
 
+    Map<String, Object> closeBatch() {
+        return http.post().uri("/admin/settlement-batches/close").retrieve().body(new ParameterizedTypeReference<>() { });
+    }
+
+    @SuppressWarnings("unchecked")
+    static List<Object> chargeIdsIn(Map<String, Object> batch) {
+        return ((List<Map<String, Object>>) batch.get("lines")).stream().map(l -> l.get("chargeId")).toList();
+    }
+
+    /** CONTRACT.md A15: a batch holds every successful charge not settled before, and never a decline. */
+    @Test
+    void aClosedBatchHoldsEachSuccessfulChargeOnceAndNoDecline() {
+        closeBatch();
+        Map<String, Object> paid = charge(token(), "SET-1");
+        mode("DECLINE_HARD(100)");
+        charge(token(), "SET-2");
+        mode("NORMAL");
+
+        Map<String, Object> batch = closeBatch();
+        Map<String, Object> next = closeBatch();
+
+        assertThat(chargeIdsIn(batch)).containsExactly(paid.get("chargeId"));
+        assertThat(chargeIdsIn(next)).as("each charge is settled once").isEmpty();
+        long number = ((Number) batch.get("number")).longValue();
+        assertThat(((Number) next.get("number")).longValue()).isEqualTo(number + 1);
+        List<Map<String, Object>> after = http.get().uri("/settlement-batches?after={n}", number - 1).retrieve()
+                .body(new ParameterizedTypeReference<>() { });
+        assertThat(after).extracting(b -> ((Number) b.get("number")).longValue()).containsExactly(number, number + 1);
+        assertThat(after.getFirst()).isEqualTo(batch);
+    }
+
     @Test
     void chargesAKnownTokenAndRecordsTheTruth() {
         Map<String, Object> response = charge(token(), "INV-1");
