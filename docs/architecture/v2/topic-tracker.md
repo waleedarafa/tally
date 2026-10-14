@@ -34,8 +34,8 @@ Drivers are the D-numbers of [`drivers.md`](drivers.md). The course review used 
 | F Delivery | 17 | 4 | 5 | 5 | 3 |  |  |
 | G Teams | 8 | 3 | 3 |  | 1 |  | 1 |
 | H Runtime infrastructure | 11 | 4 | 4 | 2 |  | 1 |  |
-| I Security | 13 | 8 | 1 | 1 | 1 |  | 2 |
-| **All** | **140** | **32** | **23** | **23** | **36** | **20** | **6** |
+| I Security | 13 | 6 | 3 | 1 | 1 |  | 2 |
+| **All** | **140** | **30** | **25** | **23** | **36** | **20** | **6** |
 
 Before this check the course table had 24 topics built or checked. After it, 54. 78 of 138 statuses changed.
 
@@ -82,8 +82,8 @@ Before this check the course table had 24 topics built or checked. After it, 54.
 - H-06 Probes and graceful shutdown: partly built. No separate liveness and readiness groups.
 - H-09 Slice 2 messaging choice: designed. The course review's open choice is already decided.
 - I-01 Threat model: not started. Design Record §15 risk register is not a threat model
-- I-02 API authentication (subscriber app, back office): not started. Was "merchant API keys". The callers are the subscriber app and the back office.
-- I-04 Object-level authorisation + cross-account test: not started. Was "cross-tenant". Subscriber A must not read subscriber B's invoice.
+- I-02 API authentication (subscriber app, back office): designed (proposed 032), not built. Was "merchant API keys". The callers are the subscriber app and the back office.
+- I-04 Object-level authorisation + cross-account test: designed (proposed 032), not built. Was "cross-tenant". Subscriber A must not read subscriber B's invoice.
 - I-05 One database user per module: not started. Was "row-level security + DB user per module". Row-level security for tenants does not apply.
 
 The Design Record lists four items as required before production: settlement reconciliation (D-23, proposed 021), authentication (I-02), a command to record a person's decision on an unknown payment past the key window (D-27), and the destructive-migration check (E-06, now checked). D-23 was raised to high priority for that reason. The first version of this tracker named only three; D-27 was missing.
@@ -174,7 +174,7 @@ The Design Record lists four items as required before production: settlement rec
 | D-20 | Dead-letter queue with alert | Partly built ◆ | Not started | Medium | D3, D9 | FAILED queue rows keep last_error and are never deleted (Retention); money queues carry money="true" on their health metrics (QueueDefinition.asMoneyQueue); tally.queue.failed; tally.events.unreadable | The queue table is the dead-letter store: a failed item waits there for a person. Missing: the alert rule on money queues (Slice 2 step 0 alerts brief). |
 | D-21 | API composition | Designed ◆ | Not started | Low | — | Design Record §6: support view as a read model over published events | Not built. |
 | D-22 | Catalogue cache by version | Not started | Not started | Low | — | — | — |
-| D-23 | Reconciliation | Partly built ◆ | Not started | High | D2, D14 | payment/application/Reconciliation (unknown resolution, ADR-026); InvariantJobs with InvoicedVersusCollected (AT-12) | Settlement reconciliation (proposed 021) is not built and is required before production. |
+| D-23 | Reconciliation | Partly built ◆ | Not started | High | D2, D14 | payment/application/Reconciliation (unknown resolution, ADR-026); InvariantJobs with InvoicedVersusCollected (AT-12) | Settlement reconciliation (proposed 021) is not built and is required before production. Decided 2026-10-14: the provider's daily settlement report; a charge found resolves an UNKNOWN attempt; no charge found only alerts a person. |
 | D-24 | RPO, RTO and tested restore | Designed ◆ | Not started | Medium | D8 | ADR-020: 7-day point-in-time recovery, 25-day snapshots, deletion log | No restore drill yet. |
 | D-25 | Every active subscription has its next renewal scheduled (invariant check) | Checked ◆ | New | High | D1, D9 | subscription/adapter/persistence/SubscriptionInvariants (check subscription.next-renewal-scheduled, a daily job in subscription.jobs, V30); NextRenewalScheduledIT | Counts subscriptions with no unfinished renewal row for the period after their latest. A FAILED row counts as scheduled, because tally.queue.failed already reports it. Reads the renewal payload format written by Renewals.scheduleNext. |
 | D-26 | Renewal queue key per subscription | Not started ◆ | New | Medium | D1 | Renewals.scheduleNext keys a renewal as <account>:<period end>; V5 subscription_one_per_account | Safe today only because of A-14's limit. With two subscriptions on one account, both periods end on the account's billing day (S5), so both renewals get the same key, and the second is dropped by ON CONFLICT DO NOTHING. D-25 would report it the next day. |
@@ -272,9 +272,9 @@ The Design Record lists four items as required before production: settlement rec
 | ID | Topic | Status | Was | Priority | Drivers | Evidence | Note |
 |---|---|---|---|---|---|---|---|
 | I-01 | Threat model | Not started | Not started | High | C2, D8 | Design Record §15 risk register is not a threat model | — |
-| I-02 | API authentication (subscriber app, back office) | Not started | Not started | High | D2 | Design Record "Required before production": authentication, with keys scoped per caller | Was "merchant API keys". The callers are the subscriber app and the back office. |
+| I-02 | API authentication (subscriber app, back office) | Designed ◆ | Not started | High | D2 | Proposed 032: a signed token (JWT) from an identity provider on every request; idempotency keys scoped per caller | Decided 2026-10-14. Not built. The callers are the subscriber app and the back office. |
 | I-03 | Human login via OIDC | Not started | Not started | Medium | — | — | — |
-| I-04 | Object-level authorisation + cross-account test | Not started | Not started | High | — | ADR-027 scopes idempotency keys per account until callers are authenticated | Was "cross-tenant". Subscriber A must not read subscriber B's invoice. |
+| I-04 | Object-level authorisation + cross-account test | Designed ◆ | Not started | High | — | Proposed 032: POST /v1/accounts links the calling user to the account, in Tally; every later request is checked against that link | Decided 2026-10-14. Not built. Subscriber A must not read subscriber B's invoice. |
 | I-05 | One database user per module | Not started | Not started | High | — | — | Was "row-level security + DB user per module". Row-level security for tenants does not apply. |
 | I-06 | RBAC and four-eyes refunds | Not started | Not started | Medium | — | — | — |
 | I-07 | PCI scope: hosted fields | Built ◆ | Designed | High | C2 | FR-015; fake-provider ProviderController simulates the hosted card form | No log-scanning test for card numbers. |
