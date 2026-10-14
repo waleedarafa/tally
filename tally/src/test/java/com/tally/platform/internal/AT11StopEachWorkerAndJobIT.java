@@ -3,7 +3,7 @@ package com.tally.platform.internal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.tally.AbstractIntegrationTest;
+import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.payment.PaymentApi;
 import com.tally.shared.Money;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -25,14 +25,15 @@ import org.springframework.test.context.TestPropertySource;
  *
  * <p>Covers every job the running application has: each queue's poller (the workers) and reaper, and
  * every periodic job (reconciliation, event resubmission, the invariant checks). Lives in the
- * platform's package because stopping pollers is not public API.
+ * platform's package because stopping pollers is not public API. It runs with the fake provider, as the application
+ * always does: settlement reconciliation reads the provider on every run, and without one it never succeeds.
  */
 @TestPropertySource(properties = {
         "tally.platform.polling-enabled=true",
         "tally.platform.poll-interval=100ms",
         "tally.test.context=at11"
 })
-class AT11StopEachWorkerAndJobIT extends AbstractIntegrationTest {
+class AT11StopEachWorkerAndJobIT extends AbstractProviderIntegrationTest {
 
     static final List<String> JOB_TABLES = List.of("platform.jobs", "payment.jobs", "invoicing.jobs");
 
