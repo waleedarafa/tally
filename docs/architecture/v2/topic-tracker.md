@@ -18,7 +18,7 @@ Drivers are the D-numbers of [`drivers.md`](drivers.md). The course review used 
 | Checked | It runs, and a test or fitness function fails the build if it breaks. |
 | Not applicable | The topic assumes something Tally is not. The note says what. |
 
-"Was" is the status the course table gave before this check.
+"Was" is the status the course table gave before this check. "New" marks a row the repository check added.
 
 ## Summary
 
@@ -28,16 +28,16 @@ Drivers are the D-numbers of [`drivers.md`](drivers.md). The course review used 
 | A Domain | 15 | 1 |  | 3 | 7 | 4 |  |
 | B Architecture styles | 8 |  | 1 | 1 | 4 | 1 | 1 |
 | C Inside a module | 6 | 1 |  | 2 |  | 3 |  |
-| D Data and reliability | 24 | 4 | 4 | 4 | 5 | 6 | 1 |
+| D Data and reliability | 25 | 4 | 4 | 4 | 5 | 7 | 1 |
 | D2 Distributed coordination | 11 | 3 | 4 | 1 | 3 |  |  |
 | E Evolution and governance | 15 | 3 | 3 | 1 | 4 | 3 | 1 |
 | F Delivery | 17 | 4 | 5 | 5 | 3 |  |  |
 | G Teams | 8 | 3 | 3 |  | 1 |  | 1 |
 | H Runtime infrastructure | 11 | 4 | 4 | 2 |  | 1 |  |
 | I Security | 13 | 8 | 1 | 1 | 1 |  | 2 |
-| **All** | **137** | **31** | **25** | **22** | **35** | **18** | **6** |
+| **All** | **138** | **31** | **25** | **22** | **35** | **19** | **6** |
 
-Before this check the course table had 24 topics built or checked. After it, 53. 77 of 137 statuses changed.
+Before this check the course table had 24 topics built or checked. After it, 54. 78 of 138 statuses changed.
 
 ## What the check found
 
@@ -56,7 +56,9 @@ Before this check the course table had 24 topics built or checked. After it, 53.
 
 **4. Two checks the Design Record describes do not exist.** F5 (an entity maps only to its module's schema) and F6 (no foreign key crosses schemas), Design Record §10, have no test. `TallyApplicationIT` checks only that the schemas exist. D-01 stays at Built, not Checked.
 
-**5. The largest open gaps.** These are high priority and not yet built or checked:
+**5. The renewal chain has no check.** Each renewal schedules the next one (H-03), so a missing row is silent: the D9 alarm sees late work, not work never scheduled. D-25 adds the invariant check this needs; it was found while reviewing durable queues, and is now built and tested.
+
+**6. The largest open gaps.** These are high priority and not yet built or checked:
 
 - A-06 Effective-dated catalogue: partly built. Versions are published and pinned per subscriber. No future effective date: a version applies from publication.
 - B-01 Architecture quantum: partly built. Access is a separate quantum on paper (ADR-001) and in-process today. Extraction is Slice 2.
@@ -167,11 +169,12 @@ Three of these the Design Record already lists as required before production: se
 | D-17 | Event ordering per key | Built ◆ | Not started | Medium | D13 | shared.DomainEvent carries the sequence (ADR-016); FF-13 treats a missing sequence as "order not known" | — |
 | D-18 | Read-your-own-writes | Designed | Designed | Medium | D13 | ADR-014: 99% within 5 seconds; app shows "activating" | — |
 | D-19 | Bulkhead for provider calls | Built ◆ | Not started | Medium | D2 | ProviderIsolation: "The worker pool is the bulkhead" | — |
-| D-20 | Dead-letter queue with alert | Partly built ◆ | Not started | Medium | D3, D9 | tally.queue.failed and tally.events.unreadable metrics; ADR-016 isolates each publication | Failures are counted and visible. No separate dead-letter store or alert rule. |
+| D-20 | Dead-letter queue with alert | Partly built ◆ | Not started | Medium | D3, D9 | FAILED queue rows keep last_error and are never deleted (Retention); money queues carry money="true" on their health metrics (QueueDefinition.asMoneyQueue); tally.queue.failed; tally.events.unreadable | The queue table is the dead-letter store: a failed item waits there for a person. Missing: the alert rule on money queues (Slice 2 step 0 alerts brief). |
 | D-21 | API composition | Designed ◆ | Not started | Low | — | Design Record §6: support view as a read model over published events | Not built. |
 | D-22 | Catalogue cache by version | Not started | Not started | Low | — | — | — |
 | D-23 | Reconciliation | Partly built ◆ | Not started | High | D2, D14 | payment/application/Reconciliation (unknown resolution, ADR-026); InvariantJobs with InvoicedVersusCollected (AT-12) | Settlement reconciliation (proposed 021) is not built and is required before production. |
 | D-24 | RPO, RTO and tested restore | Designed ◆ | Not started | Medium | D8 | ADR-020: 7-day point-in-time recovery, 25-day snapshots, deletion log | No restore drill yet. |
+| D-25 | Every active subscription has its next renewal scheduled (invariant check) | Checked ◆ | New | High | D1, D9 | subscription/adapter/persistence/SubscriptionInvariants (check subscription.next-renewal-scheduled, a daily job in subscription.jobs, V30); NextRenewalScheduledIT | Counts subscriptions with no unfinished renewal row for the period after their latest. A FAILED row counts as scheduled, because tally.queue.failed already reports it. Reads the renewal payload format written by Renewals.scheduleNext. |
 
 ## D2 Distributed coordination
 
@@ -250,8 +253,8 @@ Three of these the Design Record already lists as required before production: se
 |---|---|---|---|---|---|---|---|
 | H-01 | Hosting choice | Designed | Designed | Medium | D1–D3, G9 | ADR-007; Design Record §14 (managed containers, managed database and event log) | — |
 | H-02 | Two process types from one image | Not started ◆ | Designed | Medium | D6 | Design Record §13: one billing application runs all roles | New idea from the course review; not in the Design Record. |
-| H-03 | Renewal run: enqueue, then workers | Checked ◆ | Partly built | High | D1, D6, D9 | PeriodicJob and per-module queue tables with business unique constraints (CLAUDE.md rule 5); AT-9; AT-10 | — |
-| H-04 | Capacity sizing (Little's law) and pre-scaling | Partly built ◆ | Not started | Medium | D6 | D6: about 14 a second; AT-10 throughput test | No pre-scaling; no deployment. |
+| H-03 | Renewal run: one durable timer per subscription, competing workers | Checked ◆ | Partly built | High | D1, D6, D9 | Renewals.scheduleNext enqueues the next renewal inside the renewal transaction, due at 00:00 in the account time zone (BillingCalendar.billingTime); SKIP LOCKED claims, 5-minute lease, reaper, claim token (JdbcDurableQueue); guard subscription_period_one_per_number checked at start-up (DuplicateGuardCheck); DurableQueueIT; AT-9; AT-10 | Each renewal schedules the next one; there is no daily scan. The course review advised a 00:00 scan that enqueues the day; that does not apply. See D-25 for the check this design needs. |
+| H-04 | Capacity sizing (Little's law) and pre-scaling | Partly built ◆ | Not started | Medium | D6 | D6: about 14 a second; AT-10 throughput test | Renewals fall due at local midnight per account, so load peaks per time zone, not at one UTC instant. No pre-scaling; no deployment. |
 | H-05 | Connection sizing and PgBouncer | Not started | Not started | Medium | D6 | — | — |
 | H-06 | Probes and graceful shutdown | Partly built ◆ | Not started | High | D9 | QueueRuntime stops pollers on shutdown (fix from the Slice 2 spike); actuator health exposed | No separate liveness and readiness groups. |
 | H-07 | Front door and rate limits | Not started | Not started | Medium | — | Outbound provider rate limit is built (ProviderIsolation); nothing inbound | — |
