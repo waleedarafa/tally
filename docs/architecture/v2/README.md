@@ -55,10 +55,11 @@ The second design missed these, or Slice 1R raised them. They are proposed here,
 
 | # | Proposal | From |
 |---|---|---|
-| 021 | Daily reconciliation against the provider's settlement report, both directions; every mismatch recorded and alerted (D14). **Required before production** | FR-031 |
+| 021 | Daily reconciliation against the provider's settlement report, both directions; every mismatch recorded and alerted (D14). **Required before production**. Decided 2026-10-14: the source is the provider's daily settlement report (the lookup by reference alone sees one direction only). A charge in the report for the reference of an UNKNOWN attempt decides it: SUCCEEDED. No charge in the reports for days after an UNKNOWN attempt was sent never decides it: it raises an alert, and a person decides ("not found alone never means no charge", 026). The Payment state machine (018) does not change. Every other mismatch is recorded and alerted, never corrected automatically | FR-031 |
 | 022 | What happens to an invoice and to access when a recorded success proves false; needs finance | FR-032 |
 | 023 | Renewals are merchant-initiated; an authentication demand is a distinct outcome and reaches the customer (D15) | first-run D15 |
 | 025 | A decline on the first invoice ends the subscription at once; for finance and product, not in Slice 1R | Slice 1R PR #13 review (access at sign-up) |
+| 032 | Authentication. Every request carries a signed token (JWT) from an identity provider, and Tally checks it. The token's subject is a user. `POST /v1/accounts` links the calling user to the new account, and the link is kept in Tally: the identity provider knows nothing about accounts. Every later request is checked against that link, so one user cannot read or change another account (I-04). Idempotency keys are scoped per caller, as 027 foresees. Staff in the back office use the same kind of token; their roles are decided with the first back-office endpoint. **Required before production** | Design Record "Required before production"; decided 2026-10-14 |
 
 ## Mapping of first-run records
 

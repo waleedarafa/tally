@@ -117,6 +117,21 @@ class ProviderController {
         return ledger.chargesFor(reference);
     }
 
+    /**
+     * Closed settlement batches numbered above {@code after}, oldest first (CONTRACT.md A15). Settlement
+     * reconciliation reads them from the last batch it imported.
+     */
+    @GetMapping("/settlement-batches")
+    List<SettlementBatch> settlementBatches(@RequestParam(defaultValue = "0") long after) {
+        return ledger.batchesAfter(after);
+    }
+
+    /** Test-only: the provider's daily cut-off, now. */
+    @PostMapping("/admin/settlement-batches/close")
+    SettlementBatch closeSettlementBatch() {
+        return ledger.closeBatch();
+    }
+
     @PostMapping("/admin/mode")
     Modes mode(@RequestBody ModeRequest request) {
         Modes parsed = Modes.parse(request.modes() == null ? List.of() : request.modes());

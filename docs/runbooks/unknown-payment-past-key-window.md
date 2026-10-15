@@ -44,6 +44,6 @@ The billing team's on-call engineer (Design Record §11).
 - **Never repeat the old key.** Past the window the provider may have forgotten it, and a repeat could charge a second time.
 - **Never delete the attempt.** It is the record that a charge may have been made.
 
-## Before production
+## Settlement reconciliation
 
-This runbook is a stopgap. Settlement reconciliation (proposed ADR-021) closes these automatically, from the provider's settlement report. It is required before going live.
+Since proposed 021 was built, Tally also reads the provider's settlement batches every hour. If a batch shows a charge for the reference with the attempt's amount, the attempt becomes SUCCEEDED by itself, and this alert clears. If no batch shows a charge three days after the attempt was sent, `SettlementMismatch` raises an `UNKNOWN_NOT_SETTLED` mismatch: probably not charged, but you decide, with step 3 above. See [settlement-mismatch.md](settlement-mismatch.md).

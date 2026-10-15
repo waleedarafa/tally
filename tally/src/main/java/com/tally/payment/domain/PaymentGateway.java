@@ -23,6 +23,12 @@ public interface PaymentGateway {
     /** The provider's record of charges for a reference: the truth reconciliation reads (FR-018). */
     List<RecordedCharge> chargesFor(String reference);
 
+    /**
+     * The provider's closed settlement batches numbered above {@code number}, oldest first (proposed 021;
+     * CONTRACT.md A15). Read with no transaction open.
+     */
+    List<SettlementBatch> settlementBatchesAfter(long number);
+
     record RecordedCharge(String chargeId, ChargeResult result) {
     }
 

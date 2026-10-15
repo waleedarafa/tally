@@ -28,14 +28,14 @@ Drivers are the D-numbers of [`drivers.md`](drivers.md). The course review used 
 | A Domain | 15 | 1 |  | 2 | 8 | 4 |  |
 | B Architecture styles | 8 |  | 1 | 1 | 4 | 1 | 1 |
 | C Inside a module | 6 | 1 |  | 2 |  | 3 |  |
-| D Data and reliability | 26 | 5 | 4 | 4 | 5 | 7 | 1 |
+| D Data and reliability | 27 | 5 | 4 | 4 | 5 | 8 | 1 |
 | D2 Distributed coordination | 11 | 3 | 4 | 1 | 3 |  |  |
-| E Evolution and governance | 15 | 3 | 3 | 1 | 4 | 3 | 1 |
+| E Evolution and governance | 15 | 3 | 1 | 2 | 4 | 4 | 1 |
 | F Delivery | 17 | 4 | 5 | 5 | 3 |  |  |
 | G Teams | 8 | 3 | 3 |  | 1 |  | 1 |
 | H Runtime infrastructure | 11 | 4 | 4 | 2 |  | 1 |  |
-| I Security | 13 | 8 | 1 | 1 | 1 |  | 2 |
-| **All** | **139** | **32** | **25** | **21** | **36** | **19** | **6** |
+| I Security | 13 | 6 | 3 | 1 | 1 |  | 2 |
+| **All** | **140** | **30** | **25** | **22** | **36** | **21** | **6** |
 
 Before this check the course table had 24 topics built or checked. After it, 54. 78 of 138 statuses changed.
 
@@ -67,12 +67,11 @@ Before this check the course table had 24 topics built or checked. After it, 54.
 - D-09 Upgrade saga with pivot ordering: not started. Conflict: Design Record §3 upgrades access at once, before payment, and Slice 1R gives access at sign-up. The course review recommended unlocking after the charge. Needs a decision, not a status.
 - D-10 Saga countermeasures: not started. renew(n) plus the version check already stops a repeated renewal; no semantic locks.
 - D-11 Event-carried state transfer vs notification: designed. ADR-016 (events carry what the listener needs); ADR-012 (compacted access facts)
-- D-23 Reconciliation: partly built. Settlement reconciliation (proposed 021) is not built and is required before production.
+- D-27 Command for a person's decision on an unknown payment past the key window: partly built. Alert and runbook exist; the runbook says to change the database by hand.
 - D2-01 Static vs dynamic coupling; coupling-point map: partly built. No explicit static vs dynamic coupling map for tax and payment.
 - D2-03 Invoice state machine with tax: not started. Tax is not built.
 - E-04 Holistic and continual fitness functions: partly built. Not yet 1,000,000 (needs staging). No continual check in production.
-- E-05 Expand and contract: designed. Design Record lists a destructive-migration check as required before production.
-- E-06 Migration linter (Squawk): designed. Design Record "Required before production": a migration check that rejects destructive changes
+- E-05 Expand and contract: partly built. The migration check (E-06) is built; no change has yet been made in two releases, and the N-1 replay does not exist.
 - F-02 Feature flags per account: partly built. The reason has a place for flags. No flag table or switch yet. ADR-010 rejects hosted flags with random percentages; the course review's OpenFeature suggestion must stay within that.
 - F-03 Deployment pipeline: partly built. Staging and production stages from Design Record §14 do not exist.
 - F-07 Cohort canary for billing logic: designed. ADR-010 per-account flags; ADR-009
@@ -82,11 +81,11 @@ Before this check the course table had 24 topics built or checked. After it, 54.
 - H-06 Probes and graceful shutdown: partly built. No separate liveness and readiness groups.
 - H-09 Slice 2 messaging choice: designed. The course review's open choice is already decided.
 - I-01 Threat model: not started. Design Record §15 risk register is not a threat model
-- I-02 API authentication (subscriber app, back office): not started. Was "merchant API keys". The callers are the subscriber app and the back office.
-- I-04 Object-level authorisation + cross-account test: not started. Was "cross-tenant". Subscriber A must not read subscriber B's invoice.
+- I-02 API authentication (subscriber app, back office): designed (proposed 032), not built. Was "merchant API keys". The callers are the subscriber app and the back office.
+- I-04 Object-level authorisation + cross-account test: designed (proposed 032), not built. Was "cross-tenant". Subscriber A must not read subscriber B's invoice.
 - I-05 One database user per module: not started. Was "row-level security + DB user per module". Row-level security for tenants does not apply.
 
-Three of these the Design Record already lists as required before production: settlement reconciliation (D-23, proposed 021), authentication (I-02) and the destructive-migration check (E-06). D-23 was raised to high priority for that reason.
+The Design Record lists four items as required before production: settlement reconciliation (D-23, proposed 021, now checked), authentication (I-02), a command to record a person's decision on an unknown payment past the key window (D-27), and the destructive-migration check (E-06, now checked). D-23 was raised to high priority for that reason. The first version of this tracker named only three; D-27 was missing.
 
 **7. One subscription per account is a scope limit, not a rule.** `subscription_one_per_account` (A-14) comes from the Slice 1 brief. The Design Record assumes the opposite: one account can pay for several subscriptions. The renewal queue key is per account (D-26), so lifting the limit as it stands would drop a second subscription's renewal. Fix D-26 first.
 
@@ -174,10 +173,11 @@ Three of these the Design Record already lists as required before production: se
 | D-20 | Dead-letter queue with alert | Partly built ◆ | Not started | Medium | D3, D9 | FAILED queue rows keep last_error and are never deleted (Retention); money queues carry money="true" on their health metrics (QueueDefinition.asMoneyQueue); tally.queue.failed; tally.events.unreadable | The queue table is the dead-letter store: a failed item waits there for a person. Missing: the alert rule on money queues (Slice 2 step 0 alerts brief). |
 | D-21 | API composition | Designed ◆ | Not started | Low | — | Design Record §6: support view as a read model over published events | Not built. |
 | D-22 | Catalogue cache by version | Not started | Not started | Low | — | — | — |
-| D-23 | Reconciliation | Partly built ◆ | Not started | High | D2, D14 | payment/application/Reconciliation (unknown resolution, ADR-026); InvariantJobs with InvoicedVersusCollected (AT-12) | Settlement reconciliation (proposed 021) is not built and is required before production. |
+| D-23 | Reconciliation | Checked ◆ | Not started | High | D2, D14 | payment/application/Reconciliation (unknown resolution, ADR-026); SettlementReconciliation (proposed 021: settlement batches, both directions, V31); InvariantJobs with InvoicedVersusCollected (AT-12); UnknownResolutionIT, SettlementReconciliationIT; alert SettlementMismatch | A charge in a settlement batch resolves an UNKNOWN attempt; every other disagreement is a mismatch for a person (runbook settlement-mismatch.md). The fake's batch format is an assumption (CONTRACT.md A15) until a provider is chosen. |
 | D-24 | RPO, RTO and tested restore | Designed ◆ | Not started | Medium | D8 | ADR-020: 7-day point-in-time recovery, 25-day snapshots, deletion log | No restore drill yet. |
 | D-25 | Every active subscription has its next renewal scheduled (invariant check) | Checked ◆ | New | High | D1, D9 | subscription/adapter/persistence/SubscriptionInvariants (check subscription.next-renewal-scheduled, a daily job in subscription.jobs, V30); NextRenewalScheduledIT | Counts subscriptions with no unfinished renewal row for the period after their latest. A FAILED row counts as scheduled, because tally.queue.failed already reports it. Reads the renewal payload format written by Renewals.scheduleNext. |
 | D-26 | Renewal queue key per subscription | Not started ◆ | New | Medium | D1 | Renewals.scheduleNext keys a renewal as <account>:<period end>; V5 subscription_one_per_account | Safe today only because of A-14's limit. With two subscriptions on one account, both periods end on the account's billing day (S5), so both renewals get the same key, and the second is dropped by ON CONFLICT DO NOTHING. D-25 would report it the next day. |
+| D-27 | Command to record a person's decision on an unknown payment past the key window | Partly built ◆ | New | High | D2 | tally.payment.unknown_past_key_window gauge (Reconciliation); docs/runbooks/unknown-payment-past-key-window.md | Design Record lists it as required before production. The alert and the runbook exist. The command does not: the runbook says to change the database by hand. |
 
 ## D2 Distributed coordination
 
@@ -203,8 +203,8 @@ Three of these the Design Record already lists as required before production: se
 | E-02 | ADR template v2 | Built ◆ | Not started | High | — | ADR-001 has status, context, decision, consequences, compliance, alternatives rejected and revisit-when; the log has Drivers and Checked-by columns | Only an "advice sought" line is missing. |
 | E-03 | Fitness functions | Checked ◆ | Built | High | — | tally/src/test/java/com/tally/architecture (F3, F8–F13, FF-12, FF-13, pinned events and listeners) | — |
 | E-04 | Holistic and continual fitness functions | Partly built ◆ | Not started | High | D1, D6 | .github/workflows/nightly.yml runs AT-9 (5,000 accounts) and AT-10 (10,000 renewals) | Not yet 1,000,000 (needs staging). No continual check in production. |
-| E-05 | Expand and contract | Designed | Designed | High | D5 | ADR-009 | Design Record lists a destructive-migration check as required before production. |
-| E-06 | Migration linter (Squawk) | Designed ◆ | Not started | High | D5 | Design Record "Required before production": a migration check that rejects destructive changes | — |
+| E-05 | Expand and contract | Partly built ◆ | Designed | High | D5 | ADR-009; DestructiveMigrationsTest and DestructiveStatements (see E-06) | A destructive statement now needs a written reason, checked by the build. The check cannot tell whether the expand release really shipped first: a reviewer judges the reason. No change has yet been made in two releases (V16, V20, V27, V28 were one-step, safe only because no production database existed). The N-1 replay check ADR-009 also names does not exist. |
+| E-06 | Migration check for destructive changes | Checked ◆ | Not started | High | D5 | architecture/DestructiveMigrationsTest and DestructiveStatements, in ./mvnw verify: drop table, schema, view or column, rename, change of column type, set not null, a new not-null column without default, truncate. Each needs '-- contract: <reason>' above it. V1-V30 findings are pinned exactly, because a marker would change their Flyway checksum | Built as a test instead of Squawk: no new tool, and it runs where every other fitness function runs. It does not flag lock-heavy changes such as an index built without CONCURRENTLY, which Squawk would. |
 | E-07 | Tolerant reader and event versioning | Checked | Checked | High | D3, D13 | ADR-016, ADR-024, ADR-028; EventFieldsMayBeMissingTest (FF-13); EnumsHaveUnknownDefaultTest (FF-12) | — |
 | E-08 | Upcasting old events | Not applicable ◆ | Not started | Medium | — | CLAUDE.md rule 7 and FF-13: added fields are nullable, readers treat missing as not known | The add-only rule removes the need for upcasting so far. |
 | E-09 | Contract-first API | Checked | Checked | Medium | — | docs/api/openapi.yaml; ContractIT (ADR-019) | — |
@@ -271,9 +271,9 @@ Three of these the Design Record already lists as required before production: se
 | ID | Topic | Status | Was | Priority | Drivers | Evidence | Note |
 |---|---|---|---|---|---|---|---|
 | I-01 | Threat model | Not started | Not started | High | C2, D8 | Design Record §15 risk register is not a threat model | — |
-| I-02 | API authentication (subscriber app, back office) | Not started | Not started | High | D2 | Design Record "Required before production": authentication, with keys scoped per caller | Was "merchant API keys". The callers are the subscriber app and the back office. |
+| I-02 | API authentication (subscriber app, back office) | Designed ◆ | Not started | High | D2 | Proposed 032: a signed token (JWT) from an identity provider on every request; idempotency keys scoped per caller | Decided 2026-10-14. Not built. The callers are the subscriber app and the back office. |
 | I-03 | Human login via OIDC | Not started | Not started | Medium | — | — | — |
-| I-04 | Object-level authorisation + cross-account test | Not started | Not started | High | — | ADR-027 scopes idempotency keys per account until callers are authenticated | Was "cross-tenant". Subscriber A must not read subscriber B's invoice. |
+| I-04 | Object-level authorisation + cross-account test | Designed ◆ | Not started | High | — | Proposed 032: POST /v1/accounts links the calling user to the account, in Tally; every later request is checked against that link | Decided 2026-10-14. Not built. Subscriber A must not read subscriber B's invoice. |
 | I-05 | One database user per module | Not started | Not started | High | — | — | Was "row-level security + DB user per module". Row-level security for tenants does not apply. |
 | I-06 | RBAC and four-eyes refunds | Not started | Not started | Medium | — | — | — |
 | I-07 | PCI scope: hosted fields | Built ◆ | Designed | High | C2 | FR-015; fake-provider ProviderController simulates the hosted card form | No log-scanning test for card numbers. |
