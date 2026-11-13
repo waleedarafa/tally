@@ -1,4 +1,6 @@
-# The approved module dependency graph: docs/architecture/v2/design.md §3 (FR-040).
+# The approved module dependency graph: docs/architecture/v2/design.md §3 (FR-040), as far as the code has reached it.
+# During Slice 2 this file pins the code's graph, and design.md §3 the target: Slice 2 PR-3 adds accessfeed's line,
+# and PR-9 removes access's, which design.md §3 no longer has.
 # One line per module: "module: allowed, dependencies". Code dependencies point from downstream to upstream.
 # Named interfaces: account exposes a read API to every module that lists it, and AccountStanding.set to
 # collections only (F3).
