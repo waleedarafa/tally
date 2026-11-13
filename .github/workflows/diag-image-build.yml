@@ -6,13 +6,9 @@ on:
   pull_request:
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        case: [legacy-builder-no-pull, legacy-builder-after-pull, buildkit-no-pull]
+  nightly-command:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -22,22 +18,16 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - run: ./mvnw -B -q -pl fake-provider -DskipTests package
       - name: Docker
         run: |
-          docker version
-          docker info | grep -iE 'storage driver|driver-type|containerd-snapshotter|buildkit' || true
-          docker images
-      - name: Pull the base image first
-        if: matrix.case == 'legacy-builder-after-pull'
-        run: docker pull eclipse-temurin:25-jre
-      - name: Build three times
-        run: |
-          set +e
-          for i in 1 2 3; do
-            if [ "${{ matrix.case }}" = buildkit-no-pull ]; then export DOCKER_BUILDKIT=1; else export DOCKER_BUILDKIT=0; fi
-            docker build -t "diag-$i" fake-provider > "build-$i.log" 2>&1
-            echo "build $i exit=$?"
-            tail -5 "build-$i.log"
-            docker rmi "diag-$i" >/dev/null 2>&1
-          done
+          docker version --format 'server {{.Server.Version}}'
+          docker info | grep -iE 'storage driver|driver-type' || true
+      - name: The nightly's command, unchanged
+        run: >
+          ./mvnw -B verify
+          -Dit.test='AT09KillOneInstanceIT,AT10ThroughputIT'
+          -Dtally.at09.accounts=5000
+          -Dtally.at10.renewals=10000
+      - name: Image build lines
+        if: always()
+        run: grep -h -E "Transferred|failed to|tally-fake-provider-test" tally/target/failsafe-reports/*-output.txt tally/target/failsafe-reports/*.txt 2>/dev/null | head -40 || true
