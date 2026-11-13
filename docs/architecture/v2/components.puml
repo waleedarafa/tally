@@ -32,6 +32,7 @@ System_Boundary("TallyApplication_boundary", "TallyApplication", $tags="") {
 
 Rel(TallyApplication.TallyApplication.Access, TallyApplication.TallyApplication.Subscription, "listens to", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Account, TallyApplication.TallyApplication.Platform, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Account, TallyApplication.TallyApplication.Sharedkernel, "depends on", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Collections, TallyApplication.TallyApplication.Invoicing, "listens to", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Collections, TallyApplication.TallyApplication.Invoicing, "uses", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Collections, TallyApplication.TallyApplication.Platform, "uses", $techn="", $tags="", $link="")
