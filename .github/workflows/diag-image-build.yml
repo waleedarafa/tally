@@ -1,18 +1,45 @@
-# Temporary, for PR-0 (Slice 2 step 0b): finds why the first build of the fake provider's image fails on a
-# fresh runner. Removed before the pull request merges.
+# Temporary, for PR-0 (Slice 2 step 0b): shows the cause of the nightly failures and that the fix holds.
+# Removed before the pull request merges.
 name: Diagnose image build
 
 on:
   pull_request:
 
 jobs:
-  docker-28-cli:
+  # October's runner: Ubuntu 24.04, Docker 28.0.4, classic image store. Main's code fails here, this branch's passes.
+  at10-docker-28:
     strategy:
       fail-fast: false
       matrix:
-        case: [legacy-as-is, legacy-without-empty-copy, buildkit-as-is]
+        code: [main, branch]
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.code == 'main' && 'main' || '' }}
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Docker
+        run: |
+          docker version --format 'server {{.Server.Version}}'
+          docker info | grep -iE 'storage driver|driver-type' || true
+      - name: AT-10, the nightly's first test, at CI size
+        run: ./mvnw -B verify -Dtest=none -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=AT10ThroughputIT
+
+  # The nightly's own command, unchanged, on this branch: on October's runner, and twice on today's ubuntu-latest.
+  nightly-command:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-latest-1, ubuntu-latest-2]
+    runs-on: ${{ startsWith(matrix.runner, 'ubuntu-latest') && 'ubuntu-latest' || matrix.runner }}
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -22,24 +49,13 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - run: ./mvnw -B -q -pl fake-provider -DskipTests package
       - name: Docker
         run: |
           docker version --format 'server {{.Server.Version}}'
           docker info | grep -iE 'storage driver|driver-type' || true
-      - name: What the jar's layers hold
-        run: |
-          mkdir -p /tmp/x && cp fake-provider/target/fake-provider-*.jar /tmp/x/app.jar
-          (cd /tmp/x && java -Djarmode=tools -jar app.jar extract --layers --launcher --destination extracted && find extracted -maxdepth 2 | sort)
-      - name: Without the COPY of the empty layer
-        if: matrix.case == 'legacy-without-empty-copy'
-        run: sed -i '/snapshot-dependencies/d' fake-provider/Dockerfile && cat fake-provider/Dockerfile
-      - name: Build twice
-        run: |
-          set +e
-          if [ "${{ matrix.case }}" = buildkit-as-is ]; then export DOCKER_BUILDKIT=1; else export DOCKER_BUILDKIT=0; fi
-          for i in 1 2; do
-            docker build --no-cache=false -t "diag-$i" fake-provider > "build-$i.log" 2>&1
-            echo "== build $i exit=$?"
-            tail -12 "build-$i.log"
-          done
+      - name: AT-9 and AT-10 at nightly size
+        run: >
+          ./mvnw -B verify
+          -Dit.test='AT09KillOneInstanceIT,AT10ThroughputIT'
+          -Dtally.at09.accounts=5000
+          -Dtally.at10.renewals=10000
