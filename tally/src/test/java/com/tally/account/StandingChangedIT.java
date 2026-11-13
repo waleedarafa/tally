@@ -151,7 +151,9 @@ class StandingChangedIT extends AbstractIntegrationTest {
     }
 
     boolean someoneWaitsForARowLock() {
-        return jdbc.queryForObject("SELECT count(*) FROM pg_locks WHERE NOT granted", Long.class) > 0;
+        // Sessions of this class's own database only (ADR-029: other test classes have other databases).
+        return jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()"
+                + " AND wait_event_type = 'Lock'", Long.class) > 0;
     }
 
     @Test
