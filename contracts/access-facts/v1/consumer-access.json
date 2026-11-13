@@ -1,0 +1,15 @@
+{
+  "consumer": "access",
+  "contract": "access-facts",
+  "version": 1,
+  "reads": [
+    "schemaVersion",
+    "accountId",
+    "sequence",
+    "producedAt",
+    "standing",
+    "sources[].kind",
+    "sources[].id",
+    "sources[].state"
+  ]
+}

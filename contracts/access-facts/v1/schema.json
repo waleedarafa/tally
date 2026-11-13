@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AccessFacts, version 1",
+  "description": "The current access facts of one account, sent by billing's accessfeed to the event log (topic access-facts, key = the account ID), read by Access (ADR-012, ADR-033, ADR-034, design.md section 4). Add only (ADR-016). IDs, enums, numbers and times only: no free text, so no personal data (ADR-006, F15).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "accountId", "sequence", "producedAt", "standing", "sources"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "accountId": { "type": "string", "format": "uuid" },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "producedAt": { "type": "string", "format": "date-time" },
+    "standing": { "type": "string", "enum": ["GOOD", "OVERDUE", "BLOCKED"] },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id", "state"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["SUBSCRIPTION"] },
+          "id": { "type": "string", "format": "uuid" },
+          "state": { "type": "string", "enum": ["ACTIVE"] }
+        }
+      }
+    }
+  }
+}

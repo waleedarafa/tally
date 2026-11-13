@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "accountId": "0b6f2d4e-8c1a-4f5b-9e3d-7a2c1b0d9e8f",
+  "sequence": 7,
+  "producedAt": "2026-11-13T06:00:00Z",
+  "standing": "GOOD",
+  "sources": [
+    { "kind": "SUBSCRIPTION", "id": "5c1e9a7b-3d2f-4e6a-8b0c-1d2e3f4a5b6c", "state": "ACTIVE" }
+  ]
+}
