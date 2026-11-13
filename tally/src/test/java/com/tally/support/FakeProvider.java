@@ -11,7 +11,6 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.web.client.RestClient;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.images.builder.ImageFromDockerfile;
 
 /**
  * The fake provider as a container, built from the jar the reactor built first, so Tally's calls
@@ -22,10 +21,7 @@ public final class FakeProvider {
     private static final Path MODULE = Path.of("..", "fake-provider").toAbsolutePath().normalize();
 
     private static final GenericContainer<?> CONTAINER = new GenericContainer<>(
-            new ImageFromDockerfile("tally-fake-provider-test", false)
-                    .withFileFromPath("Dockerfile", MODULE.resolve("Dockerfile"))
-                    .withDockerfile(MODULE.resolve("Dockerfile"))
-                    .withFileFromPath("target/fake-provider-test.jar", jar()))
+            ModuleImage.of("tally-fake-provider-test", MODULE, "target/fake-provider-test.jar", jar()))
             .withExposedPorts(8081)
             .waitingFor(Wait.forHttp("/admin/charges/count?reference=startup").forStatusCode(200)
                     .withStartupTimeout(Duration.ofMinutes(2)));
