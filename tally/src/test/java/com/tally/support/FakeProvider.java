@@ -24,6 +24,7 @@ public final class FakeProvider {
     private static final GenericContainer<?> CONTAINER = new GenericContainer<>(
             new ImageFromDockerfile("tally-fake-provider-test", false)
                     .withFileFromPath("Dockerfile", MODULE.resolve("Dockerfile"))
+                    .withDockerfile(MODULE.resolve("Dockerfile"))
                     .withFileFromPath("target/fake-provider-test.jar", jar()))
             .withExposedPorts(8081)
             .waitingFor(Wait.forHttp("/admin/charges/count?reference=startup").forStatusCode(200)

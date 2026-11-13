@@ -6,28 +6,42 @@ on:
   pull_request:
 
 jobs:
-  nightly-command:
+  docker-28:
+    strategy:
+      fail-fast: false
+      matrix:
+        code: [main, branch]
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.code == 'main' && 'main' || '' }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Docker
+      - name: Docker 28.0.4 with the classic image store, as the runner had in October
         run: |
+          if ! apt-cache madison docker-ce >/dev/null 2>&1 || [ -z "$(apt-cache madison docker-ce)" ]; then
+            sudo install -m 0755 -d /etc/apt/keyrings
+            sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+            echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list
+          fi
+          sudo apt-get update -q
+          V=$(apt-cache madison docker-ce | awk '{print $3}' | grep '^5:28.0.4' | head -1)
+          echo "installing docker-ce $V"
+          sudo apt-get install -y -q --allow-downgrades docker-ce="$V" docker-ce-cli="$V"
+          echo '{"features":{"containerd-snapshotter":false}}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
           docker version --format 'server {{.Server.Version}}'
           docker info | grep -iE 'storage driver|driver-type' || true
-      - name: The nightly's command, unchanged
-        run: >
-          ./mvnw -B verify
-          -Dit.test='AT09KillOneInstanceIT,AT10ThroughputIT'
-          -Dtally.at09.accounts=5000
-          -Dtally.at10.renewals=10000
+          docker images
+      - name: AT-10, the nightly's first test, at CI size
+        run: ./mvnw -B verify -Dtest=none -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=AT10ThroughputIT
       - name: Image build lines
         if: always()
-        run: grep -h -E "Transferred|failed to|tally-fake-provider-test" tally/target/failsafe-reports/*-output.txt tally/target/failsafe-reports/*.txt 2>/dev/null | head -40 || true
+        run: grep -h -E "Pre-emptively|Transferred|failed to|tally-fake-provider-test" tally/target/failsafe-reports/*.txt 2>/dev/null | head -20 || true
