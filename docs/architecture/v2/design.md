@@ -54,8 +54,10 @@ offers: shared, platform, account
 subscription: shared, platform, account, offers
 invoicing: shared, platform, account, offers, subscription, payment
 collections: shared, platform, account, subscription, invoicing
-access: shared, platform, subscription, account    # TEMPORARY until Slice 2: events only, no API calls
+accessfeed: shared, platform, subscription, account    # events only, never their APIs (ADR-033)
 ```
+
+Access is not in this graph: it is a second deployable (ADR-001), in `access/`, base package `com.tallyaccess`, with its own database. It imports no billing code; billing and Access share only the files in `contracts/access-facts/` (ADR-034, F7). The in-process `access` module of Slice 1 leaves in Slice 2 PR-9; until then the pinned graph keeps its line.
 
 Named interfaces: `account` exposes a read API to every module that lists it, and `AccountStanding.set` to `collections` only (F3).
 `support` joins in a later slice: `support: shared, account, invoicing, collections`.
@@ -88,7 +90,8 @@ What the picture shows: one hub (Account, conformed to by every context), no cyc
 | `subscription` | `SubscriptionApi.subscribe(accountId, offerId)` (the design's `Subscriptions.start`), `changePlan`, `cancel(id, requestedAt)`, `cancelForWriteOff` | `SubscriptionChanged` with types: started, plan changed, period renewed, renewal reversed, cancelled. Since Slice 1R PR-5 it carries the offer version and the current period (number, start, end) |
 | `invoicing` | `InvoicingApi.requestPaymentAgain(invoiceId, retry)` (the retry number makes a repeated call harmless), `invoicesFor(accountId)` | `InvoiceIssued`, `InvoicePaymentDeclined`, `InvoicePaid`, `CreditNoteIssued` |
 | `payment` | `PaymentApi.requestCollection(reference, accountId, amount, paymentToken)` (the design's `Payments.collect`), `collectAgain(reference, retry)` (Collections' retry of a declined reference, via Invoicing; looks the reference up first, ADR-026), `status(reference)` | `PaymentSucceeded`, `PaymentFailed` with reason declined; technical failures publish nothing |
-| `account` | `Accounts.get(id)`; `AccountStanding.set(id, standing, cause)` | `StandingChanged` |
+| `account` | `Accounts.get(id)`; `AccountStanding.set(id, standing, cause)` | `StandingChanged`: event ID, time, account ID, sequence (the account's version), standing. Published in `AccountStanding.set`'s transaction, only when the standing changes; no cause text |
+| `accessfeed` | none | none in process. Sends `AccessFacts` to the event log (ADR-033) |
 | `collections` | `Collections.caseFor(accountId)` | none |
 
 ```java
@@ -103,6 +106,26 @@ public record QuoteReason(String offerId, int offerVersion, String kind, Map<Str
 *(Real names since Slice 1R PR-4: identifiers are `UUID` and `String`, not value types.)*
 
 **Offer version (Slice 1R PR-5, clarifies O3):** a subscription keeps the offer version it signed up to; `QuoteRequest.offerVersion` is required and `Pricing.quote` prices that version. A new version applies to new sign-ups only; moving existing subscribers is a later, explicit, dated change.
+
+**AccessFacts, version 1** (ADR-012, ADR-033, ADR-034): the current access facts of one account, on the event log's topic `access-facts`. Key: the account ID. The schema is `contracts/access-facts/v1/schema.json`.
+
+```json
+{
+  "schemaVersion": 1,
+  "accountId": "0b6f…",
+  "sequence": 7,
+  "producedAt": "2026-11-13T06:00:00Z",
+  "standing": "GOOD",
+  "sources": [
+    { "kind": "SUBSCRIPTION", "id": "5c1e…", "state": "ACTIVE" }
+  ]
+}
+```
+
+- `sequence` counts from 1 for each account, and goes up by one only when the facts change: a repeated event, or a `PERIOD_RENEWED`, changes nothing and sends nothing.
+- `standing`: GOOD, OVERDUE or BLOCKED. `kind`: SUBSCRIPTION only. `state`: ACTIVE only. Later slices add values (add only, ADR-016).
+- IDs, enums, numbers and times only: no free text, so no personal data (ADR-006, D8, F15).
+- For one account, one send at a time, each carrying the facts current when it starts; Access applies a message only if its sequence is higher.
 
 **Envelope:** every event carries event ID, occurrence time, account ID and the aggregate version as a sequence number.
 **Evolution:** add fields only; never rename or move an event class; every shared enum has `UNKNOWN`, which unknown input maps to.
@@ -162,6 +185,17 @@ Clock (all with dates), `CardProvider` (payment), `TaxRates` (invoicing), `Invoi
 | `GET /v1/subscriptions/{id}` | status, plan, current period | |
 | `GET /v1/accounts/{id}/invoices` | invoices with amounts | |
 | `GET /v1/access/{subscriberId}` | canWatch, reason, asOf, sequence | served by Access |
+
+**`GET /v1/access/{subscriberId}`**, served by Access (ADR-001), from its own copy. In Slice 2 the subscriber is the account (ADR-033). Example: `{ "subscriberId": "0b6f…", "canWatch": true, "reason": "ACTIVE_SOURCE", "asOf": "2026-11-13T06:00:00Z", "sequence": 7 }`.
+
+| Access's copy says | canWatch | reason |
+|---|---|---|
+| At least one active source, standing not BLOCKED | true | `ACTIVE_SOURCE` |
+| Standing BLOCKED | false | `ACCOUNT_BLOCKED` |
+| No active source | false | `NO_ACTIVE_SOURCE` |
+| No row for this ID | false | `NOT_KNOWN` (the app shows "activating", ADR-014) |
+
+`asOf` is the `producedAt` of the facts behind the answer, and `sequence` their sequence; for `NOT_KNOWN` both are null. A standing or a source state Access does not know never takes access away: an unknown standing is not BLOCKED, and an unknown state counts as active (ADR-033).
 
 Errors: `application/problem+json` (RFC 9457). Types: `offer-not-available`, `already-subscribed`, `account-blocked`, `idempotency-key-reused`, `request-in-progress` (409, with `Retry-After`: the same request is still being handled; added in Slice 1R PR-9b).
 An `Idempotency-Key` must be a UUID; any other value is refused with 400 and not stored (Slice 1R PR-10, from the #24 review: loosening this later is additive, tightening it would break clients). Idempotency keys are claimed before acting; the response is stored in the same transaction as the change, and both are kept for 24 hours. Keys are scoped by account until callers are authenticated. Versions live in the path; changes are additive; a break is `/v2`.
