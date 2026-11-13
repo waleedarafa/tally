@@ -7,6 +7,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -40,6 +41,14 @@ public class Account {
     @Column(name = "standing_cause")
     private String standingCause;
 
+    /**
+     * The account's version: an optimistic lock, and the sequence {@code StandingChanged} carries (ADR-016). Of two
+     * changes of standing at the same time, one commits and the other fails.
+     */
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     protected Account() {
     }
 
@@ -70,12 +79,21 @@ public class Account {
         return standing;
     }
 
-    public void setStanding(Standing standing, String cause) {
+    public long version() {
+        return version;
+    }
+
+    /** Sets the standing; returns false, and changes nothing, if the account already has it. */
+    public boolean setStanding(Standing standing, String cause) {
         if (standing == null || standing == Standing.UNKNOWN) {
             throw new IllegalArgumentException("A standing is GOOD, OVERDUE or BLOCKED: " + standing);
         }
+        if (this.standing == standing) {
+            return false;
+        }
         this.standing = standing;
         this.standingCause = cause;
+        return true;
     }
 
     public void recordPaymentToken(String token) {
