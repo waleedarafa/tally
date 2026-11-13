@@ -1,0 +1,43 @@
+# Temporary, for PR-0 (Slice 2 step 0b): finds why the first build of the fake provider's image fails on a
+# fresh runner. Removed before the pull request merges.
+name: Diagnose image build
+
+on:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [legacy-builder-no-pull, legacy-builder-after-pull, buildkit-no-pull]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - run: ./mvnw -B -q -pl fake-provider -DskipTests package
+      - name: Docker
+        run: |
+          docker version
+          docker info | grep -iE 'storage driver|driver-type|containerd-snapshotter|buildkit' || true
+          docker images
+      - name: Pull the base image first
+        if: matrix.case == 'legacy-builder-after-pull'
+        run: docker pull eclipse-temurin:25-jre
+      - name: Build three times
+        run: |
+          set +e
+          for i in 1 2 3; do
+            if [ "${{ matrix.case }}" = buildkit-no-pull ]; then export DOCKER_BUILDKIT=1; else export DOCKER_BUILDKIT=0; fi
+            docker build -t "diag-$i" fake-provider > "build-$i.log" 2>&1
+            echo "build $i exit=$?"
+            tail -5 "build-$i.log"
+            docker rmi "diag-$i" >/dev/null 2>&1
+          done
