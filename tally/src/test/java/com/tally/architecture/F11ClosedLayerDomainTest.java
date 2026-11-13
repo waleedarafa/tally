@@ -12,14 +12,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.FieldSource;
 
 /**
- * F11 (Design Record §10 C; Slice 1R close-out): inside the closed-layer modules {@code account} and
- * {@code collections}, the domain depends on no web technology and no adapter. Unlike F9, Spring Data is
- * allowed: a closed-layer domain may hold its repository. Together with F9 it replaces the first run's FF-8
- * ({@code domainDoesNotDependOnAdapters}).
+ * F11 (Design Record §10 C; Slice 1R close-out): inside the closed-layer modules {@code account},
+ * {@code collections} and {@code accessfeed} (Slice 2 PR-3), the domain depends on no web technology and no
+ * adapter. Unlike F9, Spring Data is allowed: a closed-layer domain may hold its repository. Together with F9 it
+ * replaces the first run's FF-8 ({@code domainDoesNotDependOnAdapters}).
  */
 class F11ClosedLayerDomainTest {
 
-    static final List<String> MODULES = List.of("account", "collections");
+    static final List<String> MODULES = List.of("account", "collections", "accessfeed");
 
     @ParameterizedTest
     @FieldSource("MODULES")
