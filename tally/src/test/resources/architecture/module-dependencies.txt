@@ -15,3 +15,6 @@ collections: shared, platform, account, subscription, invoicing
 # TEMPORARY until Slice 2: access may use only the events of subscription and account, never their APIs
 # (F12AccessReactsOnlyToEventsTest).
 access: shared, platform, subscription, account
+# Slice 2 PR-3 (ADR-033): the access feed uses only the events of subscription and account, never their APIs
+# (F12AccessReactsOnlyToEventsTest). Permanent: it replaces access's line, which leaves in PR-9.
+accessfeed: shared, platform, subscription, account

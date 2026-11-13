@@ -12,10 +12,11 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 /**
- * F12 (Slice 1R PR-10; design.md §3): {@code access} may use {@code subscription} and {@code account} only through
- * their events, and only until Slice 2, when Access becomes its own deployable. It never calls a billing API:
- * it reacts to events and answers from its own tables. The module graph allows the edge; this test narrows it
- * to the events and the types they carry (an event's enum, for one).
+ * F12 (Slice 1R PR-10; design.md §3; ADR-033): {@code access} and {@code accessfeed} may use {@code subscription} and
+ * {@code account} only through their events. Neither ever calls a billing API: each reacts to events and keeps its
+ * own tables. The module graph allows the edge; this test narrows it to the events and the types they carry (an
+ * event's enum, for one). {@code access}'s edge is temporary, until it leaves in Slice 2 PR-9; {@code accessfeed}'s is
+ * permanent.
  */
 class F12AccessReactsOnlyToEventsTest {
 
@@ -41,15 +42,25 @@ class F12AccessReactsOnlyToEventsTest {
 
     @Test
     void accessUsesOnlyTheEventsOfSubscriptionAndAccount() {
-        Set<JavaClass> allowed = events();
-        assertThat(allowed).extracting(JavaClass::getSimpleName).contains("SubscriptionChanged");
+        reactsOnlyToEvents("com.tally.access..", "Access reacts to events and answers from its own tables; it never"
+                + " calls a billing API (Slice 1R PR-10; the edge is temporary until Slice 2 PR-9)");
+    }
 
-        noClasses().that().resideInAPackage("com.tally.access..")
+    @Test
+    void theAccessFeedUsesOnlyTheEventsOfSubscriptionAndAccount() {
+        reactsOnlyToEvents("com.tally.accessfeed..", "the access feed builds the facts from events and keeps them in"
+                + " its own tables; it never calls the API of subscription or account (ADR-033)");
+    }
+
+    static void reactsOnlyToEvents(String module, String reason) {
+        Set<JavaClass> allowed = events();
+        assertThat(allowed).extracting(JavaClass::getSimpleName).contains("SubscriptionChanged", "StandingChanged");
+
+        noClasses().that().resideInAPackage(module)
                 .should().dependOnClassesThat(DescribedPredicate.describe(
                         "are in subscription or account but are not their events or a type an event carries",
                         (JavaClass target) -> upstream(target) && !allowed.contains(target)))
-                .because("Access reacts to events and answers from its own tables; it never calls a billing API"
-                        + " (Slice 1R PR-10; the edge is temporary until Slice 2)")
+                .because(reason)
                 .check(InsideLayout.CLASSES);
     }
 }

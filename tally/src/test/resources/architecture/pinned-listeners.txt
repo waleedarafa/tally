@@ -4,6 +4,8 @@
 # no incomplete publications, then remove the old listener and its line. To add a listener: add its line in the
 # same commit.
 com.tally.access.application.AccessService.on(com.tally.subscription.SubscriptionChanged)
+com.tally.accessfeed.application.AccessFeedListeners.on(com.tally.account.StandingChanged)
+com.tally.accessfeed.application.AccessFeedListeners.on(com.tally.subscription.SubscriptionChanged)
 com.tally.collections.application.CollectionsService.on(com.tally.invoicing.InvoicePaid)
 com.tally.collections.application.CollectionsService.on(com.tally.invoicing.InvoicePaymentDeclined)
 com.tally.invoicing.application.InvoicingListeners.on(com.tally.invoicing.InvoiceIssued)
