@@ -34,9 +34,9 @@ Step 0 of this slice is done (test isolation, alerts: ADR-029, ADR-030, ADR-031)
 - The listener `AccessService.on(SubscriptionChanged)` is in `pinned-listeners.txt` (ADR-028).
 - The repository has two Maven modules: `fake-provider`, then `tally`. Tests build the fake provider's image from its jar.
 
-## Decisions to confirm before PR-1
+## Decisions, confirmed by the user on 13 November 2026
 
-The Design Record decides the shape (ADR-001, 006, 012). It does not decide the four points below. Each has a recommendation. PR-1 records them as proposed, and no code starts before the user confirms them.
+The Design Record decides the shape (ADR-001, 006, 012). It does not decide the four points below. The user confirmed the recommended option of each point, and the three assumptions (comment on pull request 60). PR-1 records them in `README.md` as proposed 033 and 034.
 
 ### 1. Where billing builds the access facts (proposed ADR-033, part 1)
 
@@ -48,7 +48,7 @@ ADR-012 says the log holds the **current access facts of each account**: `Access
 | B. Subscription builds the message | Subscription listens to standing changes and publishes the facts. | No new module. | Subscription learns about standing and about Access's message. Its reasons to change grow. |
 | C. Two topics, one for each source module | Each module sends its own events to the log. Access joins them. | No new billing code path. | Not what ADR-012 and §16 decided. The answer's `sequence` has no single meaning. A rebuild must join two topics. |
 
-Build A. The TEMPORARY edge of `access` goes away, as the Design Record says. A new, permanent edge takes its place: `accessfeed` uses the **events** of `subscription` and `account`, never their APIs. This brief is the approval that FR-040 asks for, once the user confirms it.
+Build A. The TEMPORARY edge of `access` goes away, as the Design Record says. A new, permanent edge takes its place: `accessfeed` uses the **events** of `subscription` and `account`, never their APIs. This brief is the approval that FR-040 asks for.
 
 ### 2. How the facts reach the log (proposed ADR-033, part 2)
 
@@ -182,7 +182,7 @@ Each is a short-lived branch, merged through a pull request (ADR-008). `./mvnw v
 ### PR-0 · The nightly run (step 0b)
 
 ### PR-1 · Docs: adopt this brief (no code)
-- `README.md`: add proposed 033 and 034 with the text confirmed by the user.
+- `README.md`: add proposed 033 (decisions 1 and 2, and the three assumptions) and 034 (decision 3).
 - `design.md` §3: replace the TEMPORARY line with the target graph. `design.md` §4: add `StandingChanged` and `AccessFacts`. §8: the Access answer above.
 - `CLAUDE.md`: the changes listed below.
 - Keep `module-dependencies.txt` on the current graph until the code changes it. Say how in the pull request.
