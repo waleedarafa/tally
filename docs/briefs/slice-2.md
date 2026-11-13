@@ -34,7 +34,7 @@ Step 0 of this slice is done (test isolation, alerts: ADR-029, ADR-030, ADR-031)
 - The listener `AccessService.on(SubscriptionChanged)` is in `pinned-listeners.txt` (ADR-028).
 - The repository has two Maven modules: `fake-provider`, then `tally`. Tests build the fake provider's image from its jar.
 
-## Decisions, confirmed by the user on 13 November 2026
+## Decisions, confirmed by the user on 13 November 2026 (decision 5: the same day, after the spikes)
 
 The Design Record decides the shape (ADR-001, 006, 012). It does not decide the four points below. The user confirmed the recommended option of each point, and the three assumptions (comment on pull request 60). PR-1 records them in `README.md` as proposed 033 and 034.
 
@@ -71,6 +71,18 @@ Build B, with this property: **for one account, only one send runs at a time, an
 | C. A shared library of event classes | No translation. | Rejected in Design Record §10: both quanta would deploy together. |
 
 Build A. Billing's commit stage fails when a change breaks a field that Access reads (F7).
+
+### 5. Where Access keeps its position in the log (proposed ADR-035; added 13 November after spike S-3)
+
+Spike S-3 showed: when Access's database is emptied, a consumer in the old group does **not** read from the start. The broker keeps the group's position. An operator must stop every Access instance and reset the group, and the reset tool exits with code 0 also when it refuses.
+
+| Option | On a rebuild | Cost |
+|---|---|---|
+| A. Position in the broker (this brief's first text) | The operator stops all instances, resets the group, and reads the tool's output. | A manual step, with a trap, at the worst time. |
+| B. Position in Access's database; each instance reads all partitions itself | Empty the database; Access reads from the start. | Every instance applies every message. The broker does not share the work. |
+| **C. Position in Access's database, and the instances join a group** (confirmed by the user) | Empty the database; Access reads from the start. | A rebalance listener that moves to the stored position. |
+
+Build C. The facts and the position are in one transaction, so they cannot disagree. Kafka's `KafkaConsumer` documentation describes the pattern ("Storing Offsets Outside Kafka").
 
 ### 4. Assumptions (say so in the code and the report)
 
@@ -216,7 +228,9 @@ Each is a short-lived branch, merged through a pull request (ADR-008). `./mvnw v
 ### PR-6 · The Access service
 - A new Maven module `access`, between `fake-provider` and `tally`. Base package `com.tallyaccess`. It has no dependency on the `tally` module and imports no `com.tally` class. F7, Access side, fails the build if it does.
 - Plain layers (Design Record §10 amendment). Its own Flyway migrations and schema. It injects `Clock` (rule 4).
-- The consumer applies a message with one atomic statement: insert, or update only if the stored sequence is lower. It confirms its position in the log only after the database commit.
+- The consumer applies a message with one atomic statement: insert, or update only if the stored sequence is lower.
+- **Access keeps its position in the log in its own database** (decision 5 below, proposed ADR-035). It writes the facts and the position of each partition in one transaction. The instances still join one consumer group, so the broker shares the partitions and moves them when an instance stops. When the broker gives an instance a partition, the instance moves to the position in the database; with no position there, it starts at the beginning. Access never commits a position to the broker, and never uses the broker's stored position.
+- Two instances can hold one partition for a short time while the broker moves it. So the position only moves forward: the update is one atomic statement that keeps the higher value.
 - The endpoint and answers above. Its own OpenAPI file, `docs/api/access-openapi.yaml`, written first, with a contract test like `ContractIT`.
 - **Readiness.** An instance whose copy is behind the end of the log that it saw at start reports "not ready" and serves no answer. Without this, a rebuild answers `NOT_KNOWN` for paying households.
 - Consumer contract test: Access reads every file in `contracts/access-facts/v1/examples/`, the unknown field and values included.
@@ -230,7 +244,7 @@ The tests start billing instances, the log, and Access as a container built from
 |---|---|---|
 | AT-1 (changed) | After `POST /v1/subscriptions`, the **Access service** answers `canWatch: true` within 5 seconds. The old endpoint answers the same during this slice. Print the time. | ADR-014 |
 | AT-18 Access survives billing | With 100 accounts known to Access: stop every billing instance and the billing database. Access answers every account correctly, for known and unknown IDs. Start billing; a new sign-up reaches Access. | ADR-001, D13 |
-| AT-19 Rebuild | Empty Access's database and follow the runbook from S-3. Access is "not ready" until it has caught up. Then every answer equals the answer before. Run it once on a topic where compaction has run, and once where it has not. | ADR-012 |
+| AT-19 Rebuild | Empty Access's database (facts and positions) and start Access with its **old** consumer group. No reset of the group, and no other step in the broker. Access reads from the start, and is "not ready" until it has caught up. Then every answer equals the answer before. Run it once on a topic where compaction has run (settings from spike S-2), and once where it has not. Also: stop one of two instances in the middle of a load; the other takes its partitions and no message is lost. | ADR-012, 035 |
 | AT-20 Blocked and restored | `AccountStanding.set(BLOCKED)` makes `canWatch: false`, reason `ACCOUNT_BLOCKED`. `GOOD` restores it. The sequence goes up each time. | Access rules 2 and 4 |
 | AT-21 Old and repeated messages | Access gets sequence 6, then 5, then 6 again. The answer stays on 6. | ADR-006, ADR-016 |
 
@@ -244,7 +258,7 @@ Add to `ops/alerts/tally.rules.yml`, each with a firing test, a quiet test and a
 | `AccessStale` | The log has messages that Access has not applied for more than 120 s | 1m | page | D13 | `access-stale.md` |
 | `AccessValueNotKnown` | Access counted a value it does not know in the last day | 0m | ticket | ADR-024 | `access-value-not-known.md` |
 
-Also write `access-rebuild.md` (the steps proved by AT-19). F14 allows a runbook that no rule names only if it is on a short list in the test; say so.
+Also write `access-rebuild.md` (the steps proved by AT-19: empty the database, start Access; no group reset). F14 allows a runbook that no rule names only if it is on a short list in the test; say so.
 
 ### PR-9 · Remove the in-process `access` module (a separate release)
 ADR-028: a listener is removed only when it has no incomplete publication. So this pull request merges only after PR-7 is on `main`.
@@ -276,4 +290,5 @@ ADR-028: a listener is removed only when it has no incomplete publication. So th
 
 - Spring Modulith reference, "Event externalization": externalization "might overtake former ones"; `serialize-externalization` sends "only one event … at a time". https://docs.spring.io/spring-modulith/reference/2.0/events.html
 - Kafka design, "Log compaction": "Compaction will never reorder messages, just remove some"; a reader from the start "will see at least the final state of all records"; compaction "does not guarantee there is only one record with the same key at any one time". https://docs.confluent.io/kafka/design/log_compaction.html
+- Kafka `KafkaConsumer` documentation, "Storing Offsets Outside Kafka": a relational database "can allow committing both the results and offset in a single transaction"; with a group, pass a `ConsumerRebalanceListener` to `subscribe`. https://kafka.apache.org/42/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html
 - Kill Bill: the Design Record's own check (§13) says Kill Bill has no event log, because it has no separate Access quantum; it uses web callbacks. Nothing in Kill Bill is a model for this slice. `killbill-wiki` was not read for this brief.
