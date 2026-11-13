@@ -11,7 +11,7 @@ jobs:
       fail-fast: false
       matrix:
         code: [main, branch]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -32,6 +32,7 @@ jobs:
             echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list
           fi
           sudo apt-get update -q
+          . /etc/os-release && echo "runner $PRETTY_NAME"; docker version --format 'docker before {{.Server.Version}}' || true
           V=$(apt-cache madison docker-ce | awk '{print $3}' | grep '^5:28.0.4' | head -1)
           echo "installing docker-ce $V"
           sudo apt-get install -y -q --allow-downgrades docker-ce="$V" docker-ce-cli="$V"
