@@ -5,6 +5,7 @@
 #
 # Scrape assumptions, for whoever writes the scrape configuration:
 # - the scrape job is named tally (TallyDown reads up{job="tally"});
+# - Access, the second deployable (ADR-001), is scraped as the job access (AccessDown reads up{job="access"});
 # - honor_labels is false (Prometheus's default), so Tally's own job tag on tally_job_* arrives as exported_job.
 groups:
   - name: tally
@@ -184,3 +185,66 @@ groups:
         annotations:
           summary: "Invariant check {{ $labels.check }} found violations."
           runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/invariant-violated.md
+
+  # Access, the second deployable (ADR-001), and the feed that keeps it current (ADR-033; Slice 2 PR-8). A
+  # tally_access_ metric is Access's own; F14's Access side (com.tallyaccess.F14AccessMetricsIT) checks it exists.
+  - name: access
+    rules:
+      - alert: AccessDown
+        expr: up{job="access"} == 0 or absent(up{job="access"})
+        for: 2m
+        labels:
+          severity: page
+          driver: D13
+        annotations:
+          summary: Prometheus cannot scrape Access; households may get no answer to "can I watch?".
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-down.md
+
+      # ADR-014: a change of access reaches the log within seconds. Billing's gauge is read from its database, so
+      # every billing instance exports the same value: max, not sum.
+      - alert: AccessFeedBehind
+        expr: max(tally_accessfeed_unsent_oldest_age_seconds) > 120
+        for: 1m
+        labels:
+          severity: page
+          driver: ADR-014
+        annotations:
+          summary: Billing has changes of access older than 2 minutes that are not yet in the event log.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-feed-behind.md
+
+      # The log has messages that an Access instance has not applied for over 2 minutes. Each instance reports the
+      # partitions it holds; the gauge stays near the poll interval under a steady load.
+      - alert: AccessStale
+        expr: tally_access_unapplied_oldest_age_seconds > 120
+        for: 1m
+        labels:
+          severity: page
+          driver: D13
+        annotations:
+          summary: "Access instance {{ $labels.instance }} has not applied messages the log has held for over 2 minutes."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-stale.md
+
+      # ADR-036: a failure of the log or of Access's database never breaks liveness, since a restart repairs
+      # neither; this alert says so instead. The instance still answers from its copy, which grows old.
+      - alert: AccessReadingFailing
+        expr: tally_access_reading_failing_seconds > 120
+        for: 1m
+        labels:
+          severity: page
+          driver: D13
+        annotations:
+          summary: "Access instance {{ $labels.instance }} has failed to read the log or write its copy for over 2 minutes."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-stale.md
+
+      # A value one side does not know: Access reading a message (it never takes access away), or billing's feed
+      # reading an event (it changes nothing). Either means the two sides run different versions of the contract.
+      - alert: AccessValueNotKnown
+        expr: >-
+          increase(tally_access_values_not_known_total[1d]) > 0
+          or increase(tally_accessfeed_values_not_known_total[1d]) > 0
+        labels:
+          severity: ticket
+          driver: ADR-024
+        annotations:
+          summary: "A value of {{ $labels.field }} was not known to its reader in the last day; the contract versions differ."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-value-not-known.md
