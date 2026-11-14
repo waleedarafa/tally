@@ -30,6 +30,19 @@ class F15PayloadScanTest {
         assertThat(problems(schema, "$")).as("free text or an open object in " + SCHEMA).isEmpty();
     }
 
+    /**
+     * Every keyword in every node of the schema is one the checks understand. A keyword they do not check (for
+     * example {@code patternProperties} under an object with no {@code properties}) could otherwise let free text in
+     * while F15 and F7 stay green.
+     */
+    @Test
+    void theAccessFactsSchemaUsesOnlyKeywordsTheChecksUnderstand() throws IOException {
+        JsonNode schema = JsonMapper.builder().build().readTree(Files.readString(SCHEMA));
+
+        assertThat(JsonSchemaSubset.uncheckedKeywords(schema))
+                .as("schema keywords that JsonSchemaSubset does not check, in " + SCHEMA).isEmpty();
+    }
+
     static List<String> problems(JsonNode schema, String path) {
         List<String> found = new ArrayList<>();
         switch (schema.path("type").asString()) {

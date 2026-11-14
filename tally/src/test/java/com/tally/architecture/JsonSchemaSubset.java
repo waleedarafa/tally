@@ -28,6 +28,35 @@ final class JsonSchemaSubset {
     private JsonSchemaSubset() {
     }
 
+    /**
+     * Every keyword of {@code schema}, in every node, that this checker does not understand, as "path: keyword".
+     * Walks the whole schema, not only the nodes a document reaches, so an optional property no message carries
+     * cannot hide a rule that is not checked (review of Slice 2 PR-4).
+     */
+    static List<String> uncheckedKeywords(JsonNode schema) {
+        List<String> found = new ArrayList<>();
+        walk(schema, "$", found);
+        return found;
+    }
+
+    private static void walk(JsonNode schema, String path, List<String> found) {
+        if (!schema.isObject()) {
+            found.add(path + ": a schema must be an object");
+            return;
+        }
+        for (Map.Entry<String, JsonNode> keyword : schema.properties()) {
+            if (!KEYWORDS.contains(keyword.getKey())) {
+                found.add(path + ": " + keyword.getKey());
+            }
+        }
+        for (Map.Entry<String, JsonNode> property : schema.path("properties").properties()) {
+            walk(property.getValue(), path + ".properties." + property.getKey(), found);
+        }
+        if (schema.has("items")) {
+            walk(schema.get("items"), path + ".items", found);
+        }
+    }
+
     /** Every way {@code document} breaks {@code schema}, as "path: problem"; empty if it is valid. */
     static List<String> violations(JsonNode schema, JsonNode document) {
         List<String> found = new ArrayList<>();
