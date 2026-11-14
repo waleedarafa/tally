@@ -6,6 +6,8 @@
 #      commit. When they pass on main, the image gets a second tag, accepted-<commit>: only accepted
 #      images are candidates for deployment.
 # The split is two Maven profiles in tally/pom.xml; without a profile, ./mvnw verify runs both.
+# This is billing's pipeline (ADR-008): it builds the reactor's fake-provider and tally modules only (-pl). Access, the
+# second deployable, has its own pipeline (access.yml); a change only under access/ starts that one alone.
 # When it runs, and why:
 #   - On a pull request, against GitHub's merge of the branch into its base, so the merged result is
 #     tested before it is merged (FR-038). A push to a branch with a pull request already runs it there,
@@ -20,7 +22,9 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ['access/**', 'docs/api/access-openapi.yaml', '.github/workflows/access.yml']
   pull_request:
+    paths-ignore: ['access/**', 'docs/api/access-openapi.yaml', '.github/workflows/access.yml']
   workflow_dispatch:
 
 # A pull request's runs share one group, so a newer commit cancels the older run. Every other run has a
@@ -58,7 +62,7 @@ jobs:
           docker run --rm -v "$PWD/ops/alerts:/rules:ro" -w /rules --entrypoint promtool "$PROMETHEUS" test rules tally.rules.test.yml
 
       - name: Commit tests
-        run: ./mvnw -B -P commit-stage verify
+        run: ./mvnw -B -pl fake-provider,tally -P commit-stage verify
 
       - name: Print failed tests
         if: failure()
@@ -124,7 +128,7 @@ jobs:
           cache: maven
 
       - name: Acceptance tests
-        run: ./mvnw -B -P acceptance-stage verify
+        run: ./mvnw -B -pl fake-provider,tally -P acceptance-stage verify
 
       - name: Print failed tests
         if: failure()

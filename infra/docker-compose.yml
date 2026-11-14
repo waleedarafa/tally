@@ -40,7 +40,24 @@ services:
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists
       --topic access-facts --partitions 1 --replication-factor 1 --config cleanup.policy=compact
     restart: "no"
+  # Access's own database (ADR-001, ADR-007: Access has its own small PostgreSQL), for the access module on port 8090.
+  access-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: access
+      POSTGRES_USER: access
+      POSTGRES_PASSWORD: access
+    ports:
+      - "5433:5432"
+    volumes:
+      - access-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U access -d access"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   tally-pgdata:
   tally-kafkadata:
+  access-pgdata:

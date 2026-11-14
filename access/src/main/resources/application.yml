@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: tally-access
+  datasource:
+    url: jdbc:postgresql://localhost:5433/access
+    username: access
+    password: access
+  flyway:
+    default-schema: access
+    schemas: access
+server:
+  port: 8090
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+tally:
+  access:
+    log:
+      bootstrap-servers: localhost:9092
+      topic: access-facts
+      group-id: tally-access
