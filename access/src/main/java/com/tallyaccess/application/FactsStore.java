@@ -24,7 +24,7 @@ public interface FactsStore {
     /** Records the next offset to read; never moves a position back (two instances may hold a partition briefly). */
     void advance(String topic, int partition, long nextOffset);
 
-    /** Whether the copy once reached the end of the log an instance saw at start (review of PR-6, option B). */
+    /** Whether the copy once reached the end of the log an instance saw at start (ADR-036). */
     boolean completeOnce();
 
     /** Records that the copy reached that end; a second mark changes nothing. */

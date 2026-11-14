@@ -37,7 +37,7 @@ class ReadinessTest {
         assertThat(readiness.ready()).isFalse();
     }
 
-    /** Review of PR-6, option B: a copy that was complete once is ready before the end is known, and stays ready. */
+    /** ADR-036: a copy that was complete once is ready before the end is known, and stays ready. */
     @Test
     void aCopyThatWasCompleteOnceIsReadyBeforeTheEndIsKnown() {
         readiness.completeBefore();

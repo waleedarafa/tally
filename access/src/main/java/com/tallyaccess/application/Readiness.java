@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
  * every partition has reached the end that partition had when the instance started; it stays ready after that.
  * Reported as Spring Boot's readiness state ({@code /actuator/health/readiness}).
  *
- * <p>A copy that once reached that end is marked complete in Access's database (review of PR-6, finding 2, option B).
+ * <p>A copy that once reached that end is marked complete in Access's database (ADR-036).
  * An instance that finds the mark at start is ready at once, before it reads the log, and so also while the log is
  * down: it answers from its copy, which may be behind (D13). An emptied database has no mark, so a rebuild waits.
  */

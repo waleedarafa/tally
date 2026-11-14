@@ -22,7 +22,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.web.client.RestClient;
 
 /**
- * The review of PR-6, finding 2, option B (confirmed by the user): a "complete once" mark in Access's database. An
+ * ADR-036: a "complete once" mark in Access's database. An
  * instance whose database holds a copy that once reached the end of the log answers from it at once, also when it
  * starts while the log is down (D13). An emptied database has no mark: it waits for the catch-up, as a rebuild must.
  * Instances are started by hand on one database, as a restart would.

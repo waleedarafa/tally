@@ -14,7 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -28,15 +30,19 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 /**
  * The review of PR-6, finding 1: a failure while reading the log does not stop Access reading. When the store fails,
- * Access waits, goes back to its stored position, and reads again, so no message is skipped. If it cannot recover
- * within {@code tally.access.log.give-up-after}, it reports its liveness as broken, so the platform restarts it.
+ * Access waits, goes back to its stored position, and reads again, so no message is skipped.
+ *
+ * <p>ADR-036: a failure of the log or of Access's database never changes liveness, since a restart
+ * cannot repair either; {@code tally.access.reading.failing.seconds} shows how long reading has failed. Liveness is
+ * broken only when the reading thread ends while Access runs, which a restart does repair.
  */
-@SpringBootTest(properties = {"tally.access.log.retry-after=200ms", "tally.access.log.give-up-after=3s"})
+@SpringBootTest(properties = "tally.access.log.retry-after=200ms")
 @Import(AccessRecoveryIT.FailingStore.class)
 class AccessRecoveryIT {
 
@@ -45,6 +51,15 @@ class AccessRecoveryIT {
     static class FailingStore {
 
         static final AtomicInteger FAIL_NEXT_APPLIES = new AtomicInteger();
+
+        /** The next apply throws an {@link Error}, which nothing in the reading loop catches: the thread ends. */
+        static final AtomicBoolean END_THE_THREAD = new AtomicBoolean();
+
+        static final class ThreadEnds extends Error {
+            ThreadEnds() {
+                super("the reading thread ends");
+            }
+        }
 
         @Bean
         @Primary
@@ -57,6 +72,9 @@ class AccessRecoveryIT {
 
                 @Override
                 public boolean applyIfNewer(AccessFactsMessage message, Instant appliedAt) {
+                    if (END_THE_THREAD.getAndSet(false)) {
+                        throw new ThreadEnds();
+                    }
                     if (FAIL_NEXT_APPLIES.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
                         throw new IllegalStateException("the database does not answer");
                     }
@@ -107,6 +125,7 @@ class AccessRecoveryIT {
     @AfterEach
     void storeAnswers() {
         FailingStore.FAIL_NEXT_APPLIES.set(0);
+        FailingStore.END_THE_THREAD.set(false);
     }
 
     @Autowired
@@ -114,6 +133,13 @@ class AccessRecoveryIT {
 
     @Autowired
     ApplicationAvailability availability;
+
+    @Autowired
+    MeterRegistry meters;
+
+    double failingSeconds() {
+        return meters.get("tally.access.reading.failing.seconds").gauge().value();
+    }
 
     List<UUID> sendFive() {
         List<UUID> accounts = new ArrayList<>();
@@ -144,15 +170,31 @@ class AccessRecoveryIT {
     }
 
     @Test
-    void aStoreThatKeepsFailingBreaksLivenessAndRecoveringRestoresIt() {
+    void aStoreThatKeepsFailingLeavesLivenessCorrectAndShowsHowLongReadingHasFailed() throws InterruptedException {
         awaitAllApplied(sendFive());
+        assertThat(failingSeconds()).isZero();
 
         FailingStore.FAIL_NEXT_APPLIES.set(Integer.MAX_VALUE);
         List<UUID> accounts = sendFive();
-        await().atMost(Duration.ofSeconds(20)).until(() -> availability.getLivenessState() == LivenessState.BROKEN);
+        await().atMost(Duration.ofSeconds(20)).until(() -> failingSeconds() >= 3);
+        assertThat(availability.getLivenessState()).as("a restart cannot repair the database")
+                .isEqualTo(LivenessState.CORRECT);
 
         FailingStore.FAIL_NEXT_APPLIES.set(0);
         awaitAllApplied(accounts);
-        await().atMost(Duration.ofSeconds(10)).until(() -> availability.getLivenessState() == LivenessState.CORRECT);
+        await().atMost(Duration.ofSeconds(10)).until(() -> failingSeconds() == 0);
+        assertThat(availability.getLivenessState()).isEqualTo(LivenessState.CORRECT);
+    }
+
+    /** The reading thread is gone afterwards, so the context is closed after this test. */
+    @Test
+    @DirtiesContext
+    void aReadingThreadThatEndsBreaksLiveness() {
+        awaitAllApplied(sendFive());
+
+        FailingStore.END_THE_THREAD.set(true);
+        sendFive();
+
+        await().atMost(Duration.ofSeconds(20)).until(() -> availability.getLivenessState() == LivenessState.BROKEN);
     }
 }

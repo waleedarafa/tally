@@ -13,6 +13,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -41,12 +43,13 @@ import tools.jackson.databind.json.JsonMapper;
  *   <li>After each poll, the facts and the positions reached are written in one transaction. The position is the
  *       consumer's, which also steps over the log's transaction markers, so the end of the log can be reached.</li>
  *   <li>A failure (the log, or Access's database) never ends the reading: Access waits, goes back to its stored
- *       position, and reads again, so nothing is skipped. If reading keeps failing for
- *       {@code tally.access.log.give-up-after}, it reports its liveness as broken, so the platform restarts it, and
- *       correct again once it reads (review of PR-6, finding 1).</li>
+ *       position, and reads again, so nothing is skipped (review of PR-6, finding 1). Such a failure never changes
+ *       liveness, since a restart cannot repair the log or the database; {@code tally.access.reading.failing.seconds}
+ *       shows how long reading has failed, 0 while it reads. Liveness is broken only when the reading thread ends
+ *       while Access runs, which a restart does repair (ADR-036).</li>
  *   <li>Before it reads the log, it asks Access's database whether the copy was complete once; if so, the instance
  *       is ready at once, also while the log is down. The first time the copy reaches the end seen at start, it
- *       writes that mark (review of PR-6, finding 2, option B).</li>
+ *       writes that mark (ADR-036).</li>
  * </ul>
  */
 @Component
@@ -61,16 +64,25 @@ class AccessLogConsumer implements SmartLifecycle {
     private final Clock clock;
     private final JsonMapper json = JsonMapper.builder().build();
     private volatile boolean running;
+    private volatile Instant failingSince;
     private KafkaConsumer<String, String> consumer;
     private Thread thread;
 
     AccessLogConsumer(AccessCopy copy, Readiness readiness, AccessProperties properties,
-            ApplicationEventPublisher events, Clock clock) {
+            ApplicationEventPublisher events, Clock clock, MeterRegistry meters) {
         this.copy = copy;
         this.readiness = readiness;
         this.settings = properties.log();
         this.events = events;
         this.clock = clock;
+        Gauge.builder("tally.access.reading.failing.seconds", this, c -> c.failingFor().toMillis() / 1000.0)
+                .baseUnit("seconds").strongReference(true).register(meters);
+    }
+
+    /** How long reading has failed; zero while it reads. */
+    Duration failingFor() {
+        Instant since = failingSince;
+        return since == null ? Duration.ZERO : Duration.between(since, clock.instant());
     }
 
     @Override
@@ -94,7 +106,6 @@ class AccessLogConsumer implements SmartLifecycle {
         boolean marked = false;
         boolean endKnown = false;
         boolean goBack = false;
-        Instant failingSince = null;
         Map<Integer, Long> written = Map.of();
         try {
             while (running) {
@@ -133,9 +144,8 @@ class AccessLogConsumer implements SmartLifecycle {
                         marked = true;
                     }
                     if (failingSince != null) {
-                        log.info("Access reads the log again");
+                        log.info("Access reads the log again, after {}", failingFor());
                         failingSince = null;
-                        AvailabilityChangeEvent.publish(events, this, LivenessState.CORRECT);
                     }
                 } catch (WakeupException stopping) {
                     if (!running) {
@@ -144,22 +154,25 @@ class AccessLogConsumer implements SmartLifecycle {
                 } catch (RuntimeException e) {
                     // Nothing of this poll was stored, but the consumer's own position is already past it: go back to
                     // the stored position and read it again (review of PR-6, finding 1).
-                    Instant now = clock.instant();
                     if (failingSince == null) {
-                        failingSince = now;
+                        failingSince = clock.instant();
                     }
                     log.warn("Reading the log failed; reading again from the stored position in {}",
                             settings.retryAfter(), e);
-                    if (Duration.between(failingSince, now).compareTo(settings.giveUpAfter()) >= 0) {
-                        log.error("Access has not read the log for {}: liveness is broken", settings.giveUpAfter());
-                        AvailabilityChangeEvent.publish(events, this, LivenessState.BROKEN);
-                    }
                     goBack = true;
                     written = Map.of();
                     pause(settings.retryAfter());
                 }
             }
+        } catch (Throwable ended) {
+            log.error("The reading thread ends", ended);
+            throw ended;
         } finally {
+            if (running) {
+                // Ended while Access runs: no answer gets fresher from here on, and a restart repairs it.
+                log.error("Access no longer reads the log: liveness is broken");
+                AvailabilityChangeEvent.publish(events, this, LivenessState.BROKEN);
+            }
             consumer.close();
         }
     }

@@ -15,13 +15,11 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record AccessProperties(@DefaultValue Log log) {
 
     /**
-     * @param retryAfter  how long Access waits after a failed read or apply before it reads again, from its stored
-     *                    position
-     * @param giveUpAfter how long reading may keep failing before Access reports its liveness as broken, so the
-     *                    platform restarts it
+     * @param retryAfter how long Access waits after a failed read or apply before it reads again, from its stored
+     *                   position
      */
     public record Log(@DefaultValue("localhost:9092") String bootstrapServers,
             @DefaultValue("access-facts") String topic, @DefaultValue("tally-access") String groupId,
-            @DefaultValue("1s") Duration retryAfter, @DefaultValue("60s") Duration giveUpAfter) {
+            @DefaultValue("1s") Duration retryAfter) {
     }
 }

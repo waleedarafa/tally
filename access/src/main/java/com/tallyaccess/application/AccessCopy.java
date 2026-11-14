@@ -95,7 +95,7 @@ public class AccessCopy {
         return store.positions(topic);
     }
 
-    /** Whether this copy once reached the end of the log an instance saw at start (review of PR-6, option B). */
+    /** Whether this copy once reached the end of the log an instance saw at start (ADR-036). */
     public boolean completeOnce() {
         return store.completeOnce();
     }
