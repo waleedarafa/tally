@@ -5,6 +5,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.boot.availability.AvailabilityChangeEvent;
 import org.springframework.boot.availability.ReadinessState;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,6 +17,10 @@ import org.springframework.stereotype.Component;
  * <p>A copy that once reached that end is marked complete in Access's database (ADR-036).
  * An instance that finds the mark at start is ready at once, before it reads the log, and so also while the log is
  * down: it answers from its copy, which may be behind (D13). An emptied database has no mark, so a rebuild waits.
+ *
+ * <p>Spring Boot itself reports "accepting traffic" once the application has started, which would override "refusing"
+ * while the copy is still behind (found by AT-19 in Slice 2 PR-7). Readiness answers that report with "refusing"
+ * until the copy is ready; one lock orders it with becoming ready, so the last word is always the copy's.
  */
 @Component
 public class Readiness {
@@ -38,7 +43,7 @@ public class Readiness {
     }
 
     /** The end of each partition, read committed, when the instance started; set once. */
-    public void endAtStart(Map<Integer, Long> ends) {
+    public synchronized void endAtStart(Map<Integer, Long> ends) {
         endAtStart.compareAndSet(null, Map.copyOf(ends));
         if (!ready) {
             AvailabilityChangeEvent.publish(events, this, ReadinessState.REFUSING_TRAFFIC);
@@ -58,8 +63,16 @@ public class Readiness {
         }
     }
 
-    private void becomeReady() {
+    private synchronized void becomeReady() {
         ready = true;
         AvailabilityChangeEvent.publish(events, this, ReadinessState.ACCEPTING_TRAFFIC);
+    }
+
+    /** "Accepting traffic" from anyone else, Spring Boot's at start among them, holds only once the copy is ready. */
+    @EventListener
+    synchronized void onReadinessChange(AvailabilityChangeEvent<ReadinessState> event) {
+        if (event.getState() == ReadinessState.ACCEPTING_TRAFFIC && event.getSource() != this && !ready) {
+            AvailabilityChangeEvent.publish(events, this, ReadinessState.REFUSING_TRAFFIC);
+        }
     }
 }

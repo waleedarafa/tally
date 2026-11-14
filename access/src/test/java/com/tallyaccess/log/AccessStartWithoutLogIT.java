@@ -50,10 +50,19 @@ class AccessStartWithoutLogIT {
     }
 
     static int status(ConfigurableApplicationContext instance, UUID account) {
+        return get(instance, "/v1/access/" + account);
+    }
+
+    /** The status of the readiness probe the platform asks. */
+    static int probe(ConfigurableApplicationContext instance) {
+        return get(instance, "/actuator/health/readiness");
+    }
+
+    static int get(ConfigurableApplicationContext instance, String path) {
         String port = instance.getEnvironment().getProperty("local.server.port");
         return RestClient.builder().baseUrl("http://localhost:" + port)
                 .defaultStatusHandler(code -> true, (request, response) -> { }).build()
-                .get().uri("/v1/access/" + account).retrieve().toBodilessEntity().getStatusCode().value();
+                .get().uri(path).retrieve().toBodilessEntity().getStatusCode().value();
     }
 
     @Test
@@ -74,6 +83,7 @@ class AccessStartWithoutLogIT {
         ConfigurableApplicationContext restarted = start(logDown);
 
         await().atMost(Duration.ofSeconds(10)).until(() -> status(restarted, account) == 200);
+        assertThat(probe(restarted)).isEqualTo(200);
         assertThat(restarted.getBean(AccessCopy.class).answer(account).canWatch()).isTrue();
     }
 
@@ -94,5 +104,8 @@ class AccessStartWithoutLogIT {
         Thread.sleep(3000);
         assertThat(status(rebuilding, UUID.randomUUID())).as("no answer from a copy that was never complete")
                 .isEqualTo(503);
+        // Spring Boot reports "accepting traffic" once the application has started; the probe must still say no
+        // (found by AT-19 in PR-7).
+        assertThat(probe(rebuilding)).as("the readiness probe of a copy that was never complete").isEqualTo(503);
     }
 }

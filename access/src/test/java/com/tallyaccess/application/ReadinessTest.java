@@ -2,8 +2,12 @@ package com.tallyaccess.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.availability.AvailabilityChangeEvent;
+import org.springframework.boot.availability.ReadinessState;
 
 /** Brief PR-6: not ready, and no answer, until the copy has reached the end of the log seen at start. */
 class ReadinessTest {
@@ -46,5 +50,23 @@ class ReadinessTest {
         readiness.endAtStart(Map.of(0, 120L));
         readiness.check(Map.of(0, 5L));
         assertThat(readiness.ready()).as("an end seen later does not take readiness back").isTrue();
+    }
+
+    /** Spring Boot's "accepting traffic" at start is answered with "refusing" until the copy is ready (AT-19). */
+    @Test
+    void acceptingTrafficFromSpringBootIsRefusedUntilTheCopyIsReady() {
+        List<Object> published = new ArrayList<>();
+        Readiness withEvents = new Readiness(published::add);
+        withEvents.endAtStart(Map.of(0, 10L));
+        published.clear();
+
+        withEvents.onReadinessChange(new AvailabilityChangeEvent<>(this, ReadinessState.ACCEPTING_TRAFFIC));
+        assertThat(published).singleElement().satisfies(event -> assertThat(
+                ((AvailabilityChangeEvent<?>) event).getState()).isEqualTo(ReadinessState.REFUSING_TRAFFIC));
+
+        withEvents.check(Map.of(0, 10L));
+        published.clear();
+        withEvents.onReadinessChange(new AvailabilityChangeEvent<>(this, ReadinessState.ACCEPTING_TRAFFIC));
+        assertThat(published).as("once ready, nothing is refused").isEmpty();
     }
 }
