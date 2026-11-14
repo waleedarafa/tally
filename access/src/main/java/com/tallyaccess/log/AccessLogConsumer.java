@@ -12,6 +12,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -47,6 +48,11 @@ import tools.jackson.databind.json.JsonMapper;
  *       liveness, since a restart cannot repair the log or the database; {@code tally.access.reading.failing.seconds}
  *       shows how long reading has failed, 0 while it reads. Liveness is broken only when the reading thread ends
  *       while Access runs, which a restart does repair (ADR-036).</li>
+ *   <li>{@code tally.access.unapplied.oldest_age_seconds} (AccessStale's measure): how long the log has held committed
+ *       messages this instance has not applied. After each pass the consumer reads the end of each partition it
+ *       holds; the first time that end lies beyond what is applied, it notes the time, and it forgets the note once
+ *       the applied position reaches that end. The gauge is the oldest open note: under a steady load it stays near
+ *       the poll interval, and it grows while applies fail or the reading stops. 0 while all is applied.</li>
  *   <li>Before it reads the log, it asks Access's database whether the copy was complete once; if so, the instance
  *       is ready at once, also while the log is down. The first time the copy reaches the end seen at start, it
  *       writes that mark (ADR-036).</li>
@@ -65,6 +71,11 @@ class AccessLogConsumer implements SmartLifecycle {
     private final JsonMapper json = JsonMapper.builder().build();
     private volatile boolean running;
     private volatile Instant failingSince;
+    /** Per partition held: an end of the log not yet applied, and when it was first seen (AccessStale). */
+    private final Map<Integer, Unapplied> unapplied = new ConcurrentHashMap<>();
+
+    private record Unapplied(long end, Instant since) {
+    }
     private KafkaConsumer<String, String> consumer;
     private Thread thread;
 
@@ -77,6 +88,32 @@ class AccessLogConsumer implements SmartLifecycle {
         this.clock = clock;
         Gauge.builder("tally.access.reading.failing.seconds", this, c -> c.failingFor().toMillis() / 1000.0)
                 .baseUnit("seconds").strongReference(true).register(meters);
+        Gauge.builder("tally.access.unapplied.oldest_age_seconds", this, c -> c.oldestUnapplied().toMillis() / 1000.0)
+                .baseUnit("seconds").strongReference(true).register(meters);
+    }
+
+    /** How long the oldest end of the log this instance has not applied has been there; zero when all is applied. */
+    Duration oldestUnapplied() {
+        Instant now = clock.instant();
+        return unapplied.values().stream().map(u -> Duration.between(u.since(), now)).max(Duration::compareTo)
+                .filter(age -> !age.isNegative()).orElse(Duration.ZERO);
+    }
+
+    /** Notes each held partition's end beyond what is applied; forgets a note once its end is applied. */
+    private void noteUnapplied(Map<Integer, Long> applied) {
+        Instant now = clock.instant();
+        Map<TopicPartition, Long> ends = consumer.endOffsets(consumer.assignment());
+        // Notes of partitions this instance no longer holds go: the instance that holds them now reports them.
+        unapplied.keySet().retainAll(ends.keySet().stream().map(TopicPartition::partition).toList());
+        ends.forEach((partition, end) -> {
+            long position = applied.getOrDefault(partition.partition(), 0L);
+            unapplied.compute(partition.partition(), (p, open) -> {
+                if (open != null && position < open.end()) {
+                    return open;
+                }
+                return end > position ? new Unapplied(end, now) : null;
+            });
+        });
     }
 
     /** How long reading has failed; zero while it reads. */
@@ -111,7 +148,7 @@ class AccessLogConsumer implements SmartLifecycle {
             while (running) {
                 try {
                     if (!markKnown) {
-                        if (copy.completeOnce()) {
+                        if (copy.completeOnce(settings.topic())) {
                             readiness.completeBefore();
                             marked = true;
                         }
@@ -131,6 +168,8 @@ class AccessLogConsumer implements SmartLifecycle {
                     }
                     Map<Integer, Long> reached = consumer.assignment().stream()
                             .collect(Collectors.toMap(TopicPartition::partition, consumer::position));
+                    // Before the apply, so that messages whose apply fails are noted too (AccessStale).
+                    noteUnapplied(written);
                     // The positions are written only when something was read or a position moved (review of PR-6).
                     if (!reads.isEmpty() || !reached.equals(written)) {
                         copy.apply(settings.topic(), reads, reached);

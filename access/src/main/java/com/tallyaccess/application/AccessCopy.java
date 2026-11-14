@@ -40,6 +40,10 @@ public class AccessCopy {
         this.clock = clock;
         this.meters = meters;
         this.unreadable = Counter.builder("tally.access.unreadable").register(meters);
+        // Registered at 0 from the start, so a scrape shows them and increase() sees the first value
+        // (AccessValueNotKnown, brief PR-8).
+        List.of("schemaVersion", "standing", "sources.kind", "sources.state").forEach(field ->
+                Counter.builder("tally.access.values.not_known").tag("field", field).register(meters));
         Gauge.builder("tally.access.last_applied.age_seconds", this, c -> c.lastAppliedAge().toMillis() / 1000.0)
                 .baseUnit("seconds").strongReference(true).register(meters);
     }
@@ -96,8 +100,8 @@ public class AccessCopy {
     }
 
     /** Whether this copy once reached the end of the log an instance saw at start (ADR-036). */
-    public boolean completeOnce() {
-        return store.completeOnce();
+    public boolean completeOnce(String topic) {
+        return store.completeOnce(topic);
     }
 
     /** Marks this copy as complete once; from then on an instance that starts answers from it at once. */
