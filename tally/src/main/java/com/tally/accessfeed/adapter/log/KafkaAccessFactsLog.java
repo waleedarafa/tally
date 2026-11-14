@@ -26,8 +26,13 @@ import org.springframework.stereotype.Component;
  * {@code transaction.timeout.ms} if it cannot be aborted at once, and the next send starts a new producer with a new
  * transactional ID. A committed reader never sees the late message.
  *
- * <p>A producer runs one transaction at a time, so sends on one instance are serial. The open transaction of an
- * instance that dies holds committed readers back for at most the transaction timeout.
+ * <p>A producer runs one transaction at a time, so sends on one instance are serial: one account per transaction, a
+ * few hundred accounts a second at most. Enough for sign-ups; a re-send of every account (a backfill) would need
+ * several accounts in one transaction. The open transaction of an instance that dies between a send and its commit
+ * holds committed readers of the partition back for at most the transaction timeout, once (ADR-033, a known limit).
+ *
+ * <p>The log must support transactions, {@code read_committed}, and refuse a late write after an abort (ADR-033):
+ * spike S-4, experiment 3, is the test to run against a managed log.
  */
 @Component
 class KafkaAccessFactsLog implements AccessFactsLog {

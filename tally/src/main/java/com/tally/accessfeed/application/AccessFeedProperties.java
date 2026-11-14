@@ -17,10 +17,13 @@ public record AccessFeedProperties(@DefaultValue Log log, @DefaultValue Relay re
     /**
      * @param bootstrapServers the brokers, as Kafka's {@code bootstrap.servers}
      * @param topic            the compacted topic of current access facts, key = the account ID (ADR-012)
-     * @param sendTimeout      the longest a send waits for the broker's acknowledgement, the first connection
-     *                         included; the account's facts stay locked meanwhile, so keep it short
+     * @param sendTimeout      the longest each step of a send waits: a new producer's first connection, the
+     *                         broker's acknowledgement (plus 1 s), the commit. The account's facts stay locked
+     *                         meanwhile, about three times this at most (16 s with the default), so keep it short
      * @param transactionTimeout how long the broker keeps an instance's open transaction before it aborts it; it
-     *                         holds committed readers back, so keep it short (at least the send timeout)
+     *                         holds committed readers back, so keep it short, but above the acknowledgement and the
+     *                         commit together (twice the send timeout plus 1 s): the timer starts with the first
+     *                         send, after the connection
      */
     public record Log(@DefaultValue("localhost:9092") String bootstrapServers,
             @DefaultValue("access-facts") String topic, @DefaultValue("5s") Duration sendTimeout,

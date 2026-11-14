@@ -23,7 +23,14 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>The property: <b>for one account, only one send runs at a time, and each send carries the facts current when it
  * starts</b>, so a later send never carries an older sequence. A send holds the account's row lock, the same lock
  * every change of the facts takes (CLAUDE.md rule 7): two sends for one account, on any instance, run one after the
- * other, and no change commits while one runs. The lock is held for at most the log's send timeout.
+ * other, and no change commits while one runs.
+ *
+ * <p>How long the lock is held, at most: a new producer's first connection ({@code max.block.ms}, the send timeout),
+ * then the wait for the acknowledgement (send timeout + 1 s), then the commit (up to {@code max.block.ms} again).
+ * With the defaults (5 s) that is about 16 s. The transaction timeout (15 s) is still enough: the broker's timer
+ * starts with the transaction's first send, after the connection, so it covers the acknowledgement and the commit
+ * (at most 11 s). CLAUDE.md rule 15 allows this one database transaction open during a call out (rule 6): one
+ * connection for each relay worker, and the workers stay few.
  *
  * <p>The sequence is recorded as sent only after the log has acknowledged it, in the same transaction. If the instance
  * dies between the two, the item comes back and the same sequence is sent again: Access ignores a sequence it has.
