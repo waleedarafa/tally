@@ -17,6 +17,7 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.TopicExistsException;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.testcontainers.kafka.KafkaContainer;
@@ -46,22 +47,53 @@ public final class EventLog {
         return CONTAINER;
     }
 
+    /**
+     * Freezes the broker (docker pause): connections stay open and nothing is answered, as when the broker hangs or
+     * the network drops. Its data and its port stay, so {@link #unpause()} brings back the same broker.
+     */
+    public static void pause() {
+        container().getDockerClient().pauseContainerCmd(container().getContainerId()).exec();
+    }
+
+    public static void unpause() {
+        container().getDockerClient().unpauseContainerCmd(container().getContainerId()).exec();
+    }
+
     public static String bootstrapServers() {
         return container().getBootstrapServers();
+    }
+
+    /**
+     * The access feed's settings for the Tally instances on one database: this broker, and a compacted topic of the
+     * database's own, {@code access-facts-<database>} (ADR-029: no test meets a message it did not create).
+     */
+    public static Map<String, String> feedSettings(String databaseUrl) {
+        String database = databaseUrl.replaceFirst("^.*/([^/?]+)(\\?.*)?$", "$1");
+        String topic = "access-facts-" + database;
+        create(topic, Map.of("cleanup.policy", "compact"));
+        return Map.of("tally.accessfeed.log.bootstrap-servers", bootstrapServers(),
+                "tally.accessfeed.log.topic", topic);
     }
 
     /** A topic no other test uses: the given prefix and a random suffix, one partition. */
     public static String newTopic(String prefix, Map<String, String> config) {
         String name = prefix + "-" + UUID.randomUUID();
+        create(name, config);
+        return name;
+    }
+
+    /** Creates a topic of one partition, unless it exists. */
+    static void create(String name, Map<String, String> config) {
         try (Admin admin = admin()) {
             admin.createTopics(List.of(new NewTopic(name, 1, (short) 1).configs(config))).all().get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
         } catch (ExecutionException e) {
-            throw new IllegalStateException(e.getCause());
+            if (!(e.getCause() instanceof TopicExistsException)) {
+                throw new IllegalStateException(e.getCause());
+            }
         }
-        return name;
     }
 
     public static Admin admin() {
@@ -104,9 +136,19 @@ public final class EventLog {
      * the beginning and polls until the end offset seen at the start is reached.
      */
     public static List<ConsumerRecord<String, String>> readAll(String topic) {
+        return readAll(topic, "read_uncommitted");
+    }
+
+    /** As Access reads the log (ADR-033): committed messages only; an aborted transaction's message is never seen. */
+    public static List<ConsumerRecord<String, String>> readCommitted(String topic) {
+        return readAll(topic, "read_committed");
+    }
+
+    static List<ConsumerRecord<String, String>> readAll(String topic, String isolation) {
         Properties p = new Properties();
         p.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers());
         p.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        p.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, isolation);
         try (KafkaConsumer<String, String> consumer =
                 new KafkaConsumer<>(p, new StringDeserializer(), new StringDeserializer())) {
             TopicPartition partition = new TopicPartition(topic, 0);
