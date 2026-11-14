@@ -126,6 +126,7 @@ public record QuoteReason(String offerId, int offerVersion, String kind, Map<Str
 - `standing`: GOOD, OVERDUE or BLOCKED. `kind`: SUBSCRIPTION only. `state`: ACTIVE only. Later slices add values (add only, ADR-016).
 - IDs, enums, numbers and times only: no free text, so no personal data (ADR-006, D8, F15).
 - For one account, one send at a time, each carrying the facts current when it starts; Access applies a message only if its sequence is higher.
+- Each send is a transaction of its own, committed only once the broker acknowledges it; Access reads committed messages only (`read_committed`), so a send that was not acknowledged and reached the log later is never seen (ADR-033, spike S-4).
 
 **Envelope:** every event carries event ID, occurrence time, account ID and the aggregate version as a sequence number.
 **Evolution:** add fields only; never rename or move an event class; every shared enum has `UNKNOWN`, which unknown input maps to.

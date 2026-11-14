@@ -89,13 +89,13 @@
             <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Slice 2 spikes S-1 to S-3: the event log (ADR-012). Both versions come from Spring Boot 4.1.1's
-             dependency management: kafka-clients 4.2.1 (kafka.version), testcontainers-kafka 2.0.5
-             (testcontainers-bom). Test scope until PR-5 needs the client in the application. -->
+        <!-- The event log (ADR-012; Slice 2 spike S-1): the access feed's relay sends to it (PR-5). Both versions
+             come from Spring Boot 4.1.1's dependency management: kafka-clients 4.2.1 (kafka.version),
+             testcontainers-kafka 2.0.5 (testcontainers-bom). The plain client: one producer, no listener
+             container, so spring-kafka is not needed. -->
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>

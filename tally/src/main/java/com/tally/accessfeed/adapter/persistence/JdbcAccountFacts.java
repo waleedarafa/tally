@@ -6,9 +6,11 @@ import com.tally.accessfeed.domain.Source;
 import com.tally.accessfeed.domain.SourceKind;
 import com.tally.accessfeed.domain.SourceState;
 import com.tally.account.Standing;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -58,5 +60,24 @@ class JdbcAccountFacts implements AccountFactsStore {
                     facts.accountId(), source.kind().name(), source.id(), source.state().name(),
                     source.sourceSequence());
         }
+    }
+
+    @Override
+    public long sentSequence(UUID accountId) {
+        return jdbc.queryForObject("SELECT sent_sequence FROM accessfeed.account_facts WHERE account_id = ?",
+                Long.class, accountId);
+    }
+
+    @Override
+    public void recordSent(UUID accountId, long sequence) {
+        jdbc.update("UPDATE accessfeed.account_facts SET sent_sequence = greatest(sent_sequence, ?)"
+                + " WHERE account_id = ?", sequence, accountId);
+    }
+
+    @Override
+    public Optional<Instant> oldestUnsent() {
+        OffsetDateTime oldest = jdbc.queryForObject("SELECT min(produced_at) FROM accessfeed.account_facts"
+                + " WHERE sequence > sent_sequence", OffsetDateTime.class);
+        return Optional.ofNullable(oldest).map(OffsetDateTime::toInstant);
     }
 }

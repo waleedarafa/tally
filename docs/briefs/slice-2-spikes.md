@@ -1,12 +1,28 @@
 # Slice 2 spikes: findings
 
-Three spikes from `slice-2.md`, before PR-2. All three pass. No result differs from what ADR-006 or ADR-012 assumes, so nothing here stops the slice. Each finding names the test that pins it: a broker or client upgrade that changes a finding fails the build.
+Three spikes from `slice-2.md`, before PR-2, and a fourth (S-4) found while building PR-5. All pass. No result differs from what ADR-006 or ADR-012 assumes, so nothing here stops the slice. Each finding names the test that pins it: a broker or client upgrade that changes a finding fails the build.
 
 | Spike | Question | Answer | Test |
 |---|---|---|---|
 | S-1 | Which Kafka client and which Testcontainers module work with Spring Boot 4.1.1 and Java 25? | `org.apache.kafka:kafka-clients` **4.2.1** and `org.testcontainers:testcontainers-kafka` **2.0.5**, both versions from Spring Boot 4.1.1's dependency management. The broker image is `apache/kafka:4.2.1`. Runs on Java 25. | `spikes.SpikeS2CompactionIT.s1…` |
 | S-2 | Before compaction, does a reader from the start see several messages for one key? After it, only the last? Which topic settings make compaction run in a test? | **Yes, and not always.** Before: every message. After: only the last of each key, but only for closed segments; a change after compaction is a second message for the key again. Five topic settings, and the cleaner's back-off, make it run within about 2 seconds. | `spikes.SpikeS2CompactionIT` (3 tests) |
 | S-3 | When Access restarts with an empty database and its old consumer group, does it read from the start? What must an operator reset? | **No.** The group resumes at its committed position; `auto.offset.reset` does not apply. The operator stops every Access instance, then resets the group to the earliest offset. The tool exits 0 even when it refuses. A new group reads from the start with no reset. | `spikes.SpikeS3EmptyDatabaseOldGroupIT` (2 tests) |
+
+## S-4. A send the broker did not acknowledge (found while building PR-5)
+
+Not in the brief: building PR-5 showed that ADR-033's property needs more than "one send at a time". A send that times out can still reach the log later.
+
+| # | Experiment (`spikes.SpikeS4UnacknowledgedSendIT`) | Observed (log prefix `SPIKE-S4`) |
+|---|---|---|
+| 1 | A plain idempotent producer. The broker is frozen (`docker pause`), a send times out, then the broker is back | `[warm-up, sequence-5]`: **the send that timed out reached the log after all**. |
+| 2 | The gap itself: sequence 6 committed, then sequence 5 written after it, as a send one instance gave up on can land after another instance's acknowledged send | Read committed, without transactions: `[sequence-6, sequence-5]`, **the older one last**. With sequence 5 in a transaction never committed: `[sequence-6]`, although the log holds both. |
+| 3 | Two transactional producers: the first one's send times out and its transaction is aborted; the second commits sequence 6 | Read committed: `[sequence-6]`. |
+
+The relay's own test hit the first case: in `AccessFactsRelayIT`, with the broker down, a send timed out, the relay sent again once the broker was back, and the log held sequence 1 twice.
+
+**Why it matters.** The relay's row lock makes the sends of one account run one at a time, across instances. But if instance A's send times out, A releases the lock, instance B sends a newer sequence, and A's message can still land after it. A running Access ignores the older message. A rebuild from the compacted topic ends on it, and the account has stale facts until its next change.
+
+**Decided on the PR-5 pull request:** each send is a Kafka transaction of its own, committed only once the broker has acknowledged the message, and Access reads only committed messages (`read_committed`). ADR-033's row, the contract's README and `design.md` §4 say so. Access's consumer test (PR-6) checks that it reads committed messages only.
 
 ## S-1. Versions
 

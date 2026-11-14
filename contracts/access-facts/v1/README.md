@@ -10,4 +10,6 @@ The message billing's `accessfeed` sends to the event log, and Access reads (ADR
 
 `examples/future-unknown-values.json` is **not** a valid version 1 message, on purpose. It holds what a later version may add: an unknown field (`graceEndsAt`, and `partnerSequence` in a source), and enum values version 1 does not know (`SUSPENDED`, `PARTNER_BUNDLE`, `PAUSED`). Access must read it without failing, and a value it does not know never takes access away (ADR-033). Every other example is valid version 1.
 
+**Read committed messages only.** Billing sends each message in a Kafka transaction of its own and commits it only once the broker has acknowledged it. A send the broker did not acknowledge can still reach the log, later, in a transaction that is never committed (ADR-033; Slice 2 spike S-4). Access must read the topic with `isolation.level=read_committed`, so it never sees such a message.
+
 Change these files in the same commit as the code that changes the message (CLAUDE.md rule 7). Add only (ADR-016): a new field or enum value is added; nothing is renamed or removed. A break is version 2, in `v2/`.

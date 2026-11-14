@@ -1,4 +1,4 @@
-# Local PostgreSQL for running Tally outside tests: docker compose -f infra/docker-compose.yml up -d
+# Local PostgreSQL and the event log for running Tally outside tests: docker compose -f infra/docker-compose.yml up -d
 services:
   postgres:
     image: postgres:17-alpine
@@ -16,5 +16,31 @@ services:
       timeout: 3s
       retries: 10
 
+  # The event log (ADR-012; Slice 2 PR-5): one Kafka broker in KRaft mode, at the version of the client
+  # (spike S-1). Tally's relay sends to topic access-facts (tally.accessfeed.log.*), created compacted by kafka-topics.
+  kafka:
+    image: apache/kafka:4.2.1
+    ports:
+      - "9092:9092"
+    volumes:
+      - tally-kafkadata:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+  kafka-topics:
+    image: apache/kafka:4.2.1
+    # In the broker's network namespace: the broker advertises localhost:9092.
+    network_mode: "service:kafka"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: >
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists
+      --topic access-facts --partitions 1 --replication-factor 1 --config cleanup.policy=compact
+    restart: "no"
+
 volumes:
   tally-pgdata:
+  tally-kafkadata:

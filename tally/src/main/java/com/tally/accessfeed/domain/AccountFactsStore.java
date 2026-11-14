@@ -1,5 +1,7 @@
 package com.tally.accessfeed.domain;
 
+import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Where the feed keeps its facts: one row per account, changed under that row's lock. */
@@ -14,4 +16,13 @@ public interface AccountFactsStore {
 
     /** Writes the facts locked by {@link #lockOrCreate} in this transaction. */
     void save(AccountFacts facts);
+
+    /** The last sequence that reached the event log; 0 if none. Read under the lock of {@link #lockOrCreate}. */
+    long sentSequence(UUID accountId);
+
+    /** Records that {@code sequence} reached the event log. Never lowers it. */
+    void recordSent(UUID accountId, long sequence);
+
+    /** When the oldest facts not yet in the log were produced, if any facts are not. */
+    Optional<Instant> oldestUnsent();
 }
