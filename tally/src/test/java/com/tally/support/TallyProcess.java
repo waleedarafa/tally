@@ -39,12 +39,14 @@ public final class TallyProcess implements AutoCloseable {
             Files.createDirectories(dir);
             Path log = dir.resolve(name + ".log");
             List<String> command = new ArrayList<>(List.of(
-                    Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-Xmx512m", "-jar", jar().toString(),
-                    "--spring.datasource.url=" + databaseUrl,
-                    "--spring.datasource.username=" + AbstractIntegrationTest.POSTGRES.getUsername(),
-                    "--spring.datasource.password=" + AbstractIntegrationTest.POSTGRES.getPassword(),
-                    "--server.port=0"));
-            Map<String, String> all = new LinkedHashMap<>(EventLog.feedSettings(databaseUrl));
+                    Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-Xmx512m", "-jar", jar().toString()));
+            // Defaults, which the caller's settings replace: a repeated argument would bind as "a,b".
+            Map<String, String> all = new LinkedHashMap<>();
+            all.put("spring.datasource.url", databaseUrl);
+            all.put("spring.datasource.username", AbstractIntegrationTest.POSTGRES.getUsername());
+            all.put("spring.datasource.password", AbstractIntegrationTest.POSTGRES.getPassword());
+            all.put("server.port", "0");
+            all.putAll(EventLog.feedSettings(databaseUrl));
             all.putAll(settings);
             all.forEach((k, v) -> command.add("--" + k + "=" + v));
             ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile());

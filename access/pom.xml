@@ -94,4 +94,18 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+        Billing's acceptance stage (.github/workflows/ci.yml) builds this module only for its jar: billing's acceptance
+        tests start Access as a container built from it (Slice 2 PR-7). Access's own tests run in its own pipeline
+        (access.yml) and in a plain ./mvnw verify, not a second time there.
+    -->
+    <profiles>
+        <profile>
+            <id>acceptance-stage</id>
+            <properties>
+                <skipTests>true</skipTests>
+            </properties>
+        </profile>
+    </profiles>
 </project>
