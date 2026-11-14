@@ -1,0 +1,61 @@
+openapi: 3.1.0
+info:
+  title: Tally Access API
+  version: "1"
+  description: >
+    Access, the second deployable (ADR-001): "Can I watch?", answered from Access's own copy of the access facts,
+    which it reads from the event log (ADR-012, ADR-033, ADR-035; design.md §8). Written before the code and checked
+    against it (com.tallyaccess's contract test). Versions live in the path; changes are additive; a break is /v2.
+    Read only: nothing here changes state, so no Idempotency-Key.
+paths:
+  /v1/access/{subscriberId}:
+    get:
+      operationId: getAccess
+      summary: Whether the subscriber may watch.
+      description: >
+        In Slice 2 the subscriber is the account: the ID is the account ID (ADR-033). The answer comes from Access's
+        own copy, also while billing is down (D13). A value Access does not know never takes access away: an unknown
+        standing is not BLOCKED, and a source in an unknown state counts as active (ADR-033). An instance that has not
+        yet caught up with the log answers 503 and no body (readiness, brief PR-6).
+      parameters:
+        - name: subscriberId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The answer, also for a subscriber Access does not know (reason NOT_KNOWN).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Access"
+        "400":
+          description: The ID is not a UUID. No body.
+        "503":
+          description: This instance has not caught up with the log yet. No body; another instance may answer.
+components:
+  schemas:
+    Access:
+      type: object
+      additionalProperties: false
+      required: [subscriberId, canWatch, reason, asOf, sequence]
+      properties:
+        subscriberId:
+          type: string
+          format: uuid
+        canWatch:
+          type: boolean
+        reason:
+          type: string
+          enum: [ACTIVE_SOURCE, ACCOUNT_BLOCKED, NO_ACTIVE_SOURCE, NOT_KNOWN]
+          description: Why. Later versions may add values; a client treats one it does not know as "ask again later".
+        asOf:
+          type: [string, "null"]
+          format: date-time
+          description: When the facts behind the answer were produced (their producedAt); null for NOT_KNOWN.
+        sequence:
+          type: [integer, "null"]
+          minimum: 1
+          description: The sequence of the facts behind the answer; null for NOT_KNOWN.

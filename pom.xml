@@ -18,9 +18,11 @@
     <packaging>pom</packaging>
     <name>Tally (parent)</name>
 
-    <!-- fake-provider first: Tally's integration tests run it as a container built from its jar. -->
+    <!-- fake-provider first: Tally's integration tests run it as a container built from its jar. Then access, the
+         second deployable (ADR-001), which depends on neither: its acceptance tests (Slice 2 PR-7) run it from its jar. -->
     <modules>
         <module>fake-provider</module>
+        <module>access</module>
         <module>tally</module>
     </modules>
 

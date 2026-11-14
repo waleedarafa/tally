@@ -25,7 +25,7 @@ jobs:
 
       - name: AT-9 and AT-10 at nightly size
         run: >
-          ./mvnw -B verify
+          ./mvnw -B -pl fake-provider,tally verify
           -Dit.test='AT09KillOneInstanceIT,AT10ThroughputIT'
           -Dtally.at09.accounts=5000
           -Dtally.at10.renewals=10000
