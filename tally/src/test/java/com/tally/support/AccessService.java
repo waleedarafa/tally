@@ -147,9 +147,12 @@ public final class AccessService implements AutoCloseable {
         running.remove(stopping);
     }
 
-    /** The rebuild's first step: empties Access's database (facts, positions and the ADR-036 mark), in one statement. */
+    /** The statement of the rebuild's second step, as {@code docs/runbooks/access-rebuild.md} gives it. */
+    public static final String EMPTY_DATABASE = "TRUNCATE access.facts, access.log_position, access.copy_state;";
+
+    /** The rebuild's emptying step: Access's facts, positions and ADR-036 mark, in one statement. */
     public void emptyDatabase() {
-        jdbc.execute("TRUNCATE access.facts, access.log_position, access.copy_state");
+        jdbc.execute(EMPTY_DATABASE);
     }
 
     /** Access's own database, from the test. */

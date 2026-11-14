@@ -9,6 +9,7 @@ import com.tally.shared.DomainEvent;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionChanged;
 import com.tally.support.AbstractReconcilingTest;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.time.Duration;
@@ -246,5 +247,32 @@ class AccessFeedIT extends AbstractReconcilingTest {
         assertThat(Map.of("one", standingOf(one), "other", standingOf(other)))
                 .containsEntry("one", "BLOCKED").containsEntry("other", "GOOD");
         assertThat(sources(one)).isEmpty();
+    }
+
+    @Autowired
+    MeterRegistry meters;
+
+    double notKnown(String field) {
+        return meters.get("tally.accessfeed.values.not_known").tag("field", field).counter().count();
+    }
+
+    /**
+     * A value this release does not know changes nothing, and is counted (brief PR-8, from the review of PR-3), so
+     * that AccessValueNotKnown says the two sides run different versions.
+     */
+    @Test
+    void aValueTheFeedDoesNotKnowChangesNothingAndIsCounted() {
+        UUID account = UUID.randomUUID();
+        double typesBefore = notKnown("subscription.type");
+        double standingsBefore = notKnown("standing");
+
+        publish(subscription(account, UUID.randomUUID(), 1, SubscriptionChangeType.UNKNOWN));
+        publish(standing(account, 1L, Standing.UNKNOWN));
+        awaitFeed(account);
+
+        assertThat(notKnown("subscription.type")).isEqualTo(typesBefore + 1);
+        assertThat(notKnown("standing")).isEqualTo(standingsBefore + 1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM accessfeed.account_facts WHERE account_id = ?",
+                Long.class, account)).as("no facts from values not known").isZero();
     }
 }

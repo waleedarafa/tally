@@ -68,8 +68,9 @@ class JdbcFactsStore implements FactsStore {
     }
 
     @Override
-    public boolean completeOnce() {
-        return jdbc.queryForObject("SELECT exists (SELECT 1 FROM access.copy_state)", Boolean.class);
+    public boolean completeOnce(String topic) {
+        return jdbc.queryForObject("SELECT exists (SELECT 1 FROM access.copy_state)"
+                + " AND exists (SELECT 1 FROM access.log_position WHERE topic = ?)", Boolean.class, topic);
     }
 
     @Override

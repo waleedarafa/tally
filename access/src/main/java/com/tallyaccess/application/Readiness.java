@@ -2,36 +2,27 @@ package com.tallyaccess.application;
 
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-import org.springframework.boot.availability.AvailabilityChangeEvent;
-import org.springframework.boot.availability.ReadinessState;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
  * Readiness (brief PR-6): an instance whose copy is behind the end of the log it saw at start is not ready, and serves
  * no answer. Without this, a rebuild would answer NOT_KNOWN for paying households. Ready once the stored position of
  * every partition has reached the end that partition had when the instance started; it stays ready after that.
- * Reported as Spring Boot's readiness state ({@code /actuator/health/readiness}).
  *
  * <p>A copy that once reached that end is marked complete in Access's database (ADR-036).
  * An instance that finds the mark at start is ready at once, before it reads the log, and so also while the log is
  * down: it answers from its copy, which may be behind (D13). An emptied database has no mark, so a rebuild waits.
  *
- * <p>Spring Boot itself reports "accepting traffic" once the application has started, which would override "refusing"
- * while the copy is still behind (found by AT-19 in Slice 2 PR-7). Readiness answers that report with "refusing"
- * until the copy is ready; one lock orders it with becoming ready, so the last word is always the copy's.
+ * <p>The platform asks {@code /actuator/health/readiness}; the health indicator {@code copyReady} reports this state
+ * there, in the readiness group (application.yml). Spring Boot's own readiness state is not used for it: Spring Boot
+ * reports "accepting traffic" once the application has started, which said yes while the copy was behind (found by
+ * AT-19 in Slice 2 PR-7).
  */
 @Component
 public class Readiness {
 
-    private final ApplicationEventPublisher events;
     private final AtomicReference<Map<Integer, Long>> endAtStart = new AtomicReference<>();
     private volatile boolean ready;
-
-    Readiness(ApplicationEventPublisher events) {
-        this.events = events;
-    }
 
     public boolean ready() {
         return ready;
@@ -39,40 +30,21 @@ public class Readiness {
 
     /** The copy was complete once: ready at once, whatever the log says. */
     public void completeBefore() {
-        becomeReady();
+        ready = true;
     }
 
     /** The end of each partition, read committed, when the instance started; set once. */
-    public synchronized void endAtStart(Map<Integer, Long> ends) {
+    public void endAtStart(Map<Integer, Long> ends) {
         endAtStart.compareAndSet(null, Map.copyOf(ends));
-        if (!ready) {
-            AvailabilityChangeEvent.publish(events, this, ReadinessState.REFUSING_TRAFFIC);
-        }
     }
 
-    /** Checks the stored positions against the end at start; reports ready the first time they reach it. */
+    /** Checks the stored positions against the end at start; ready the first time they reach it. */
     public void check(Map<Integer, Long> positions) {
         Map<Integer, Long> ends = endAtStart.get();
         if (ready || ends == null) {
             return;
         }
-        boolean caughtUp = ends.entrySet().stream()
+        ready = ends.entrySet().stream()
                 .allMatch(end -> positions.getOrDefault(end.getKey(), 0L) >= end.getValue());
-        if (caughtUp) {
-            becomeReady();
-        }
-    }
-
-    private synchronized void becomeReady() {
-        ready = true;
-        AvailabilityChangeEvent.publish(events, this, ReadinessState.ACCEPTING_TRAFFIC);
-    }
-
-    /** "Accepting traffic" from anyone else, Spring Boot's at start among them, holds only once the copy is ready. */
-    @EventListener
-    synchronized void onReadinessChange(AvailabilityChangeEvent<ReadinessState> event) {
-        if (event.getState() == ReadinessState.ACCEPTING_TRAFFIC && event.getSource() != this && !ready) {
-            AvailabilityChangeEvent.publish(events, this, ReadinessState.REFUSING_TRAFFIC);
-        }
     }
 }
