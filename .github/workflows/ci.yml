@@ -6,8 +6,10 @@
 #      commit. When they pass on main, the image gets a second tag, accepted-<commit>: only accepted
 #      images are candidates for deployment.
 # The split is two Maven profiles in tally/pom.xml; without a profile, ./mvnw verify runs both.
-# This is billing's pipeline (ADR-008): it builds the reactor's fake-provider and tally modules only (-pl). Access, the
-# second deployable, has its own pipeline (access.yml); a change only under access/ starts that one alone.
+# This is billing's pipeline (ADR-008). Its commit stage builds the reactor's fake-provider and tally modules (-pl).
+# Its acceptance stage also builds the access module, for its jar only (its tests run in Access's own pipeline,
+# access.yml): billing's acceptance tests start Access as a container built from it (Slice 2 PR-7). So a change to
+# access/ starts this pipeline too, and Access's pipeline as well.
 # When it runs, and why:
 #   - On a pull request, against GitHub's merge of the branch into its base, so the merged result is
 #     tested before it is merged (FR-038). A push to a branch with a pull request already runs it there,
@@ -22,9 +24,7 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore: ['access/**', 'docs/api/access-openapi.yaml', '.github/workflows/access.yml']
   pull_request:
-    paths-ignore: ['access/**', 'docs/api/access-openapi.yaml', '.github/workflows/access.yml']
   workflow_dispatch:
 
 # A pull request's runs share one group, so a newer commit cancels the older run. Every other run has a
@@ -127,8 +127,9 @@ jobs:
           java-version: '25'
           cache: maven
 
+      # The access module is built for its jar: AT-1 and AT-18 to AT-21 start Access as a container built from it.
       - name: Acceptance tests
-        run: ./mvnw -B -pl fake-provider,tally -P acceptance-stage verify
+        run: ./mvnw -B -pl fake-provider,access,tally -P acceptance-stage verify
 
       - name: Print failed tests
         if: failure()
