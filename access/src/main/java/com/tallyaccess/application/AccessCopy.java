@@ -16,8 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Access's copy of who may watch: applies what the log brings, and answers from what it holds (ADR-001, ADR-012).
  *
- * <p>Metrics: {@code tally.access.values.not_known} counts each standing, source kind or source state a message
- * carries that version 1 does not know, by {@code field}; {@code tally.access.unreadable} counts messages Access
+ * <p>Metrics: {@code tally.access.values.not_known} counts each schema version, standing, source kind or source
+ * state a message carries that version 1 does not know, by {@code field}; {@code tally.access.unreadable} counts messages Access
  * cannot store (no account, sequence or time, or not JSON); {@code tally.access.last_applied.age_seconds} is the age
  * of the newest facts Access holds (their {@code producedAt}); 0 while it holds none.
  */
@@ -70,6 +70,10 @@ public class AccessCopy {
     }
 
     private void countValuesNotKnown(AccessFactsMessage message) {
+        // A later version is read as version 1 (add only, ADR-016); counted, so a mistake shows.
+        if (message.schemaVersion() == null || message.schemaVersion() != 1) {
+            notKnown("schemaVersion");
+        }
         if (message.standing() == null || !AccessRules.STANDINGS.contains(message.standing())) {
             notKnown("standing");
         }
