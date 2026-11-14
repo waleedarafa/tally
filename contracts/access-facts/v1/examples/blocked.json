@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "accountId": "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a",
+  "sequence": 3,
+  "producedAt": "2026-11-13T07:30:00Z",
+  "standing": "BLOCKED",
+  "sources": [
+    { "kind": "SUBSCRIPTION", "id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d", "state": "ACTIVE" }
+  ]
+}
