@@ -24,10 +24,12 @@ import org.springframework.stereotype.Service;
 class AccessFeedListeners {
 
     private final AccountFactsStore facts;
+    private final AccessFactsRelay relay;
     private final Clock clock;
 
-    AccessFeedListeners(AccountFactsStore facts, Clock clock) {
+    AccessFeedListeners(AccountFactsStore facts, AccessFactsRelay relay, Clock clock) {
         this.facts = facts;
+        this.relay = relay;
         this.clock = clock;
     }
 
@@ -38,9 +40,10 @@ class AccessFeedListeners {
             return;
         }
         AccountFacts account = facts.lockOrCreate(changed.accountId());
+        long before = account.sequence();
         account.applySource(SourceKind.SUBSCRIPTION, changed.subscriptionId(), SourceState.ACTIVE, changed.sequence(),
                 clock.instant());
-        facts.save(account);
+        save(account, before);
     }
 
     @ApplicationModuleListener
@@ -49,7 +52,16 @@ class AccessFeedListeners {
             return;
         }
         AccountFacts account = facts.lockOrCreate(changed.accountId());
+        long before = account.sequence();
         account.applyStanding(changed.standing(), changed.sequence(), clock.instant());
+        save(account, before);
+    }
+
+    /** Saves the facts; a change of them is sent to the log, through the relay's queue, in the same transaction. */
+    private void save(AccountFacts account, long sequenceBefore) {
         facts.save(account);
+        if (account.sequence() != sequenceBefore) {
+            relay.changed(account.accountId(), account.sequence());
+        }
     }
 }

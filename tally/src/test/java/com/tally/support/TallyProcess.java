@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -43,7 +44,9 @@ public final class TallyProcess implements AutoCloseable {
                     "--spring.datasource.username=" + AbstractIntegrationTest.POSTGRES.getUsername(),
                     "--spring.datasource.password=" + AbstractIntegrationTest.POSTGRES.getPassword(),
                     "--server.port=0"));
-            settings.forEach((k, v) -> command.add("--" + k + "=" + v));
+            Map<String, String> all = new LinkedHashMap<>(EventLog.feedSettings(databaseUrl));
+            all.putAll(settings);
+            all.forEach((k, v) -> command.add("--" + k + "=" + v));
             ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile());
             builder.environment().put("HOSTNAME", name);
             TallyProcess started = new TallyProcess(name, builder.start(), log);

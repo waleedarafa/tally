@@ -4,6 +4,7 @@ import com.tally.AbstractIntegrationTest;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -16,7 +17,7 @@ import org.springframework.test.context.ContextCustomizerFactory;
 import org.springframework.test.context.MergedContextConfiguration;
 
 /**
- * Test isolation (ADR-029): no test class meets a row it did not create. Every test class that extends
+ * Test isolation (ADR-029): no test class meets a row, or a message in the event log, it did not create. Every test class that extends
  * {@link AbstractIntegrationTest} gets a Spring context and a PostgreSQL database of its own, and so does every
  * {@link TallyInstances}. Each database is a copy of a template migrated once per run
  * ({@code CREATE DATABASE ... TEMPLATE ...}, about 50 ms). The test class is part of the customizer's equality, so a
@@ -52,10 +53,14 @@ public final class PerContextDatabase implements ContextCustomizerFactory {
 
         @Override
         public void customizeContext(ConfigurableApplicationContext context, MergedContextConfiguration config) {
-            context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("per-context-database", Map.of(
-                    "spring.datasource.url", newDatabase("tally_ctx"),
-                    "spring.datasource.username", AbstractIntegrationTest.POSTGRES.getUsername(),
-                    "spring.datasource.password", AbstractIntegrationTest.POSTGRES.getPassword())));
+            String url = newDatabase("tally_ctx");
+            Map<String, Object> settings = new HashMap<>(EventLog.feedSettings(url));
+            settings.put("spring.datasource.url", url);
+            settings.put("spring.datasource.username", AbstractIntegrationTest.POSTGRES.getUsername());
+            settings.put("spring.datasource.password", AbstractIntegrationTest.POSTGRES.getPassword());
+            // The event log's topic is the database's own too (EventLog.feedSettings).
+            context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("per-context-database",
+                    settings));
         }
 
         @Override
