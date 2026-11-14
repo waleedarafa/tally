@@ -74,6 +74,16 @@ class AccessRecoveryIT {
                 }
 
                 @Override
+                public boolean completeOnce() {
+                    return store.completeOnce();
+                }
+
+                @Override
+                public void markComplete(Instant at) {
+                    store.markComplete(at);
+                }
+
+                @Override
                 public Optional<Instant> newestProducedAt() {
                     return store.newestProducedAt();
                 }

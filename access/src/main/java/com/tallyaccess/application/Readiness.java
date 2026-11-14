@@ -12,6 +12,10 @@ import org.springframework.stereotype.Component;
  * no answer. Without this, a rebuild would answer NOT_KNOWN for paying households. Ready once the stored position of
  * every partition has reached the end that partition had when the instance started; it stays ready after that.
  * Reported as Spring Boot's readiness state ({@code /actuator/health/readiness}).
+ *
+ * <p>A copy that once reached that end is marked complete in Access's database (review of PR-6, finding 2, option B).
+ * An instance that finds the mark at start is ready at once, before it reads the log, and so also while the log is
+ * down: it answers from its copy, which may be behind (D13). An emptied database has no mark, so a rebuild waits.
  */
 @Component
 public class Readiness {
@@ -28,10 +32,17 @@ public class Readiness {
         return ready;
     }
 
+    /** The copy was complete once: ready at once, whatever the log says. */
+    public void completeBefore() {
+        becomeReady();
+    }
+
     /** The end of each partition, read committed, when the instance started; set once. */
     public void endAtStart(Map<Integer, Long> ends) {
         endAtStart.compareAndSet(null, Map.copyOf(ends));
-        AvailabilityChangeEvent.publish(events, this, ReadinessState.REFUSING_TRAFFIC);
+        if (!ready) {
+            AvailabilityChangeEvent.publish(events, this, ReadinessState.REFUSING_TRAFFIC);
+        }
     }
 
     /** Checks the stored positions against the end at start; reports ready the first time they reach it. */
@@ -43,8 +54,12 @@ public class Readiness {
         boolean caughtUp = ends.entrySet().stream()
                 .allMatch(end -> positions.getOrDefault(end.getKey(), 0L) >= end.getValue());
         if (caughtUp) {
-            ready = true;
-            AvailabilityChangeEvent.publish(events, this, ReadinessState.ACCEPTING_TRAFFIC);
+            becomeReady();
         }
+    }
+
+    private void becomeReady() {
+        ready = true;
+        AvailabilityChangeEvent.publish(events, this, ReadinessState.ACCEPTING_TRAFFIC);
     }
 }

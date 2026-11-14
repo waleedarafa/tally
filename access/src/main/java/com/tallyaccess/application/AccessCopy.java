@@ -95,6 +95,16 @@ public class AccessCopy {
         return store.positions(topic);
     }
 
+    /** Whether this copy once reached the end of the log an instance saw at start (review of PR-6, option B). */
+    public boolean completeOnce() {
+        return store.completeOnce();
+    }
+
+    /** Marks this copy as complete once; from then on an instance that starts answers from it at once. */
+    public void markComplete() {
+        store.markComplete(clock.instant());
+    }
+
     Duration lastAppliedAge() {
         return store.newestProducedAt().map(produced -> Duration.between(produced, clock.instant()))
                 .filter(age -> !age.isNegative()).orElse(Duration.ZERO);

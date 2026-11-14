@@ -36,4 +36,15 @@ class ReadinessTest {
         readiness.check(Map.of(0, 5L));
         assertThat(readiness.ready()).isFalse();
     }
+
+    /** Review of PR-6, option B: a copy that was complete once is ready before the end is known, and stays ready. */
+    @Test
+    void aCopyThatWasCompleteOnceIsReadyBeforeTheEndIsKnown() {
+        readiness.completeBefore();
+        assertThat(readiness.ready()).isTrue();
+
+        readiness.endAtStart(Map.of(0, 120L));
+        readiness.check(Map.of(0, 5L));
+        assertThat(readiness.ready()).as("an end seen later does not take readiness back").isTrue();
+    }
 }

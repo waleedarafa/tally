@@ -3,6 +3,7 @@ package com.tallyaccess;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -42,6 +43,13 @@ public final class AccessTestSupport {
 
     /** A database and a compacted topic of the test's own, and the settings that point Access at them. */
     public static String isolate(DynamicPropertyRegistry registry) {
+        Map<String, String> settings = isolated();
+        settings.forEach((key, value) -> registry.add(key, () -> value));
+        return settings.get("tally.access.log.topic");
+    }
+
+    /** As {@link #isolate}, as settings for an instance a test starts itself. */
+    public static Map<String, String> isolated() {
         String name = "access_" + UUID.randomUUID().toString().replace("-", "");
         try (Connection c = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
                 POSTGRES.getPassword())) {
@@ -51,14 +59,14 @@ public final class AccessTestSupport {
         }
         String topic = "access-facts-" + name;
         createTopic(topic);
-        registry.add("spring.datasource.url", () -> POSTGRES.getJdbcUrl().replaceFirst("/[^/?]+(\\?|$)",
-                "/" + name + "$1"));
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("tally.access.log.bootstrap-servers", KAFKA::getBootstrapServers);
-        registry.add("tally.access.log.topic", () -> topic);
-        registry.add("tally.access.log.group-id", () -> "tally-access-" + name);
-        return topic;
+        Map<String, String> settings = new LinkedHashMap<>();
+        settings.put("spring.datasource.url", POSTGRES.getJdbcUrl().replaceFirst("/[^/?]+(\\?|$)", "/" + name + "$1"));
+        settings.put("spring.datasource.username", POSTGRES.getUsername());
+        settings.put("spring.datasource.password", POSTGRES.getPassword());
+        settings.put("tally.access.log.bootstrap-servers", KAFKA.getBootstrapServers());
+        settings.put("tally.access.log.topic", topic);
+        settings.put("tally.access.log.group-id", "tally-access-" + name);
+        return settings;
     }
 
     static void createTopic(String topic) {

@@ -169,6 +169,7 @@ class AccessLogIT {
         consumer.stop();
         jdbc.update("DELETE FROM access.facts");
         jdbc.update("DELETE FROM access.log_position");
+        jdbc.update("DELETE FROM access.copy_state");
         assertThat(copy.answer(account).reason()).isEqualTo(Reason.NOT_KNOWN);
         consumer.start();
 

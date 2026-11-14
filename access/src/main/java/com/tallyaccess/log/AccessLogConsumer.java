@@ -44,6 +44,9 @@ import tools.jackson.databind.json.JsonMapper;
  *       position, and reads again, so nothing is skipped. If reading keeps failing for
  *       {@code tally.access.log.give-up-after}, it reports its liveness as broken, so the platform restarts it, and
  *       correct again once it reads (review of PR-6, finding 1).</li>
+ *   <li>Before it reads the log, it asks Access's database whether the copy was complete once; if so, the instance
+ *       is ready at once, also while the log is down. The first time the copy reaches the end seen at start, it
+ *       writes that mark (review of PR-6, finding 2, option B).</li>
  * </ul>
  */
 @Component
@@ -87,6 +90,8 @@ class AccessLogConsumer implements SmartLifecycle {
 
     private void run() {
         consumer.subscribe(List.of(settings.topic()), new MoveToStoredPosition());
+        boolean markKnown = false;
+        boolean marked = false;
         boolean endKnown = false;
         boolean goBack = false;
         Instant failingSince = null;
@@ -94,6 +99,13 @@ class AccessLogConsumer implements SmartLifecycle {
         try {
             while (running) {
                 try {
+                    if (!markKnown) {
+                        if (copy.completeOnce()) {
+                            readiness.completeBefore();
+                            marked = true;
+                        }
+                        markKnown = true;
+                    }
                     if (!endKnown) {
                         readiness.endAtStart(endOfEachPartition());
                         endKnown = true;
@@ -113,7 +125,13 @@ class AccessLogConsumer implements SmartLifecycle {
                         copy.apply(settings.topic(), reads, reached);
                         written = reached;
                     }
-                    readiness.check(copy.positions(settings.topic()));
+                    if (!readiness.ready()) {
+                        readiness.check(copy.positions(settings.topic()));
+                    }
+                    if (readiness.ready() && !marked) {
+                        copy.markComplete();
+                        marked = true;
+                    }
                     if (failingSince != null) {
                         log.info("Access reads the log again");
                         failingSince = null;

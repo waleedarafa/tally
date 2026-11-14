@@ -24,6 +24,12 @@ public interface FactsStore {
     /** Records the next offset to read; never moves a position back (two instances may hold a partition briefly). */
     void advance(String topic, int partition, long nextOffset);
 
+    /** Whether the copy once reached the end of the log an instance saw at start (review of PR-6, option B). */
+    boolean completeOnce();
+
+    /** Records that the copy reached that end; a second mark changes nothing. */
+    void markComplete(Instant at);
+
     /** When the newest facts Access has were produced, if it has any. */
     Optional<Instant> newestProducedAt();
 }

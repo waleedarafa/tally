@@ -68,6 +68,16 @@ class JdbcFactsStore implements FactsStore {
     }
 
     @Override
+    public boolean completeOnce() {
+        return jdbc.queryForObject("SELECT exists (SELECT 1 FROM access.copy_state)", Boolean.class);
+    }
+
+    @Override
+    public void markComplete(Instant at) {
+        jdbc.update("INSERT INTO access.copy_state (complete_at) VALUES (?) ON CONFLICT (one) DO NOTHING", at(at));
+    }
+
+    @Override
     public Optional<Instant> newestProducedAt() {
         return Optional.ofNullable(jdbc.queryForObject("SELECT max(produced_at) FROM access.facts",
                 OffsetDateTime.class)).map(OffsetDateTime::toInstant);
