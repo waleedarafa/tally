@@ -92,8 +92,8 @@ class AccessRecoveryIT {
                 }
 
                 @Override
-                public boolean completeOnce() {
-                    return store.completeOnce();
+                public boolean completeOnce(String topic) {
+                    return store.completeOnce(topic);
                 }
 
                 @Override
@@ -139,6 +139,10 @@ class AccessRecoveryIT {
 
     double failingSeconds() {
         return meters.get("tally.access.reading.failing.seconds").gauge().value();
+    }
+
+    double unappliedSeconds() {
+        return meters.get("tally.access.unapplied.oldest_age_seconds").gauge().value();
     }
 
     List<UUID> sendFive() {
@@ -196,5 +200,23 @@ class AccessRecoveryIT {
         sendFive();
 
         await().atMost(Duration.ofSeconds(20)).until(() -> availability.getLivenessState() == LivenessState.BROKEN);
+    }
+
+    /**
+     * AccessStale's measure (brief PR-8; review 1 of PR-6): how long the log has held committed messages this instance
+     * has not applied. It rises while applies fail, and is back to 0 once everything is applied.
+     */
+    @Test
+    void messagesTheLogHoldsAndAccessHasNotAppliedShowInTheirAge() {
+        awaitAllApplied(sendFive());
+        await().atMost(Duration.ofSeconds(10)).until(() -> unappliedSeconds() == 0);
+
+        FailingStore.FAIL_NEXT_APPLIES.set(Integer.MAX_VALUE);
+        List<UUID> accounts = sendFive();
+        await().atMost(Duration.ofSeconds(20)).until(() -> unappliedSeconds() >= 3);
+
+        FailingStore.FAIL_NEXT_APPLIES.set(0);
+        awaitAllApplied(accounts);
+        await().atMost(Duration.ofSeconds(10)).until(() -> unappliedSeconds() == 0);
     }
 }

@@ -19,6 +19,11 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        # Ready only once the copy may answer (CopyReadyHealthIndicator); Spring Boot's own readiness state alone says yes as
+        # soon as the application has started.
+        readiness:
+          include: readinessState,copyReady
 tally:
   access:
     log:

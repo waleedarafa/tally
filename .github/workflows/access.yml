@@ -3,19 +3,20 @@
 # access), and billing's (ci.yml) builds fake-provider and tally only. Access depends on no other module, only on the
 # contract files in contracts/access-facts/.
 # When it runs:
-#   - A change to access/, to its OpenAPI file, to the contract files, to the build (pom.xml, the Maven wrapper) or to
-#     this file. A change to contracts/ starts both pipelines: billing's F7 and Access's consumer tests both read it.
+#   - A change to access/, to its OpenAPI file, to the contract files, to the alert rules, to the build (pom.xml, the
+#     Maven wrapper) or to this file. A change to contracts/ starts both pipelines: billing's F7 and Access's consumer
+#     tests both read it. So does a change to ops/alerts/: F14 has a side in each (Slice 2 PR-8).
 #   - On a pull request, against its merge into the base; on a push to main, also one image tally-access:<commit>.
 name: Access
 
 on:
   push:
     branches: [main]
-    paths: ['access/**', 'docs/api/access-openapi.yaml', 'contracts/**', 'pom.xml', 'mvnw', '.mvn/**',
-            '.github/workflows/access.yml']
+    paths: ['access/**', 'docs/api/access-openapi.yaml', 'contracts/**', 'ops/alerts/**', 'pom.xml', 'mvnw',
+            '.mvn/**', '.github/workflows/access.yml']
   pull_request:
-    paths: ['access/**', 'docs/api/access-openapi.yaml', 'contracts/**', 'pom.xml', 'mvnw', '.mvn/**',
-            '.github/workflows/access.yml']
+    paths: ['access/**', 'docs/api/access-openapi.yaml', 'contracts/**', 'ops/alerts/**', 'pom.xml', 'mvnw',
+            '.mvn/**', '.github/workflows/access.yml']
   workflow_dispatch:
 
 concurrency:

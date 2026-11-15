@@ -108,4 +108,30 @@ class AccessStartWithoutLogIT {
         // (found by AT-19 in PR-7).
         assertThat(probe(rebuilding)).as("the readiness probe of a copy that was never complete").isEqualTo(503);
     }
+
+    /**
+     * The mark guard (review 2 of PR-6, carried to PR-8): an operator empties the facts and the positions and forgets
+     * the mark. A copy that reached the end always has a position for its topic, also for an empty topic, so a mark
+     * with no position is a mark left behind: the instance waits for the catch-up instead of answering NOT_KNOWN for
+     * paying households.
+     */
+    @Test
+    void aMarkLeftBehindByAnIncompleteEmptyingIsIgnored() throws InterruptedException {
+        Map<String, String> settings = AccessTestSupport.isolated();
+        ConfigurableApplicationContext first = start(settings);
+        await().atMost(Duration.ofSeconds(30)).until(() -> status(first, UUID.randomUUID()) == 200);
+        first.close();
+        new JdbcTemplate(new DriverManagerDataSource(settings.get("spring.datasource.url"),
+                settings.get("spring.datasource.username"), settings.get("spring.datasource.password")))
+                .update("TRUNCATE access.facts, access.log_position");
+
+        Map<String, String> logDown = new LinkedHashMap<>(settings);
+        logDown.put("tally.access.log.bootstrap-servers", LOG_DOWN);
+        ConfigurableApplicationContext rebuilding = start(logDown);
+
+        Thread.sleep(3000);
+        assertThat(status(rebuilding, UUID.randomUUID())).as("a mark with no position is not a complete copy")
+                .isEqualTo(503);
+        assertThat(probe(rebuilding)).isEqualTo(503);
+    }
 }

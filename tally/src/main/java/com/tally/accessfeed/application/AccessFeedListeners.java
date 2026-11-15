@@ -8,6 +8,8 @@ import com.tally.account.Standing;
 import com.tally.account.StandingChanged;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionChanged;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Service;
@@ -18,7 +20,8 @@ import org.springframework.stereotype.Service;
  * change the row once (CLAUDE.md rule 7). Both listeners are pinned (pinned-listeners.txt).
  *
  * <p>A value this release does not know (a change type, a standing) changes nothing and is not recorded, so a known
- * event with a lower sequence still applies after it.
+ * event with a lower sequence still applies after it. It is counted, by field, in
+ * {@code tally.accessfeed.values.not_known} (AccessValueNotKnown, brief PR-8); a repeated event is counted again.
  */
 @Service
 class AccessFeedListeners {
@@ -26,16 +29,29 @@ class AccessFeedListeners {
     private final AccountFactsStore facts;
     private final AccessFactsRelay relay;
     private final Clock clock;
+    private final Counter typeNotKnown;
+    private final Counter standingNotKnown;
 
-    AccessFeedListeners(AccountFactsStore facts, AccessFactsRelay relay, Clock clock) {
+    AccessFeedListeners(AccountFactsStore facts, AccessFactsRelay relay, Clock clock, MeterRegistry meters) {
         this.facts = facts;
         this.relay = relay;
         this.clock = clock;
+        // Registered at 0 from the start, so a scrape shows them and increase() sees the first value.
+        this.typeNotKnown = notKnown(meters, "subscription.type");
+        this.standingNotKnown = notKnown(meters, "standing");
+    }
+
+    private static Counter notKnown(MeterRegistry meters, String field) {
+        return Counter.builder("tally.accessfeed.values.not_known").tag("field", field).register(meters);
     }
 
     /** A started or renewed subscription is an active source. A renewal changes no fact, so it sends nothing. */
     @ApplicationModuleListener
     void on(SubscriptionChanged changed) {
+        if (changed.type() == null || changed.type() == SubscriptionChangeType.UNKNOWN) {
+            typeNotKnown.increment();
+            return;
+        }
         if (changed.type() != SubscriptionChangeType.STARTED && changed.type() != SubscriptionChangeType.PERIOD_RENEWED) {
             return;
         }
@@ -49,6 +65,7 @@ class AccessFeedListeners {
     @ApplicationModuleListener
     void on(StandingChanged changed) {
         if (changed.standing() == null || changed.standing() == Standing.UNKNOWN) {
+            standingNotKnown.increment();
             return;
         }
         AccountFacts account = facts.lockOrCreate(changed.accountId());

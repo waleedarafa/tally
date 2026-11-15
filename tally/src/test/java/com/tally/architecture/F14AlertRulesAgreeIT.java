@@ -32,8 +32,10 @@ import org.yaml.snakeyaml.Yaml;
  *   <li>a rule has no {@code severity} ({@code page} or {@code ticket}), {@code driver}, {@code summary} or
  *       {@code runbook_url};</li>
  *   <li>a {@code runbook_url} names a file that does not exist in {@code docs/runbooks/};</li>
- *   <li>a runbook in {@code docs/runbooks/} is named by no rule;</li>
- *   <li>a rule reads a {@code tally_} metric that Tally does not export;</li>
+ *   <li>a runbook in {@code docs/runbooks/} is named by no rule, unless it is on {@link #NAMED_BY_NO_RULE};</li>
+ *   <li>a rule reads a {@code tally_} metric that billing does not export. A {@code tally_access_} metric is
+ *       Access's, the second deployable: F14's Access side ({@code com.tallyaccess.F14AccessMetricsIT}) checks it
+ *       against a scrape of Access (Slice 2 PR-8);</li>
  *   <li>a {@code page} alert has no unit test where it fires and none where it stays quiet.</li>
  * </ol>
  */
@@ -45,6 +47,15 @@ class F14AlertRulesAgreeIT extends AbstractIntegrationTest {
     static final Path RUNBOOKS = Path.of("../docs/runbooks");
     static final String RUNBOOK_URL = "https://github.com/waleedarafa/tally/blob/main/docs/runbooks/";
     static final Pattern TALLY_METRIC = Pattern.compile("\\btally_[a-z0-9_]+\\b");
+
+    /** Access's own metrics, checked by F14's Access side. {@code tally_accessfeed_} is billing's. */
+    static final String ACCESS_METRIC = "tally_access_";
+
+    /**
+     * Runbooks for a planned procedure, which no alert starts. Short on purpose: every other runbook belongs to an
+     * alert.
+     */
+    static final Set<String> NAMED_BY_NO_RULE = Set.of("access-rebuild.md");
 
     @LocalServerPort
     int port;
@@ -98,9 +109,11 @@ class F14AlertRulesAgreeIT extends AbstractIntegrationTest {
                 .collect(Collectors.toSet());
         try (Stream<Path> files = Files.list(RUNBOOKS)) {
             List<String> unnamed = files.map(file -> file.getFileName().toString()).filter(name -> name.endsWith(".md"))
-                    .filter(name -> !named.contains(name)).sorted().toList();
+                    .filter(name -> !named.contains(name) && !NAMED_BY_NO_RULE.contains(name)).sorted().toList();
             assertThat(unnamed).as("Runbooks no alert rule names").isEmpty();
         }
+        assertThat(NAMED_BY_NO_RULE).as("The short list names runbooks that exist")
+                .allMatch(name -> Files.isRegularFile(RUNBOOKS.resolve(name)));
     }
 
     @Test
@@ -112,7 +125,7 @@ class F14AlertRulesAgreeIT extends AbstractIntegrationTest {
         List<String> unexported = new ArrayList<>();
         for (Map<String, Object> rule : rules) {
             TALLY_METRIC.matcher(String.valueOf(rule.get("expr"))).results().map(m -> m.group())
-                    .filter(metric -> !exported.contains(metric)).distinct()
+                    .filter(metric -> !metric.startsWith(ACCESS_METRIC) && !exported.contains(metric)).distinct()
                     .forEach(metric -> unexported.add(rule.get("alert") + ": " + metric));
         }
         assertThat(unexported).as("Metrics the rules read that /actuator/prometheus does not serve").isEmpty();

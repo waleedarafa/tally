@@ -24,8 +24,12 @@ public interface FactsStore {
     /** Records the next offset to read; never moves a position back (two instances may hold a partition briefly). */
     void advance(String topic, int partition, long nextOffset);
 
-    /** Whether the copy once reached the end of the log an instance saw at start (ADR-036). */
-    boolean completeOnce();
+    /**
+     * Whether the copy of the topic once reached the end of the log an instance saw at start (ADR-036). A mark with
+     * no position stored for the topic is a mark left behind by an incomplete emptying, and does not count: a copy
+     * that reached the end always has a position, also for an empty topic.
+     */
+    boolean completeOnce(String topic);
 
     /** Records that the copy reached that end; a second mark changes nothing. */
     void markComplete(Instant at);

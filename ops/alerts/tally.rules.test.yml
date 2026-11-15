@@ -565,3 +565,192 @@ tests:
   - eval_time: 5m
     alertname: SettlementMismatch
     exp_alerts: []
+- name: AccessDown fires when Access cannot be scraped for 2 minutes
+  interval: 30s
+  input_series:
+  - series: up{job="access", instance="access-1"}
+    values: 1 1 0x10
+  alert_rule_test:
+  - eval_time: 2m30s
+    alertname: AccessDown
+    exp_alerts: []
+  - eval_time: 3m
+    alertname: AccessDown
+    exp_alerts:
+    - exp_labels:
+        job: access
+        instance: access-1
+        severity: page
+        driver: D13
+      exp_annotations:
+        summary: Prometheus cannot scrape Access; households may get no answer to "can I watch?".
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-down.md
+- name: AccessDown fires when Access is absent for 2 minutes
+  interval: 30s
+  input_series:
+  - series: up{job="tally", instance="tally-1"}
+    values: '1x10'
+  alert_rule_test:
+  - eval_time: 1m30s
+    alertname: AccessDown
+    exp_alerts: []
+  - eval_time: 2m
+    alertname: AccessDown
+    exp_alerts:
+    - exp_labels:
+        job: access
+        severity: page
+        driver: D13
+      exp_annotations:
+        summary: Prometheus cannot scrape Access; households may get no answer to "can I watch?".
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-down.md
+- name: AccessDown stays quiet while Access is scraped
+  interval: 30s
+  input_series:
+  - series: up{job="access", instance="access-1"}
+    values: 1x20
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: AccessDown
+    exp_alerts: []
+- name: AccessFeedBehind fires when unsent facts stay older than 120 s for 1 minute
+  interval: 30s
+  input_series:
+  # Two billing instances read the same database, so they export the same age.
+  - series: tally_accessfeed_unsent_oldest_age_seconds{instance="tally-1"}
+    values: 0 0 30+30x10
+  - series: tally_accessfeed_unsent_oldest_age_seconds{instance="tally-2"}
+    values: 0 0 30+30x10
+  alert_rule_test:
+  # The age is 120 s at 2m30s (not above) and 150 s at 3m: pending from 3m, firing at 4m.
+  - eval_time: 3m30s
+    alertname: AccessFeedBehind
+    exp_alerts: []
+  - eval_time: 4m
+    alertname: AccessFeedBehind
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        driver: ADR-014
+      exp_annotations:
+        summary: Billing has changes of access older than 2 minutes that are not yet in the event log.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-feed-behind.md
+- name: AccessFeedBehind stays quiet while the feed keeps up
+  interval: 30s
+  input_series:
+  - series: tally_accessfeed_unsent_oldest_age_seconds{instance="tally-1"}
+    values: 0 2 0 115 0 3 0x10
+  alert_rule_test:
+  - eval_time: 8m
+    alertname: AccessFeedBehind
+    exp_alerts: []
+- name: AccessStale fires when an instance leaves messages unapplied for over 120 s, for 1 minute
+  interval: 30s
+  input_series:
+  - series: tally_access_unapplied_oldest_age_seconds{instance="access-1"}
+    values: 0 0 30+30x10
+  - series: tally_access_unapplied_oldest_age_seconds{instance="access-2"}
+    values: '0x12'
+  alert_rule_test:
+  - eval_time: 3m30s
+    alertname: AccessStale
+    exp_alerts: []
+  - eval_time: 4m
+    alertname: AccessStale
+    exp_alerts:
+    - exp_labels:
+        instance: access-1
+        severity: page
+        driver: D13
+      exp_annotations:
+        summary: "Access instance access-1 has not applied messages the log has held for over 2 minutes."
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-stale.md
+- name: AccessStale stays quiet under a steady load, where the gauge stays near the poll interval
+  interval: 30s
+  input_series:
+  - series: tally_access_unapplied_oldest_age_seconds{instance="access-1"}
+    values: 0.5 0.4 0.6 1 0.5 0x10
+  alert_rule_test:
+  - eval_time: 8m
+    alertname: AccessStale
+    exp_alerts: []
+- name: AccessReadingFailing fires when reading has failed for over 120 s, for 1 minute
+  interval: 30s
+  input_series:
+  - series: tally_access_reading_failing_seconds{instance="access-1"}
+    values: 0 0 30+30x10
+  alert_rule_test:
+  - eval_time: 3m30s
+    alertname: AccessReadingFailing
+    exp_alerts: []
+  - eval_time: 4m
+    alertname: AccessReadingFailing
+    exp_alerts:
+    - exp_labels:
+        instance: access-1
+        severity: page
+        driver: D13
+      exp_annotations:
+        summary: "Access instance access-1 has failed to read the log or write its copy for over 2 minutes."
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-stale.md
+- name: AccessReadingFailing stays quiet when reading recovers within 2 minutes
+  interval: 30s
+  input_series:
+  - series: tally_access_reading_failing_seconds{instance="access-1"}
+    values: 0 30 60 90 0x10
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: AccessReadingFailing
+    exp_alerts: []
+- name: AccessValueNotKnown fires when Access counts a value it does not know
+  interval: 30s
+  input_series:
+  - series: tally_access_values_not_known_total{instance="access-1", field="standing"}
+    values: 0 0 1x10
+  - series: tally_accessfeed_values_not_known_total{instance="tally-1", field="standing"}
+    values: '0x12'
+  alert_rule_test:
+  - eval_time: 30s
+    alertname: AccessValueNotKnown
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: AccessValueNotKnown
+    exp_alerts:
+    - exp_labels:
+        instance: access-1
+        field: standing
+        severity: ticket
+        driver: ADR-024
+      exp_annotations:
+        summary: "A value of standing was not known to its reader in the last day; the contract versions differ."
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-value-not-known.md
+- name: AccessValueNotKnown fires when billing's feed ignores a value it does not know
+  interval: 30s
+  input_series:
+  - series: tally_access_values_not_known_total{instance="access-1", field="standing"}
+    values: '0x12'
+  - series: tally_accessfeed_values_not_known_total{instance="tally-1", field="subscription.type"}
+    values: 0 0 1x10
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: AccessValueNotKnown
+    exp_alerts:
+    - exp_labels:
+        instance: tally-1
+        field: subscription.type
+        severity: ticket
+        driver: ADR-024
+      exp_annotations:
+        summary: "A value of subscription.type was not known to its reader in the last day; the contract versions differ."
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-value-not-known.md
+- name: AccessValueNotKnown stays quiet while every value is known
+  interval: 30s
+  input_series:
+  - series: tally_access_values_not_known_total{instance="access-1", field="standing"}
+    values: '0x20'
+  - series: tally_accessfeed_values_not_known_total{instance="tally-1", field="standing"}
+    values: '0x20'
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: AccessValueNotKnown
+    exp_alerts: []
