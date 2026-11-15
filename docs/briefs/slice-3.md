@@ -1,6 +1,6 @@
 # Slice 3 brief: Collections
 
-Status of this brief: **draft**. The four decisions below wait for the user. Do not start PR-2 before they are confirmed on the pull request of this brief.
+Status of this brief: **confirmed**. The user confirmed the four decisions below on 15 November 2026, on pull request 74: option A for each.
 
 ## Goal
 
@@ -48,9 +48,9 @@ Slice 2 built the path from the standing to Access (`StandingChanged` → `acces
 - No endpoint lets a household pay an unpaid invoice. After the last retry, only time passes.
 - AT-16 declines the **first** invoice of a new subscription, then pays on day 3.
 
-## Decisions that wait for the user
+## Decisions, confirmed by the user on 15 November 2026
 
-Finance and product own these four. Each has a recommendation. The rest of this brief assumes the recommendations.
+Finance and product own these four. The user chose option A for each. The other options stay here with their costs, as the record of what was compared.
 
 ### 1. A decline on the first invoice (proposed 025)
 
@@ -58,7 +58,7 @@ A new subscriber gets access at sign-up, before the first charge. Then the first
 
 | Option | What happens | Cost |
 |---|---|---|
-| **A. End the subscription at once (recommended)** | No case. Access says no. The household signs up again with a card that works. | A household whose card had a short problem must sign up again. |
+| **A. End the subscription at once (chosen)** | No case. Access says no. The household signs up again with a card that works. | A household whose card had a short problem must sign up again. |
 | B. The normal 30-day timetable | The household watches until day 10. | Anyone with a bad card watches 10 days for free, again and again. |
 | C. A short grace: one retry after 24 hours, then end | One more chance. | One more timer and one more state, for a person who is still at the screen. |
 
@@ -68,7 +68,7 @@ The timetable has two retries. After day 7 nothing asks for the payment again. S
 
 | Option | What happens | Cost |
 |---|---|---|
-| **A. "Pay now" (recommended)** | The household asks Tally to try the payment again, at any time while a debt is open. | One new endpoint, with an idempotency key. |
+| **A. "Pay now" (chosen)** | The household asks Tally to try the payment again, at any time while a debt is open. | One new endpoint, with an idempotency key. |
 | B. More automatic retries (day 10, day 30) | Tally tries again before it blocks and before it writes off. | A change to finance's timetable (H4). A household that repairs its card on day 12 waits until day 30. |
 | C. Both | | Both costs. |
 
@@ -80,7 +80,7 @@ A household is blocked on 10 March. Its next renewal date is 1 April.
 
 | Option | What happens | Cost |
 |---|---|---|
-| **A. Postpone the renewal while BLOCKED (recommended)** | No new period and no new invoice while blocked (I6). The renewal runs when the standing is GOOD again. | The period keeps its dates. A household restored on 5 April pays for all of April. |
+| **A. Postpone the renewal while BLOCKED (chosen)** | No new period and no new invoice while blocked (I6). The renewal runs when the standing is GOOD again. | The period keeps its dates. A household restored on 5 April pays for all of April. |
 | B. Renew and invoice as usual | The new invoice is declined and joins the case. | The household gets a debt for a month in which it could not watch. This breaks I6. |
 
 Proration would remove the cost of option A. It belongs to the billing lifecycle slice (WAR-62).
@@ -89,7 +89,7 @@ Proration would remove the cost of option A. It belongs to the billing lifecycle
 
 | Option | What happens | Cost |
 |---|---|---|
-| **A. The standing stays BLOCKED (recommended)** | The household pays the debt with "pay now". Then the standing is GOOD, and it can sign up again (H11). | A household that never pays can never come back on this account. |
+| **A. The standing stays BLOCKED (chosen)** | The household pays the debt with "pay now". Then the standing is GOOD, and it can sign up again (H11). | A household that never pays can never come back on this account. |
 | B. The standing returns to GOOD at the write-off | The household can sign up again at once. | It can repeat this: 10 free days for each sign-up. |
 
 ## Rules of the design (not open)
@@ -161,7 +161,7 @@ Not in this slice: TRIAL, CANCELLING, a cancel by the customer, "renewal reverse
 ## In scope
 
 - Everything in "Target shape".
-- The four decisions, as recommended, when confirmed.
+- The four decisions, as confirmed.
 - WAR-57's second part: a `set` and a sign-up for one account at the same time. The sign-up answers 409 with `Retry-After`; it never answers 500. The `set` runs on the queue, so it tries again.
 - Health for every new timer (rule 8), and alert rules with runbooks for work that is late (ADR-030).
 - The documents: `design.md` §4, §5 and §8, the glossary, the topic tracker (C-06, D-07, D-09, D-10), `docs/api/openapi.yaml`.
