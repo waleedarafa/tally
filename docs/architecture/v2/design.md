@@ -155,7 +155,33 @@ Payment allows a new attempt only while no attempt is REQUESTED, SENT or UNKNOWN
 
 **Subscription:** TRIAL → ACTIVE (trial ends) · TRIAL or ACTIVE → CANCELLING (cancel) · ACTIVE → ACTIVE (`renew(n)` for the current period only) · ACTIVE → ENDED (late cancel requested before period end; emits renewal reversed) · CANCELLING → ENDED (period ends) · any live state → ENDED (write-off) · ENDED refuses everything.
 
-**Collections case (one per account):** OPEN on a declined payment → day 3 and day 7 retries → OVERDUE (day 7) → BLOCKED (day 10) → WRITTEN_OFF (day 30). `InvoicePaid` closes it from any open state and restores standing. Timers are claimed rows. *(Slice 1R builds OPEN, the day-3 retry and close only.)*
+As Slice 3 builds it (proposed ADR-038): only ACTIVE and ENDED.
+
+| From | Event | To |
+|---|---|---|
+| ACTIVE | `renew(n)` for the current period, account not BLOCKED | ACTIVE, period n (`PERIOD_RENEWED`) |
+| ACTIVE | `renew(n)` while the account is BLOCKED | ACTIVE, unchanged; the renewal waits and runs once the standing is GOOD (I6) |
+| ACTIVE | end, reason `WRITE_OFF` or `FIRST_PAYMENT_DECLINED` (025) | ENDED (`ENDED`) |
+| ENDED | anything, `renew` and end included | ENDED, unchanged |
+
+One live subscription per account; an account whose subscription ended may sign up again. TRIAL, CANCELLING and a cancel by the customer come with the billing lifecycle slice.
+
+**Collections case (one per account; proposed ADR-037):** the case covers every unpaid invoice of the account. Days count from the case's first decline. Only a decline opens a case (ADR-013); after that no payment outcome moves it forward: each timer looks only at "is a debt still open", and only `InvoicePaid` moves it back. The standing follows the case in the same transaction.
+
+| From | Event | To | Standing |
+|---|---|---|---|
+| (none) | a renewal's payment declined | OPEN; retry 1 due on day 3 | GOOD |
+| (none) | the first invoice's payment declined (025; found through `InvoicingApi`) | no case; the subscription ends | GOOD |
+| OPEN, OVERDUE, BLOCKED | another invoice declined | the same state, the invoice added | unchanged |
+| OPEN | day 3 | OPEN; retry 1 asked; retry 2 due on day 7 | GOOD |
+| OPEN | day 7 | OPEN; retry 2 asked; OVERDUE due one hour later | GOOD |
+| OPEN | day 7 plus one hour, a debt open | OVERDUE | OVERDUE |
+| OVERDUE | day 10, a debt open | BLOCKED | BLOCKED |
+| BLOCKED | day 30, a debt open | WRITTEN_OFF; the subscription ends (`WRITE_OFF`) | BLOCKED |
+| OPEN, OVERDUE, BLOCKED | every invoice of the case paid (a retry or "pay now") | CLOSED | GOOD |
+| WRITTEN_OFF | every invoice of the case paid ("pay now") | CLOSED; the subscription stays ended | GOOD |
+
+Each timer is a claimed row on Collections' queue, with a business unique constraint for the step. "Pay now" asks again in any state with a debt open; its decline changes no state. *(Slice 1R built OPEN, the day-3 retry and close for one invoice; Slice 3 builds the rest.)*
 
 ## 6. Money
 

@@ -10,7 +10,7 @@ Decision records are cited as `ADR-NNN` for the second design (`docs/architectur
 - `docs/architecture/v2/drivers.md`: the drivers. Numbering differs from the first run.
 - `docs/architecture/v2/design.md`: contexts, invariants, the dependency graph, public APIs and events, state machines, Money, the REST contract.
 - `docs/architecture/v2/design-record.md`: the full Design Record: every step's reasoning, the options compared and why the others were rejected. Read the section a task's decision comes from. Do not edit it: it is a snapshot, refreshed from the record's document.
-- `docs/briefs/slice-N.md`: the scope of the current slice. Now `docs/briefs/slice-2.md`.
+- `docs/briefs/slice-N.md`: the scope of the current slice. Now `docs/briefs/slice-3.md`.
 - `contracts/access-facts/v1/`: the message billing sends to Access, and the fields Access reads (ADR-034).
 - killbill-wiki (separate repository): how Kill Bill solves the same problems, with path:line citations. Use it to compare, not to copy. Claims marked 'inference' must be verified before relying on them.
 
