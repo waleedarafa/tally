@@ -12,7 +12,8 @@ A summary of the Design Record, Steps 6, 7, 10, 12 and 16. Section numbers here 
 | `payment` | Payment | generic | ports and adapters | Engineering |
 | `collections` | Collections | supporting | closed layers | Finance |
 | `account` | Account | supporting | closed layers | Finance |
-| `access` | Access (separate deployable from Slice 2) | supporting | layers plus one translator per partner | Product |
+| `accessfeed` | Access feed: billing's side of the access facts (ADR-033) | — | ports and adapters | — |
+| Access, `access/` (`com.tallyaccess`) | Access: a separate deployable since Slice 2 (ADR-001), with its own database | supporting | plain layers (web, application, persistence, log); one translator per partner later | Product |
 | `support` | Support view (read model; later slice) | — | closed layers | Customer support |
 | `shared` | Shared kernel: `Money`, `Ratio`, `DomainEvent` | — | — | — |
 | `platform` | Queues, jobs, listener executor (kept from the first run) | — | — | Engineering |
@@ -57,7 +58,7 @@ collections: shared, platform, account, subscription, invoicing
 accessfeed: shared, platform, subscription, account    # events only, never their APIs (ADR-033)
 ```
 
-Access is not in this graph: it is a second deployable (ADR-001), in `access/`, base package `com.tallyaccess`, with its own database. It imports no billing code; billing and Access share only the files in `contracts/access-facts/` (ADR-034, F7). The in-process `access` module of Slice 1 leaves in Slice 2 PR-9; until then the pinned graph keeps its line.
+Access is not in this graph: it is a second deployable (ADR-001), in `access/`, base package `com.tallyaccess`, with its own database. It imports no billing code; billing and Access share only the files in `contracts/access-facts/` (ADR-034, F7). The in-process `access` module of Slice 1 left in Slice 2 PR-9, and V36 dropped its schema; the pinned graph is this one.
 
 Named interfaces: `account` exposes a read API to every module that lists it, and `AccountStanding.set` to `collections` only (F3).
 `support` joins in a later slice: `support: shared, account, invoicing, collections`.
@@ -127,6 +128,7 @@ public record QuoteReason(String offerId, int offerVersion, String kind, Map<Str
 - IDs, enums, numbers and times only: no free text, so no personal data (ADR-006, D8, F15).
 - For one account, one send at a time, each carrying the facts current when it starts; Access applies a message only if its sequence is higher.
 - Each send is a transaction of its own, committed only once the broker acknowledges it; Access reads committed messages only (`read_committed`), so a send that was not acknowledged and reached the log later is never seen (ADR-033, spike S-4).
+- Access keeps its position in the log in its own database, with the facts, in one transaction; an emptied database reads the log from the start with the old consumer group (ADR-035).
 
 **Envelope:** every event carries event ID, occurrence time, account ID and the aggregate version as a sequence number.
 **Evolution:** add fields only; never rename or move an event class; every shared enum has `UNKNOWN`, which unknown input maps to.
@@ -197,6 +199,8 @@ Clock (all with dates), `CardProvider` (payment), `TaxRates` (invoicing), `Invoi
 | No row for this ID | false | `NOT_KNOWN` (the app shows "activating", ADR-014) |
 
 `asOf` is the `producedAt` of the facts behind the answer, and `sequence` their sequence; for `NOT_KNOWN` both are null. A standing or a source state Access does not know never takes access away: an unknown standing is not BLOCKED, and an unknown state counts as active (ADR-033).
+
+**Not ready** (ADR-036): while an instance's copy is behind the end of the log it saw at start, it answers 503 with no body, and its readiness probe (`/actuator/health/readiness`, health indicator `copyReady`) says no. A copy that once reached that end is marked complete in Access's database, so an instance that finds the mark answers at once, also while the log is down; an emptied database has no mark, so a rebuild waits for the catch-up. A failure of the log or of Access's database never breaks liveness; only a reading thread that ends does. Slice 2 replaced `GET /v1/accounts/{id}/access`, served by billing, with this endpoint; billing no longer answers access.
 
 Errors: `application/problem+json` (RFC 9457). Types: `offer-not-available`, `already-subscribed`, `account-blocked`, `idempotency-key-reused`, `request-in-progress` (409, with `Retry-After`: the same request is still being handled; added in Slice 1R PR-9b).
 An `Idempotency-Key` must be a UUID; any other value is refused with 400 and not stored (Slice 1R PR-10, from the #24 review: loosening this later is additive, tightening it would break clients). Idempotency keys are claimed before acting; the response is stored in the same transaction as the change, and both are kept for 24 hours. Keys are scoped by account until callers are authenticated. Versions live in the path; changes are additive; a break is `/v2`.

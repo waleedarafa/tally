@@ -44,15 +44,35 @@ From the Step 7 canvas and `design.md` §2 and §4.
 | Cancellation | An end date, always a period end; no refund for the current period (S4, H11) |
 | States | TRIAL, ACTIVE, CANCELLING, ENDED; ENDED refuses everything (`design.md` §5; not built yet) |
 
-## Access (`access`)
+## Access (the deployable in `access/`, `com.tallyaccess`)
+
+A separate deployable since Slice 2 (ADR-001), with its own database.
 
 | Word | Meaning |
 |---|---|
-| Subscriber | The person who watches |
+| Subscriber | The person who watches. In Slice 2 the subscriber is the account (ADR-033) |
 | Source of access | A subscription, a trial or a partner bundle. A subscriber can watch if at least one source is active |
 | Suspended | Viewing stopped; billing facts unchanged |
 | Activating | What the app shows while a new subscriber's access arrives; 99% within 5 seconds (ADR-014) |
-| Access facts | The current facts per account that billing publishes to Access, IDs only (ADR-006, ADR-012) |
+| Access facts | The current facts per account that billing publishes to Access, IDs, enums, numbers and times only: standing and sources, with a sequence (ADR-006, ADR-012; `contracts/access-facts/v1/`) |
+| Copy | Access's own store of the access facts, one row per account, from which it answers (`access.facts`) |
+| Sequence | The number of an account's facts: it goes up by one only when the facts change. Access applies a message only if its sequence is higher than the one it holds (ADR-033) |
+| Position | Where Access has read to in each partition of the log, kept in its own database with the facts (`access.log_position`, ADR-035) |
+| Ready | An instance may answer: its copy has reached the end of the log it saw at start, or the copy was complete once. Not ready: it answers 503 (ADR-036) |
+| Complete once | The mark in Access's database that its copy once reached the end of the log (`access.copy_state`). It counts only with a stored position (ADR-036) |
+| Rebuild | Building the copy again from the log: the three tables emptied in one statement, then Access started with its usual consumer group (`docs/runbooks/access-rebuild.md`; AT-19) |
+| Value not known | A schema version, standing, source kind or source state Access does not know. It never takes access away, and is counted (ADR-033) |
+
+## Access feed (`accessfeed`)
+
+Billing's side of the access facts (ADR-033). It holds no access rule.
+
+| Word | Meaning |
+|---|---|
+| Account facts | One row per account in `accessfeed.account_facts`: standing, sources and sequence, built from `SubscriptionChanged` and `StandingChanged` |
+| Relay | The worker on the platform queue that sends an account's current facts to the log: for one account, one send at a time, each a Kafka transaction of its own (CLAUDE.md rule 15) |
+| Sent sequence | The last sequence of an account that reached the log (`sent_sequence`). Facts with a higher sequence are unsent; the age of the oldest is `AccessFeedBehind`'s measure |
+| Event log | The compacted topic `access-facts`, keyed by account ID, that carries the facts from billing to Access (ADR-006, ADR-012) |
 
 ## Invoicing (`invoicing`)
 

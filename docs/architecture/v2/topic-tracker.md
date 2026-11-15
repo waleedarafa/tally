@@ -26,16 +26,16 @@ Drivers are the D-numbers of [`drivers.md`](drivers.md). The course review used 
 |---|---|---|---|---|---|---|---|
 | 0 Decision drivers | 9 |  |  | 2 | 7 |  |  |
 | A Domain | 15 | 1 |  | 2 | 8 | 4 |  |
-| B Architecture styles | 8 |  | 1 | 1 | 4 | 1 | 1 |
+| B Architecture styles | 8 |  |  |  | 4 | 3 | 1 |
 | C Inside a module | 6 | 1 |  | 2 |  | 3 |  |
-| D Data and reliability | 27 | 5 | 4 | 4 | 5 | 8 | 1 |
-| D2 Distributed coordination | 11 | 3 | 4 | 1 | 3 |  |  |
-| E Evolution and governance | 15 | 3 | 1 | 2 | 4 | 4 | 1 |
+| D Data and reliability | 27 | 5 | 3 | 3 | 4 | 11 | 1 |
+| D2 Distributed coordination | 11 | 3 | 2 | 1 | 4 | 1 |  |
+| E Evolution and governance | 15 | 3 |  | 2 | 4 | 5 | 1 |
 | F Delivery | 17 | 4 | 5 | 5 | 3 |  |  |
 | G Teams | 8 | 3 | 3 |  | 1 |  | 1 |
-| H Runtime infrastructure | 11 | 4 | 4 | 2 |  | 1 |  |
-| I Security | 13 | 6 | 3 | 1 | 1 |  | 2 |
-| **All** | **140** | **30** | **25** | **22** | **36** | **21** | **6** |
+| H Runtime infrastructure | 11 | 4 | 3 | 2 | 1 | 1 |  |
+| I Security | 13 | 6 | 2 | 1 | 1 | 1 | 2 |
+| **All** | **140** | **30** | **18** | **20** | **37** | **29** | **6** |
 
 Before this check the course table had 24 topics built or checked. After it, 54. 78 of 138 statuses changed.
 
@@ -127,14 +127,14 @@ The Design Record lists four items as required before production: settlement rec
 
 | ID | Topic | Status | Was | Priority | Drivers | Evidence | Note |
 |---|---|---|---|---|---|---|---|
-| B-01 | Architecture quantum | Partly built ◆ | Designed | High | D13 | access module with its own tables; F12AccessReactsOnlyToEventsTest; AccessIT | Access is a separate quantum on paper (ADR-001) and in-process today. Extraction is Slice 2. |
+| B-01 | Architecture quantum | Checked ◆ | Designed | High | D13 | access/ (com.tallyaccess): its own process, database, image and pipeline (access.yml); NoBillingCodeTest (F7, Access side); AT18AccessSurvivesBillingIT | Extracted in Slice 2: billing and Access share only contracts/access-facts/. The in-process module left in PR-9 (#72). |
 | B-02 | Modular monolith | Checked ◆ | Built | High | D1, D3, D10 | ADR-001; pinned module graph tests | — |
 | B-03 | Event-driven architecture (in-process) | Built | Built | Medium | D3 | Spring Modulith events with the publication registry (ADR-002) | — |
 | B-04 | Choreography versus orchestration | Built | Built | Medium | — | ADR-005: renewal choreographed; Collections orchestrated | — |
 | B-05 | Style scoring against drivers | Built ◆ | Designed | High | All | Design Record §9 "Candidates against the drivers" | — |
 | B-06 | Microkernel for providers | Built ◆ | Designed | Medium | D11 | payment/domain/PaymentGateway port; HttpPaymentGateway adapter | A port with one adapter, not runtime plug-ins. That meets D11. |
 | B-07 | Pipeline for usage rating | Not applicable ◆ | Not started | Low | — | Design Record §1: monthly plans, promotions, trials | Tally has no usage billing. |
-| B-08 | Access with its own database | Designed | Designed | High | D13 | ADR-001; ADR-007 (Access has its own small PostgreSQL) | — |
+| B-08 | Access with its own database | Checked | Designed | High | D13 | access/: Flyway schema access (V1, V2) in its own PostgreSQL (infra/docker-compose.yml access-postgres; a container of its own in tests); AT-18 stops billing's database and Access still answers | Which managed PostgreSQL is chosen with the first deployed environment (ADR-007). |
 
 ## C Inside a module
 
@@ -158,7 +158,7 @@ The Design Record lists four items as required before production: settlement rec
 | D-05 | Competing consumers, leaderless | Checked ◆ | Built | High | D1, D6 | ADR-003; JdbcDurableQueue and PeriodicJob use FOR UPDATE SKIP LOCKED; AT-9; DurableQueueIT | — |
 | D-06 | Retry, back-off and circuit breaker | Checked ◆ | Built | High | D2 | ADR-013; payment/application/ProviderIsolation (Resilience4j breaker and rate limiter); AT-4; ProviderIsolationIT | No jitter found in retries. |
 | D-07 | Saga (Collections) | Partly built | Partly built | High | — | collections module; V24__collections.sql (case retries); V23 collection request retries | Case opens and closes, with retries. Overdue, blocked and write-off steps are not built. |
-| D-08 | CQRS, read model and materialised view | Partly built ◆ | Designed | Medium | D13 | access module answers from its own tables (F12) | In-process copy today. The compacted log of ADR-012 is Slice 2. |
+| D-08 | CQRS, read model and materialised view | Checked ◆ | Designed | Medium | D13 | Access's copy (access.facts) is built from the compacted topic access-facts (ADR-012, ADR-033, ADR-035); AccessLogIT; AT19RebuildIT (with and without compaction, old consumer group) | A rebuild has downtime: every instance refuses answers until its copy has caught up (slice-2-report §4). |
 | D-09 | Upgrade saga with pivot ordering | Not started ◆ | Designed | High | — | No plan change in code (no changePlan or PlanChanged) | Conflict: Design Record §3 upgrades access at once, before payment, and Slice 1R gives access at sign-up. The course review recommended unlocking after the charge. Needs a decision, not a status. |
 | D-10 | Saga countermeasures | Not started | Not started | High | — | — | renew(n) plus the version check already stops a repeated renewal; no semantic locks. |
 | D-11 | Event-carried state transfer vs notification | Designed | Designed | High | D13 | ADR-016 (events carry what the listener needs); ADR-012 (compacted access facts) | — |
@@ -167,8 +167,8 @@ The Design Record lists four items as required before production: settlement rec
 | D-14 | Partitioned renewal run (single writer) | Not started | Not started | Medium | D6 | ADR-003 claims batches; no partitioning | Not needed at D6's 14 a second. |
 | D-15 | Clock as a dependency | Checked ◆ | Not started | High | D10 | platform/ClockConfiguration; ArchitectureRulesTest bans no-argument now() and currentTimeMillis | — |
 | D-16 | Multi-tenancy model | Not applicable ◆ | Not started | High | — | Design Record §1: one streaming business billing households | Tally has no merchants or tenants. |
-| D-17 | Event ordering per key | Built ◆ | Not started | Medium | D13 | shared.DomainEvent carries the sequence (ADR-016); FF-13 treats a missing sequence as "order not known" | — |
-| D-18 | Read-your-own-writes | Designed | Designed | Medium | D13 | ADR-014: 99% within 5 seconds; app shows "activating" | — |
+| D-17 | Event ordering per key | Checked ◆ | Not started | Medium | D13 | shared.DomainEvent carries the sequence (ADR-016; FF-13); accessfeed keeps one sequence per account, +1 only on change (AccessFeedIT); the relay sends one account at a time, each send a Kafka transaction (AccessFeedOrderIT, SpikeS4UnacknowledgedSendIT); Access applies only a higher sequence (AccessLogIT, AT21OldAndRepeatedMessagesIT) | — |
+| D-18 | Read-your-own-writes | Checked | Designed | Medium | D13 | AT01SignUpHappyPathIT asks the Access service: canWatch within 5 s (769 ms in CI on #70); AccessFeedLatencyIT: sign-up to committed facts in the log in about 0.6 s | No app exists in this repository, so the "activating" screen is not built; NOT_KNOWN is what it would show. |
 | D-19 | Bulkhead for provider calls | Built ◆ | Not started | Medium | D2 | ProviderIsolation: "The worker pool is the bulkhead" | — |
 | D-20 | Dead-letter queue with alert | Partly built ◆ | Not started | Medium | D3, D9 | FAILED queue rows keep last_error and are never deleted (Retention); money queues carry money="true" on their health metrics (QueueDefinition.asMoneyQueue); tally.queue.failed; tally.events.unreadable | The queue table is the dead-letter store: a failed item waits there for a person. Missing: the alert rule on money queues (Slice 2 step 0 alerts brief). |
 | D-21 | API composition | Designed ◆ | Not started | Low | — | Design Record §6: support view as a read model over published events | Not built. |
@@ -190,8 +190,8 @@ The Design Record lists four items as required before production: settlement rec
 | D2-05 | State management over compensation | Built ◆ | Designed | High | D2 | AttemptState UNKNOWN; ADR-026; tally.payment.unknown_past_key_window alert; declines start Collections | — |
 | D2-06 | Eventual consistency patterns | Built ◆ | Designed | Medium | D3 | Event-based: InvoiceIssued and PaymentSucceeded listeners | — |
 | D2-07 | Joint ownership: delegate | Built | Built | Low | — | Payment publishes outcomes by reference; Invoicing records them (R1) | — |
-| D2-08 | Distributed data access patterns | Designed | Designed | Medium | D13 | ADR-012 Access copy | — |
-| D2-09 | Contracts and stamp coupling | Designed ◆ | Not started | Medium | — | ADR-016: events carry what the listener needs | No review of event size against consumers yet. |
+| D2-08 | Distributed data access patterns | Checked | Designed | Medium | D13 | Access holds a replicated copy of the access facts, fed by the event log (ADR-012, ADR-033); AT18AccessSurvivesBillingIT answers from it with billing and its database stopped | — |
+| D2-09 | Contracts and stamp coupling | Built ◆ | Not started | Medium | — | AccessFacts v1 carries only what Access reads: IDs, enums, numbers and times (contracts/access-facts/v1/consumer-access.json; ConsumerAccessFieldsTest; F7AccessFactsContractTest) | Reviewed for the one message that crosses quanta. No test fails if billing sends a field Access does not read; billing's in-process events are not reviewed against their consumers. |
 | D2-10 | Saga participation marked in code | Not started | Not started | Low | — | — | — |
 | D2-11 | Granularity of the tax adapter | Designed | Designed | Low | D12 | FR-016 kept: tax bought behind the TaxRates port in Invoicing | — |
 
@@ -209,7 +209,7 @@ The Design Record lists four items as required before production: settlement rec
 | E-08 | Upcasting old events | Not applicable ◆ | Not started | Medium | — | CLAUDE.md rule 7 and FF-13: added fields are nullable, readers treat missing as not known | The add-only rule removes the need for upcasting so far. |
 | E-09 | Contract-first API | Checked | Checked | Medium | — | docs/api/openapi.yaml; ContractIT (ADR-019) | — |
 | E-10 | Breaking-change check (oasdiff) | Not started | Not started | Medium | — | — | — |
-| E-11 | Consumer-driven contracts | Designed | Designed | Medium | D13 | ADR-011 | Slice 2. |
+| E-11 | Consumer-driven contracts | Checked | Designed | Medium | D13 | contracts/access-facts/v1/ (ADR-034): F7AccessFactsContractTest fails billing's commit stage on a broken field Access reads; Access's ExamplesTest reads every example, and ConsumerAccessFieldsTest keeps consumer-access.json equal to what Access reads | — |
 | E-12 | Public API versioning strategy | Built ◆ | Designed | Medium | — | ADR-019: version in the path; openapi.yaml paths start /v1 | — |
 | E-13 | Parallel run for proration replacement | Not started | Not started | Medium | — | — | — |
 | E-14 | Dependency freshness (temporal check) | Not started | Not started | Low | — | FR-039 dependency version policy | Policy exists; no automated upgrade or freshness check. |
@@ -262,7 +262,7 @@ The Design Record lists four items as required before production: settlement rec
 | H-06 | Probes and graceful shutdown | Partly built ◆ | Not started | High | D9 | QueueRuntime stops pollers on shutdown (fix from the Slice 2 spike); actuator health exposed | No separate liveness and readiness groups. |
 | H-07 | Front door and rate limits | Not started | Not started | Medium | — | Outbound provider rate limit is built (ProviderIsolation); nothing inbound | — |
 | H-08 | One layer owns retries | Designed | Designed | Low | — | Course review only; the Design Record has no service mesh | Retries live in Payment (ADR-013). |
-| H-09 | Slice 2 messaging choice | Designed | Designed | High | D13 | ADR-006 and ADR-012: a managed Kafka-compatible compacted log | The course review's open choice is already decided. |
+| H-09 | Slice 2 messaging choice | Built | Designed | High | D13 | Kafka 4.2.1 (spike S-1): the compacted topic access-facts, one transaction per send, read_committed (ADR-033); SpikeS2CompactionIT, SpikeS4UnacknowledgedSendIT; infra/docker-compose.yml | The managed service is not chosen. It must support Kafka transactions, read_committed and the broker's refusal of a late write after an abort (ADR-033); S-4 experiment 3 is the test to run against a candidate. |
 | H-10 | Multi-AZ deployment | Designed ◆ | Not started | Medium | D1–D3 | ADR-007: synchronous standby; Design Record §13: 2+ copies | — |
 | H-11 | Multi-region triggers | Not started | Not started | Low | — | Constraint C4: personal data stays in the region | — |
 
@@ -280,7 +280,7 @@ The Design Record lists four items as required before production: settlement rec
 | I-08 | Inbound webhook verification | Not applicable ◆ | Not started | High | D2 | ADR-026: Tally asks the provider by reference; no webhooks are consumed | Becomes relevant if a provider pushes outcomes. |
 | I-09 | Outbound webhooks | Not applicable ◆ | Not started | Medium | — | No merchant callbacks in Tally | — |
 | I-10 | Secrets and keys | Not started | Not started | Medium | — | application.yml holds local credentials only | — |
-| I-11 | No personal data in events | Designed ◆ | Not started | Medium | D8 | ADR-006: IDs only, no personal data; "Event payload scan" planned | Slice 2. |
+| I-11 | No personal data in events | Checked ◆ | Not started | Medium | D8 | F15PayloadScanTest: the AccessFacts schema allows no extra properties, and every property is an ID, an enum, a number or a time; it fails on a free-text field (shown in #67) | Covers the message that leaves billing. In-process events stay in billing's database. |
 | I-12 | Audit log | Partly built ◆ | Not started | Medium | D7 | Each invoice stores the PriceQuote reason as data (QuoteReason, V19) | Traces charges (D7). No audit of staff actions. |
 | I-13 | Supply chain | Not started | Not started | Low | — | — | — |
 
