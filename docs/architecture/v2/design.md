@@ -166,16 +166,16 @@ As Slice 3 builds it (proposed ADR-038): only ACTIVE and ENDED.
 
 One live subscription per account; an account whose subscription ended may sign up again. TRIAL, CANCELLING and a cancel by the customer come with the billing lifecycle slice.
 
-**Collections case (one per account; proposed ADR-037):** the case covers every unpaid invoice of the account. Days count from the case's first decline. Only a decline moves it (ADR-013); a technical failure or an unknown outcome changes nothing. The standing follows the case in the same transaction.
+**Collections case (one per account; proposed ADR-037):** the case covers every unpaid invoice of the account. Days count from the case's first decline. Only a decline opens a case (ADR-013); after that no payment outcome moves it forward: each timer looks only at "is a debt still open", and only `InvoicePaid` moves it back. The standing follows the case in the same transaction.
 
 | From | Event | To | Standing |
 |---|---|---|---|
 | (none) | a renewal's payment declined | OPEN; retry 1 due on day 3 | GOOD |
-| (none) | the first invoice's payment declined (025) | no case; the subscription ends | GOOD |
+| (none) | the first invoice's payment declined (025; found through `InvoicingApi`) | no case; the subscription ends | GOOD |
 | OPEN, OVERDUE, BLOCKED | another invoice declined | the same state, the invoice added | unchanged |
 | OPEN | day 3 | OPEN; retry 1 asked; retry 2 due on day 7 | GOOD |
-| OPEN | day 7 | OPEN; retry 2 asked | GOOD |
-| OPEN | retry 2 declined | OVERDUE | OVERDUE |
+| OPEN | day 7 | OPEN; retry 2 asked; OVERDUE due one hour later | GOOD |
+| OPEN | day 7 plus one hour, a debt open | OVERDUE | OVERDUE |
 | OVERDUE | day 10, a debt open | BLOCKED | BLOCKED |
 | BLOCKED | day 30, a debt open | WRITTEN_OFF; the subscription ends (`WRITE_OFF`) | BLOCKED |
 | OPEN, OVERDUE, BLOCKED | every invoice of the case paid (a retry or "pay now") | CLOSED | GOOD |

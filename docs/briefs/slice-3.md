@@ -52,6 +52,8 @@ Slice 2 built the path from the standing to Access (`StandingChanged` → `acces
 
 Finance and product own these four. The user chose option A for each. The other options stay here with their costs, as the record of what was compared.
 
+Two more were confirmed on #75, after spike S-1 (`docs/briefs/slice-3-spikes.md`): the case becomes OVERDUE by a timer one hour after retry 2 is asked, if a debt is still open (no event tells Collections that a retry was declined); and Collections finds the first invoice through `InvoicingApi`.
+
 ### 1. A decline on the first invoice (proposed 025)
 
 A new subscriber gets access at sign-up, before the first charge. Then the first charge is declined.
@@ -96,8 +98,8 @@ Proration would remove the cost of option A. It belongs to the billing lifecycle
 
 These follow from accepted records. They are not choices of this slice.
 
-1. **The timetable** counts days from the first decline of the case. Day 3: retry 1. Day 7: retry 2. The case is OVERDUE when retry 2 is declined. Day 10: BLOCKED, if a debt is still open. Day 30: WRITTEN_OFF, if a debt is still open.
-2. **Only a decline moves the case** (rule 9, ADR-013). A technical failure or an unknown outcome of a retry changes nothing in Collections. The day-10 and day-30 timers look only at "is a debt still open".
+1. **The timetable** counts days from the first decline of the case. Day 3: retry 1. Day 7: retry 2. Day 7 plus one hour: OVERDUE, if a debt is still open. Day 10: BLOCKED, if a debt is still open. Day 30: WRITTEN_OFF, if a debt is still open.
+2. **Only a decline opens a case** (rule 9, ADR-013). After that, no payment outcome moves the case forward: each timer looks only at "is a debt still open". Only `InvoicePaid` moves it back. The one hour is D2's measure: an unknown payment is resolved within one hour.
 3. **Collections never moves money** (Design Record §7, rule 2). It asks Invoicing to request the payment again.
 4. **Only Collections sets the standing** (R3, F3).
 5. **The standing follows the case in one transaction.** The step that changes the case's state calls `AccountStanding.set` in the same transaction. The case's version orders a race. Example: `InvoicePaid` and the day-10 timer arrive at the same time. One wins the lock; the other reads the new state and acts on it. The end state is never "case closed, standing BLOCKED".
@@ -112,7 +114,7 @@ These follow from accepted records. They are not choices of this slice.
 payment declined (a renewal)
    │
    ▼
- OPEN ──day 3: retry 1──► OPEN ──day 7: retry 2 declined──► OVERDUE ──day 10──► BLOCKED ──day 30──► WRITTEN_OFF
+ OPEN ──day 3: retry 1──► OPEN ──day 7 + 1 h: a debt is still open──► OVERDUE ──day 10──► BLOCKED ──day 30──► WRITTEN_OFF
    │                        │                                  │                   │                    │
    └────────────── every unpaid invoice is paid (a retry or "pay now") ────────────┘                    │
                                       │                                                                 │
@@ -164,6 +166,7 @@ Not in this slice: TRIAL, CANCELLING, a cancel by the customer, "renewal reverse
 - The four decisions, as confirmed.
 - WAR-57's second part: a `set` and a sign-up for one account at the same time. The sign-up answers 409 with `Retry-After`; it never answers 500. The `set` runs on the queue, so it tries again.
 - Health for every new timer (rule 8), and alert rules with runbooks for work that is late (ADR-030).
+- No change in `invoicing` or `payment` for the OVERDUE step: it is a timer (rule 1).
 - The documents: `design.md` §4, §5 and §8, the glossary, the topic tracker (C-06, D-07, D-09, D-10), `docs/api/openapi.yaml`.
 
 ## Out of scope
@@ -226,7 +229,7 @@ The endpoint, the key table, `openapi.yaml`. AT-23 and AT-25 come with this pull
 
 ### PR-7 · The first invoice (025)
 
-A decline of the first invoice ends the subscription. No case opens. AT-24 comes with this pull request. AT-16 changes: its decline moves to a renewal.
+A decline of the first invoice ends the subscription. No case opens. Collections asks `InvoicingApi` for the invoice and for its subscription's invoices: the first invoice is the earliest period. No new field on `InvoicePaymentDeclined`. AT-24 comes with this pull request. AT-16 changes: its decline moves to a renewal.
 
 ### PR-8 · Alerts and runbooks (ADR-030)
 
