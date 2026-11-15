@@ -70,8 +70,6 @@ class JdbcAccountFacts implements AccountFactsStore {
                         facts.accountId(), source.kind().name(), source.id(), source.sourceSequence());
                 continue;
             }
-            jdbc.update("DELETE FROM accessfeed.ended_source WHERE account_id = ? AND kind = ? AND source_id = ?",
-                    facts.accountId(), source.kind().name(), source.id());
             jdbc.update("INSERT INTO accessfeed.fact_source (account_id, kind, source_id, state, source_sequence)"
                     + " VALUES (?, ?, ?, ?, ?) ON CONFLICT (account_id, kind, source_id)"
                     + " DO UPDATE SET state = excluded.state, source_sequence = excluded.source_sequence",

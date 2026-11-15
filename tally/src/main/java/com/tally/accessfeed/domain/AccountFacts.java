@@ -59,10 +59,15 @@ public final class AccountFacts {
 
     /**
      * Applies a source's state; the sequence goes up if the message changes: a source that is new, leaves (ENDED) or
-     * changes state. An ENDED source that was never sent changes nothing, but is kept with its sequence.
+     * changes state. An ENDED source that was never sent changes nothing, but is kept with its sequence. An ENDED
+     * source never changes again, whatever the event's sequence.
      */
     public void applySource(SourceKind kind, UUID id, SourceState state, Long eventSequence, Instant now) {
         Source current = sources.get(id);
+        if (current != null && current.state() == SourceState.ENDED) {
+            // ENDED refuses everything (design.md §5), an event with no sequence included.
+            return;
+        }
         Long last = current == null ? null : current.sourceSequence();
         if (olderOrRepeated(eventSequence, last)) {
             return;
