@@ -36,7 +36,7 @@ public final class AccessFactsMessages {
             throw new IllegalArgumentException("No facts to send yet for account " + facts.accountId());
         }
         return JSON.writeValueAsString(new AccessFacts(SCHEMA_VERSION, facts.accountId(), facts.sequence(),
-                facts.producedAt(), facts.standing().name(), facts.sources().stream().map(AccessFactsMessages::fact)
+                facts.producedAt(), facts.standing().name(), facts.sources().stream().filter(Source::sent).map(AccessFactsMessages::fact)
                         .toList()));
     }
 

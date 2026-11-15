@@ -115,7 +115,7 @@ class F7AccessFactsContractTest {
             examples = files.filter(f -> f.toString().endsWith(".json")).sorted().toList();
         }
         assertThat(examples).extracting(p -> p.getFileName().toString())
-                .contains("normal.json", "blocked.json", "future-unknown-values.json");
+                .contains("normal.json", "blocked.json", "subscription-ended.json", "future-unknown-values.json");
 
         for (Path example : examples) {
             List<String> violations = JsonSchemaSubset.violations(schema, read(example));

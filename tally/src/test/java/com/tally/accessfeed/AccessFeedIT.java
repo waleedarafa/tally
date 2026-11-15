@@ -3,6 +3,9 @@ package com.tally.accessfeed;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.tally.accessfeed.application.AccessFactsMessages;
+import com.tally.accessfeed.domain.AccountFacts;
+import com.tally.accessfeed.domain.AccountFactsStore;
 import com.tally.account.Standing;
 import com.tally.account.StandingChanged;
 import com.tally.shared.DomainEvent;
@@ -14,6 +17,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -23,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Slice 2 PR-3 (ADR-033, design.md §4): {@code accessfeed} keeps one row of current access facts per account. Its
@@ -274,5 +279,74 @@ class AccessFeedIT extends AbstractReconcilingTest {
         assertThat(notKnown("standing")).isEqualTo(standingsBefore + 1);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM accessfeed.account_facts WHERE account_id = ?",
                 Long.class, account)).as("no facts from values not known").isZero();
+    }
+
+    static final JsonMapper JSON = JsonMapper.builder().build();
+
+    @Autowired
+    AccountFactsStore store;
+
+    /** The sources in the account's message: the ones Access sees. */
+    List<String> messageSources(UUID account) {
+        AccountFacts facts = transactions.execute(tx -> store.lockOrCreate(account));
+        List<String> sources = new ArrayList<>();
+        JSON.readTree(AccessFactsMessages.json(facts)).get("sources")
+                .forEach(source -> sources.add(source.get("id").asString() + " " + source.get("state").asString()));
+        return sources;
+    }
+
+    /** Slice 3 brief: on ENDED the source leaves the facts, the sequence goes up, and the message has no source. */
+    @Test
+    void anEndedSubscriptionLeavesTheFactsAndTheSequenceGoesUp() {
+        UUID account = UUID.randomUUID();
+        UUID subscription = UUID.randomUUID();
+        publish(subscription(account, subscription, 1, SubscriptionChangeType.STARTED));
+        awaitFeed(account);
+        double typesBefore = notKnown("subscription.type");
+
+        publish(subscription(account, subscription, 2, SubscriptionChangeType.ENDED));
+        awaitFeed(account);
+
+        assertThat(sequence(account)).isEqualTo(2);
+        assertThat(messageSources(account)).isEmpty();
+        assertThat(notKnown("subscription.type")).as("ENDED is a type the feed knows").isEqualTo(typesBefore);
+    }
+
+    /** An ENDED that arrives before its STARTED stays ended: the older STARTED is ignored (CLAUDE.md rule 7). */
+    @Test
+    void anEndedThatArrivesFirstStaysEnded() {
+        UUID account = UUID.randomUUID();
+        UUID ended = UUID.randomUUID();
+        UUID live = UUID.randomUUID();
+        publish(subscription(account, live, 1, SubscriptionChangeType.STARTED));
+        awaitFeed(account);
+
+        publish(subscription(account, ended, 3, SubscriptionChangeType.ENDED));
+        awaitFeed(account);
+        publish(subscription(account, ended, 1, SubscriptionChangeType.STARTED));
+        awaitFeed(account);
+        publish(subscription(account, ended, 2, SubscriptionChangeType.PERIOD_RENEWED));
+        awaitFeed(account);
+
+        assertThat(messageSources(account)).containsExactly(live + " ACTIVE");
+        assertThat(sequence(account)).as("the ended source was never sent").isEqualTo(1);
+    }
+
+    /** An account whose subscription ended signs up again: the new one is its only source. */
+    @Test
+    void aNewSubscriptionAfterAnEndedOneIsTheOnlySource() {
+        UUID account = UUID.randomUUID();
+        UUID ended = UUID.randomUUID();
+        UUID again = UUID.randomUUID();
+        publish(subscription(account, ended, 1, SubscriptionChangeType.STARTED));
+        awaitFeed(account);
+        publish(subscription(account, ended, 2, SubscriptionChangeType.ENDED));
+        awaitFeed(account);
+
+        publish(subscription(account, again, 1, SubscriptionChangeType.STARTED));
+        awaitFeed(account);
+
+        assertThat(messageSources(account)).containsExactly(again + " ACTIVE");
+        assertThat(sequence(account)).isEqualTo(3);
     }
 }

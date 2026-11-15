@@ -12,6 +12,8 @@ public enum SubscriptionChangeType {
     STARTED,
     /** The subscription moved into its next period (Slice 1R PR-5). */
     PERIOD_RENEWED,
+    /** The subscription ended, and will never renew (Slice 3, design.md §5). */
+    ENDED,
     @JsonEnumDefaultValue
     UNKNOWN
 }

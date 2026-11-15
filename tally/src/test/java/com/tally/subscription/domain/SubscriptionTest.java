@@ -3,6 +3,7 @@ package com.tally.subscription.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.tally.subscription.EndReason;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -58,5 +59,42 @@ class SubscriptionTest {
 
         assertThatThrownBy(() -> subscription.renew(3)).isInstanceOf(IllegalStateException.class);
         assertThat(subscription.periods()).hasSize(1);
+    }
+
+    /** ENDED refuses everything (design.md §5, proposed in ADR-038): a renewal after the end changes nothing. */
+    @Test
+    void anEndedSubscriptionRefusesARenewal() {
+        Subscription subscription = startedOn31January();
+
+        assertThat(subscription.end(EndReason.WRITE_OFF, Instant.parse("2026-02-10T00:00:00Z"))).isTrue();
+
+        assertThat(subscription.status()).isEqualTo(SubscriptionStatus.ENDED);
+        assertThat(subscription.renew(2)).isFalse();
+        assertThat(subscription.periods()).hasSize(1);
+    }
+
+    @Test
+    void endingAnEndedSubscriptionChangesNothing() {
+        Subscription subscription = startedOn31January();
+        subscription.end(EndReason.FIRST_PAYMENT_DECLINED, Instant.parse("2026-01-31T10:01:00Z"));
+
+        assertThat(subscription.end(EndReason.WRITE_OFF, Instant.parse("2026-03-02T00:00:00Z"))).isFalse();
+        assertThat(subscription.endReason()).isEqualTo(EndReason.FIRST_PAYMENT_DECLINED);
+        assertThat(subscription.endedAt()).isEqualTo(Instant.parse("2026-01-31T10:01:00Z"));
+    }
+
+    @Test
+    void aNewSubscriptionIsActive() {
+        assertThat(startedOn31January().status()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(startedOn31January().endReason()).isNull();
+    }
+
+    @Test
+    void anEndNeedsAKnownReason() {
+        Subscription subscription = startedOn31January();
+
+        assertThatThrownBy(() -> subscription.end(EndReason.UNKNOWN, Instant.parse("2026-02-10T00:00:00Z")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(subscription.status()).isEqualTo(SubscriptionStatus.ACTIVE);
     }
 }

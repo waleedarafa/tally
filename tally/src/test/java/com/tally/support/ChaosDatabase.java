@@ -62,7 +62,7 @@ public final class ChaosDatabase {
                     SELECT id, 0, 1, (?::date - interval '1 month')::date, ?::date FROM s RETURNING 1
                 ), q AS (
                     INSERT INTO subscription.renewal (queue_key, due_at, payload, status, attempts, created_at)
-                    SELECT account_id || ':' || ?, ?::date, subscription_id || ',2', 'READY', 0, now() FROM seed
+                    SELECT account_id || ':' || subscription_id || ':' || ?, ?::date, subscription_id || ',2', 'READY', 0, now() FROM seed
                     RETURNING 1
                 )
                 SELECT (SELECT count(*) FROM a) + (SELECT count(*) FROM p) + (SELECT count(*) FROM q)
