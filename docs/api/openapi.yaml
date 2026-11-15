@@ -52,19 +52,6 @@ paths:
                 $ref: "#/components/schemas/Account"
         "404":
           description: No such account. No body.
-  /v1/accounts/{id}/access:
-    get:
-      operationId: getAccess
-      summary: Whether the account may watch (until Slice 2, beside GET /v1/access/{subscriberId}).
-      parameters:
-        - $ref: "#/components/parameters/AccountId"
-      responses:
-        "200":
-          description: The account's access.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Access"
   /v1/payments/{reference}/status:
     get:
       operationId: getPaymentStatus
@@ -209,16 +196,6 @@ components:
           type: string
         timeZone:
           type: string
-    Access:
-      type: object
-      required: [accountId, hasAccess]
-      additionalProperties: false
-      properties:
-        accountId:
-          type: string
-          format: uuid
-        hasAccess:
-          type: boolean
     PaymentStatus:
       type: object
       required: [reference, state, failureReason]

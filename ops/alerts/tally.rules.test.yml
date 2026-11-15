@@ -754,3 +754,31 @@ tests:
   - eval_time: 10m
     alertname: AccessValueNotKnown
     exp_alerts: []
+- name: EventListenerGone fires when publications wait for a removed listener for 5 minutes
+  interval: 30s
+  input_series:
+  - series: tally_events_listener_gone{instance="tally-1"}
+    values: 0 1x14
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: EventListenerGone
+    exp_alerts: []
+  - eval_time: 5m30s
+    alertname: EventListenerGone
+    exp_alerts:
+    - exp_labels:
+        instance: tally-1
+        severity: page
+        driver: D3
+      exp_annotations:
+        summary: Event publications wait for a listener this release no longer has; nothing will ever run them.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/events-stuck.md
+- name: EventListenerGone stays quiet when the old instances complete them during a rolling deploy
+  interval: 30s
+  input_series:
+  - series: tally_events_listener_gone{instance="tally-1"}
+    values: 0 3 2 1 0x12
+  alert_rule_test:
+  - eval_time: 7m
+    alertname: EventListenerGone
+    exp_alerts: []

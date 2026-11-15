@@ -12,15 +12,14 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 /**
- * F12 (Slice 1R PR-10; design.md §3; ADR-033): {@code access} and {@code accessfeed} may use {@code subscription} and
- * {@code account} only through their events. Neither ever calls a billing API: each reacts to events and keeps its
- * own tables. The module graph allows the edge; this test narrows it to the events and the types they carry (an
- * event's enum, for one). {@code access}'s edge is temporary, until it leaves in Slice 2 PR-9; {@code accessfeed}'s is
- * permanent.
+ * F12 (Slice 1R PR-10; design.md §3; ADR-033): {@code accessfeed} may use {@code subscription} and {@code account}
+ * only through their events. It never calls a billing API: it reacts to events and keeps its own tables. The module
+ * graph allows the edge; this test narrows it to the events and the types they carry (an event's enum, for one).
+ * The in-process {@code access} module, which this test also held to the rule, left in Slice 2 PR-9.
  */
 class F12AccessReactsOnlyToEventsTest {
 
-    /** The modules Access may use, through their events only, until Slice 2. */
+    /** The modules the access feed may use, through their events only. */
     static boolean upstream(JavaClass type) {
         return type.getPackageName().startsWith("com.tally.subscription")
                 || type.getPackageName().startsWith("com.tally.account");
@@ -38,12 +37,6 @@ class F12AccessReactsOnlyToEventsTest {
                 .collect(Collectors.toSet());
         carried.addAll(events);
         return carried;
-    }
-
-    @Test
-    void accessUsesOnlyTheEventsOfSubscriptionAndAccount() {
-        reactsOnlyToEvents("com.tally.access..", "Access reacts to events and answers from its own tables; it never"
-                + " calls a billing API (Slice 1R PR-10; the edge is temporary until Slice 2 PR-9)");
     }
 
     @Test

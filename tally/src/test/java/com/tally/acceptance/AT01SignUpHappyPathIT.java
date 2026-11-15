@@ -26,9 +26,9 @@ import org.springframework.web.client.RestClient;
 
 /**
  * AT-1. Sign-up, happy path, through {@code POST /v1/subscriptions} (ADR-014, ADR-019; changed in Slice 1R
- * PR-9, which removed checkout, and in Slice 2 PR-7). Pass when: the response promises access within 5 seconds, the
- * invoice is paid, and the <b>Access service</b> answers {@code canWatch: true} within 5 seconds. The old endpoint,
- * {@code GET /v1/accounts/{id}/access}, answers the same during this slice.
+ * PR-9, which removed checkout, and in Slice 2 PR-7 and PR-9). Pass when: the response promises access within 5
+ * seconds, the invoice is paid, and the <b>Access service</b> answers {@code canWatch: true} within 5 seconds. Since
+ * Slice 2 PR-9 it is the only one asked: billing no longer answers access.
  *
  * <p>Everything goes through the HTTP API, against the fake provider in its own container, with pollers
  * running on their production settings (1 s poll interval). Access is a container reading this context's topic.
@@ -93,10 +93,6 @@ class AT01SignUpHappyPathIT extends AbstractProviderIntegrationTest {
                         && Boolean.TRUE.equals(accessService.answer(account).get("canWatch")));
         Duration toAccess = Duration.ofNanos(System.nanoTime() - started);
         assertThat(accessService.answer(account)).containsEntry("reason", "ACTIVE_SOURCE");
-        // The old endpoint answers the same during this slice.
-        await().atMost(Duration.ofSeconds(5)).pollInterval(Duration.ofMillis(50))
-                .until(() -> Boolean.TRUE.equals(get("/v1/accounts/{id}/access", account).get("hasAccess")));
-        Duration toOldEndpoint = Duration.ofNanos(System.nanoTime() - started);
 
         // Invoice PAID, charged exactly once.
         await().atMost(Duration.ofSeconds(10)).until(() -> invoicing.invoicesFor(account).stream()
@@ -105,7 +101,7 @@ class AT01SignUpHappyPathIT extends AbstractProviderIntegrationTest {
         assertThat(get("/v1/payments/{reference}/status", reference)).containsEntry("state", "SUCCEEDED");
         assertThat(FakeProvider.chargeCount(reference)).isEqualTo(1);
 
-        System.out.printf("AT-1: sign-up answered; the Access service said yes %d ms after the request (the old"
-                + " endpoint by %d ms)%n", toAccess.toMillis(), toOldEndpoint.toMillis());
+        System.out.printf("AT-1: sign-up answered; the Access service said yes %d ms after the request%n",
+                toAccess.toMillis());
     }
 }

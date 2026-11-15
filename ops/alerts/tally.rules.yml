@@ -107,6 +107,20 @@ groups:
           summary: An event publication has been incomplete for over 15 minutes; its work has not happened.
           runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/events-stuck.md
 
+      # ADR-028: a listener removed while it had incomplete publications. Spring Modulith marks each FAILED and
+      # never runs it again (ListenerGoneIT), so its work is lost unless a person acts. During a rolling deploy a new
+      # instance sees the old instances' publications for the listener it no longer has; they complete in seconds,
+      # hence the 5 minutes.
+      - alert: EventListenerGone
+        expr: tally_events_listener_gone > 0
+        for: 5m
+        labels:
+          severity: page
+          driver: D3
+        annotations:
+          summary: Event publications wait for a listener this release no longer has; nothing will ever run them.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/events-stuck.md
+
       - alert: EventUnreadable
         expr: tally_events_unreadable > 0
         labels:

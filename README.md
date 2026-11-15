@@ -57,9 +57,10 @@ To run one stage of the pipeline only:
 ## Run locally
 
 ```sh
-docker compose -f infra/docker-compose.yml up -d     # PostgreSQL on localhost:5432
+docker compose -f infra/docker-compose.yml up -d     # PostgreSQL on 5432, the event log on 9092, Access's PostgreSQL on 5433
 ./mvnw -pl fake-provider spring-boot:run              # fake provider on localhost:8081
 ./mvnw -pl tally spring-boot:run                      # Tally on localhost:8080
+./mvnw -pl access spring-boot:run                     # Access on localhost:8090
 ```
 
 Flyway creates the schemas on start-up. A walk through the API:
@@ -78,7 +79,7 @@ curl -s -X POST localhost:8080/v1/subscriptions -H 'Content-Type: application/js
 
 # Follow up
 curl -s localhost:8080/v1/payments/<payment reference>/status
-curl -s localhost:8080/v1/accounts/<account id>/access
+curl -s localhost:8090/v1/access/<account id>          # Access: can this account watch?
 ```
 
 Plans are `BASIC`, `STANDARD` and `PREMIUM`, priced in USD and AED. The fake provider's behaviour can be switched for experiments, for example `curl -X POST localhost:8081/admin/mode -H 'Content-Type: application/json' -d '{"modes":["OUTAGE"]}'`; see [`CONTRACT.md`](fake-provider/CONTRACT.md) for every mode.
