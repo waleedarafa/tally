@@ -70,21 +70,21 @@ class UnknownEnumValuesIT extends AbstractIntegrationTest {
         UUID invoicingPublication = store(SubscriptionChanged.class, changed,
                 "com.tally.invoicing.application.InvoicingListeners.on(com.tally.subscription.SubscriptionChanged)",
                 earlier);
-        UUID accessPublication = store(SubscriptionChanged.class, changed,
-                "com.tally.access.application.AccessService.on(com.tally.subscription.SubscriptionChanged)",
+        UUID feedPublication = store(SubscriptionChanged.class, changed,
+                "com.tally.accessfeed.application.AccessFeedListeners.on(com.tally.subscription.SubscriptionChanged)",
                 earlier);
 
         incomplete.resubmitIncompletePublicationsOlderThan(Duration.ofMinutes(1));
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(jdbc.queryForList(
                 "SELECT id FROM event_publication WHERE completion_date IS NOT NULL AND id IN (?, ?, ?)", UUID.class,
-                failedPublication, invoicingPublication, accessPublication)).hasSize(3));
+                failedPublication, invoicingPublication, feedPublication)).hasSize(3));
         // An unknown failure reason is unresolved: the invoice still waits (FR-018).
         assertThat(jdbc.queryForObject("SELECT status FROM invoicing.invoice WHERE payment_reference = ?",
                 String.class, reference)).isEqualTo("PAYMENT_PENDING");
-        // An unknown change type grants nothing and invoices nothing.
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM access.access WHERE account_id = ?", Long.class,
-                account)).isZero();
+        // An unknown change type changes no access fact and invoices nothing.
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM accessfeed.account_facts WHERE account_id = ?",
+                Long.class, account)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM invoicing.invoice WHERE account_id = ?", Long.class,
                 account)).isEqualTo(1);
     }

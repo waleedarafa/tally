@@ -55,7 +55,7 @@ class ContractIT extends AbstractIntegrationTest {
 
     /** Every operation this class tests; it must be exactly the operations in the specification. */
     static final Set<String> TESTED = Set.of(
-            "POST /v1/accounts", "GET /v1/accounts/{id}", "GET /v1/accounts/{id}/access",
+            "POST /v1/accounts", "GET /v1/accounts/{id}",
             "GET /v1/payments/{reference}/status", "POST /v1/subscriptions");
 
     static final OpenApiInteractionValidator VALIDATOR = OpenApiInteractionValidator
@@ -233,11 +233,6 @@ class ContractIT extends AbstractIntegrationTest {
     void getAccount() throws Exception {
         valid(get("/v1/accounts/{id}", account()), 200);
         valid(get("/v1/accounts/{id}", UUID.randomUUID()), 404);
-    }
-
-    @Test
-    void getAccess() throws Exception {
-        valid(get("/v1/accounts/{id}/access", account()), 200);
     }
 
     @Test

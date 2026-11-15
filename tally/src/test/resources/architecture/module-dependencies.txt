@@ -1,6 +1,6 @@
 # The approved module dependency graph: docs/architecture/v2/design.md §3 (FR-040), as far as the code has reached it.
-# During Slice 2 this file pins the code's graph, and design.md §3 the target: Slice 2 PR-3 adds accessfeed's line,
-# and PR-9 removes access's, which design.md §3 no longer has.
+# Slice 2 PR-3 added accessfeed's line; PR-9 removed access's, the in-process module that Access, the second
+# deployable, replaced (ADR-001).
 # One line per module: "module: allowed, dependencies". Code dependencies point from downstream to upstream.
 # Named interfaces: account exposes a read API to every module that lists it, and AccountStanding.set to
 # collections only (F3).
@@ -12,9 +12,6 @@ offers: shared, platform, account
 subscription: shared, platform, account, offers
 invoicing: shared, platform, account, offers, subscription, payment
 collections: shared, platform, account, subscription, invoicing
-# TEMPORARY until Slice 2: access may use only the events of subscription and account, never their APIs
-# (F12AccessReactsOnlyToEventsTest).
-access: shared, platform, subscription, account
 # Slice 2 PR-3 (ADR-033): the access feed uses only the events of subscription and account, never their APIs
-# (F12AccessReactsOnlyToEventsTest). Permanent: it replaces access's line, which leaves in PR-9.
+# (F12AccessReactsOnlyToEventsTest).
 accessfeed: shared, platform, subscription, account

@@ -19,9 +19,10 @@ class TallyApplicationIT extends AbstractIntegrationTest {
                 "SELECT schema_name FROM information_schema.schemata", String.class);
 
         assertThat(schemas).contains(
-                "account", "offers", "subscription", "invoicing", "payment", "access");
-        // Slice 1R PR-3 and PR-10 renamed schemas in one step (no production database exists).
-        assertThat(schemas).doesNotContain("catalog", "entitlement");
+                "account", "offers", "subscription", "invoicing", "payment", "collections", "accessfeed");
+        // Slice 1R PR-3 and PR-10 renamed schemas in one step, and Slice 2 PR-9 dropped the in-process access
+        // module's (no production database exists).
+        assertThat(schemas).doesNotContain("catalog", "entitlement", "access");
     }
 
     @Autowired
