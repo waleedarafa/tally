@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -56,17 +57,31 @@ public final class AccountFacts {
         }
     }
 
-    /** Applies a source's state; the sequence goes up if the source is new or its state changes. */
+    /**
+     * Applies a source's state; the sequence goes up if the message changes: a source that is new, leaves (ENDED) or
+     * changes state. An ENDED source that was never sent changes nothing, but is kept with its sequence. An ENDED
+     * source never changes again, whatever the event's sequence.
+     */
     public void applySource(SourceKind kind, UUID id, SourceState state, Long eventSequence, Instant now) {
         Source current = sources.get(id);
+        if (current != null && current.state() == SourceState.ENDED) {
+            // ENDED refuses everything (design.md §5), an event with no sequence included.
+            return;
+        }
         Long last = current == null ? null : current.sourceSequence();
         if (olderOrRepeated(eventSequence, last)) {
             return;
         }
-        sources.put(id, new Source(kind, id, state, eventSequence != null ? eventSequence : last));
-        if (current == null || current.state() != state) {
+        Source applied = new Source(kind, id, state, eventSequence != null ? eventSequence : last);
+        sources.put(id, applied);
+        if (!sentAs(current).equals(sentAs(applied))) {
             changed(now);
         }
+    }
+
+    /** The source as the message carries it: its state, or none. */
+    private static Optional<SourceState> sentAs(Source source) {
+        return source == null || !source.sent() ? Optional.empty() : Optional.of(source.state());
     }
 
     private static boolean olderOrRepeated(Long eventSequence, Long lastApplied) {
@@ -98,7 +113,7 @@ public final class AccountFacts {
         return producedAt;
     }
 
-    /** The sources, by ID. */
+    /** The sources, by ID, ended ones included; the message carries only the {@link Source#sent()} ones. */
     public List<Source> sources() {
         List<Source> all = new ArrayList<>(sources.values());
         all.sort(Comparator.comparing(Source::id));

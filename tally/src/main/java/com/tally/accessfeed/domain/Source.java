@@ -8,4 +8,9 @@ import java.util.UUID;
  * @param sourceSequence the source's own sequence in the last event applied; null when that event had none
  */
 public record Source(SourceKind kind, UUID id, SourceState state, Long sourceSequence) {
+
+    /** Whether the message carries this source: every state but ENDED. */
+    public boolean sent() {
+        return state != SourceState.ENDED;
+    }
 }

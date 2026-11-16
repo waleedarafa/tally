@@ -11,6 +11,7 @@ import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.domain.BillingCalendar;
 import com.tally.subscription.domain.Subscription;
 import com.tally.subscription.domain.SubscriptionPeriod;
+import com.tally.subscription.domain.SubscriptionStatus;
 import com.tally.subscription.domain.Subscriptions;
 import java.time.ZoneId;
 import java.util.UUID;
@@ -64,7 +65,9 @@ class Renewals implements QueueHandler {
      */
     void scheduleNext(Subscription subscription, ZoneId zone) {
         SubscriptionPeriod current = subscription.currentPeriod();
-        queue.enqueue(subscription.accountId() + ":" + current.end(), BillingCalendar.billingTime(current.end(), zone),
+        // Keyed by subscription too (D-26): an account whose subscription ended may sign up again on the same billing
+        // day, and the ended one's renewal row still waits. The account comes first, so a key still names it.
+        queue.enqueue(subscription.accountId() + ":" + subscription.id() + ":" + current.end(), BillingCalendar.billingTime(current.end(), zone),
                 subscription.id() + "," + (current.number() + 1));
     }
 
@@ -95,6 +98,10 @@ class Renewals implements QueueHandler {
 
     private void renew(UUID subscriptionId, int period) {
         Subscription subscription = subscriptions.find(subscriptionId).orElseThrow();
+        if (subscription.status() == SubscriptionStatus.ENDED) {
+            log.info("Subscription {} has ended; period {} is not renewed", subscriptionId, period);
+            return;
+        }
         if (!subscription.renew(period)) {
             log.info("Period {} of subscription {} already exists", period, subscriptionId);
             return;

@@ -45,19 +45,27 @@ class AccessFeedListeners {
         return Counter.builder("tally.accessfeed.values.not_known").tag("field", field).register(meters);
     }
 
-    /** A started or renewed subscription is an active source. A renewal changes no fact, so it sends nothing. */
+    /**
+     * A started or renewed subscription is an active source; a renewal changes no fact, so it sends nothing. An ended
+     * one leaves the facts (Slice 3), and the sequence goes up.
+     */
     @ApplicationModuleListener
     void on(SubscriptionChanged changed) {
         if (changed.type() == null || changed.type() == SubscriptionChangeType.UNKNOWN) {
             typeNotKnown.increment();
             return;
         }
-        if (changed.type() != SubscriptionChangeType.STARTED && changed.type() != SubscriptionChangeType.PERIOD_RENEWED) {
+        SourceState state = switch (changed.type()) {
+            case STARTED, PERIOD_RENEWED -> SourceState.ACTIVE;
+            case ENDED -> SourceState.ENDED;
+            default -> null;
+        };
+        if (state == null) {
             return;
         }
         AccountFacts account = facts.lockOrCreate(changed.accountId());
         long before = account.sequence();
-        account.applySource(SourceKind.SUBSCRIPTION, changed.subscriptionId(), SourceState.ACTIVE, changed.sequence(),
+        account.applySource(SourceKind.SUBSCRIPTION, changed.subscriptionId(), state, changed.sequence(),
                 clock.instant());
         save(account, before);
     }

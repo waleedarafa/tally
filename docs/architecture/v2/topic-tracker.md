@@ -28,14 +28,14 @@ Drivers are the D-numbers of [`drivers.md`](drivers.md). The course review used 
 | A Domain | 15 | 1 |  | 2 | 8 | 4 |  |
 | B Architecture styles | 8 |  |  |  | 4 | 3 | 1 |
 | C Inside a module | 6 | 1 |  | 2 |  | 3 |  |
-| D Data and reliability | 27 | 5 | 3 | 3 | 4 | 11 | 1 |
+| D Data and reliability | 27 | 4 | 3 | 3 | 4 | 12 | 1 |
 | D2 Distributed coordination | 11 | 3 | 2 | 1 | 4 | 1 |  |
 | E Evolution and governance | 15 | 3 |  | 2 | 4 | 5 | 1 |
 | F Delivery | 17 | 4 | 5 | 5 | 3 |  |  |
 | G Teams | 8 | 3 | 3 |  | 1 |  | 1 |
 | H Runtime infrastructure | 11 | 4 | 3 | 2 | 1 | 1 |  |
 | I Security | 13 | 6 | 2 | 1 | 1 | 1 | 2 |
-| **All** | **140** | **30** | **18** | **20** | **37** | **29** | **6** |
+| **All** | **140** | **29** | **18** | **20** | **37** | **30** | **6** |
 
 Before this check the course table had 24 topics built or checked. After it, 54. 78 of 138 statuses changed.
 
@@ -120,7 +120,7 @@ The Design Record lists four items as required before production: settlement rec
 | A-11 | Anti-corruption layer | Partly built | Partly built | Medium | D11 | payment/adapter/provider/HttpPaymentGateway | Provider translation built. Tax service and telecom partner translators are not built. |
 | A-12 | Aggregate and invariant | Checked ◆ | Built | High | D1, D2 | Subscription.renew(n), Invoice, CollectionRequest; aggregate and exhaustive transition tests (ADR-018) | — |
 | A-13 | Domain event | Built | Built | Medium | D3 | shared.DomainEvent; invoicing.InvoiceIssued and others | — |
-| A-14 | One-active-subscription rule | Checked ◆ | Designed | High | D1 | V5__subscription.sql: CONSTRAINT subscription_one_per_account UNIQUE (account_id) | One subscription per account, enforced by the database. This is a Slice 1 scope limit (slice-1.md), not a decision: the Design Record assumes one account can pay for several subscriptions (Step 6, Step 7). D-26 must be fixed before the limit is lifted. |
+| A-14 | One-active-subscription rule | Checked ◆ | Designed | High | D1 | V37__subscription_end.sql: UNIQUE INDEX subscription_one_live_per_account ON (account_id) WHERE status = 'ACTIVE'; SubscriptionApiIT | One live subscription per account, enforced by the database (Slice 3 PR-2); an account whose subscription ended may sign up again. Before, one subscription per account (V5, a Slice 1 scope limit). It is still a scope limit, not a decision: the Design Record assumes one account can pay for several subscriptions (Step 6, Step 7). D-26 is fixed. |
 | A-15 | Aggregate root encapsulation check | Not started | Not started | Medium | — | — | No test stops code outside an aggregate changing its parts. |
 
 ## B Architecture styles
@@ -176,7 +176,7 @@ The Design Record lists four items as required before production: settlement rec
 | D-23 | Reconciliation | Checked ◆ | Not started | High | D2, D14 | payment/application/Reconciliation (unknown resolution, ADR-026); SettlementReconciliation (proposed 021: settlement batches, both directions, V31); InvariantJobs with InvoicedVersusCollected (AT-12); UnknownResolutionIT, SettlementReconciliationIT; alert SettlementMismatch | A charge in a settlement batch resolves an UNKNOWN attempt; every other disagreement is a mismatch for a person (runbook settlement-mismatch.md). The fake's batch format is an assumption (CONTRACT.md A15) until a provider is chosen. |
 | D-24 | RPO, RTO and tested restore | Designed ◆ | Not started | Medium | D8 | ADR-020: 7-day point-in-time recovery, 25-day snapshots, deletion log | No restore drill yet. |
 | D-25 | Every active subscription has its next renewal scheduled (invariant check) | Checked ◆ | New | High | D1, D9 | subscription/adapter/persistence/SubscriptionInvariants (check subscription.next-renewal-scheduled, a daily job in subscription.jobs, V30); NextRenewalScheduledIT | Counts subscriptions with no unfinished renewal row for the period after their latest. A FAILED row counts as scheduled, because tally.queue.failed already reports it. Reads the renewal payload format written by Renewals.scheduleNext. |
-| D-26 | Renewal queue key per subscription | Not started ◆ | New | Medium | D1 | Renewals.scheduleNext keys a renewal as <account>:<period end>; V5 subscription_one_per_account | Safe today only because of A-14's limit. With two subscriptions on one account, both periods end on the account's billing day (S5), so both renewals get the same key, and the second is dropped by ON CONFLICT DO NOTHING. D-25 would report it the next day. |
+| D-26 | Renewal queue key per subscription | Checked ◆ | New | Medium | D1 | Renewals.scheduleNext keys a renewal as <account>:<subscription>:<period end> (Slice 3 PR-2); SubscriptionApiIT.anAccountWithAnEndedSubscriptionSignsUpAgain | Fixed in Slice 3 PR-2, when A-14's limit became one live subscription per account: an account whose subscription ended may sign up again on the same billing day, while the ended one's renewal row still waits, so a key per account would drop the new subscription's renewal. The test signs up again on the same day and finds both rows. Rows written before keep the old key; the period's unique constraint still guards them. |
 | D-27 | Command to record a person's decision on an unknown payment past the key window | Partly built ◆ | New | High | D2 | tally.payment.unknown_past_key_window gauge (Reconciliation); docs/runbooks/unknown-payment-past-key-window.md | Design Record lists it as required before production. The alert and the runbook exist. The command does not: the runbook says to change the database by hand. |
 
 ## D2 Distributed coordination

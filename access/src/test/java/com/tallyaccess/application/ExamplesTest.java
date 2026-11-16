@@ -36,7 +36,7 @@ class ExamplesTest {
         try (Stream<Path> listed = Files.list(EXAMPLES)) {
             files = listed.filter(f -> f.toString().endsWith(".json")).sorted().toList();
         }
-        assertThat(files).hasSizeGreaterThanOrEqualTo(4);
+        assertThat(files).hasSizeGreaterThanOrEqualTo(5);
         for (Path file : files) {
             AccessFactsMessage message = read(file.getFileName().toString());
             assertThat(message.complete()).as(file.toString()).isTrue();
@@ -48,6 +48,22 @@ class ExamplesTest {
         assertThat(answerFor(read("normal.json")).reason()).isEqualTo(Reason.ACTIVE_SOURCE);
         assertThat(answerFor(read("blocked.json")).reason()).isEqualTo(Reason.ACCOUNT_BLOCKED);
         assertThat(answerFor(read("no-source.json")).reason()).isEqualTo(Reason.NO_ACTIVE_SOURCE);
+    }
+
+    /**
+     * Slice 3: the subscription ENDED (here its first payment was declined, so the standing is GOOD). It leaves the
+     * sources, with a higher sequence, and Access says no.
+     */
+    @Test
+    void anEndedSubscriptionLeavesNoSource() throws IOException {
+        AccessFactsMessage ended = read("subscription-ended.json");
+
+        assertThat(ended.sourcesOrNone()).isEmpty();
+        assertThat(answerFor(ended)).satisfies(answer -> {
+            assertThat(answer.canWatch()).isFalse();
+            assertThat(answer.reason()).isEqualTo(Reason.NO_ACTIVE_SOURCE);
+            assertThat(answer.sequence()).isEqualTo(2L);
+        });
     }
 
     /** A later version's field and values: read without failing, and never taking access away (ADR-033). */

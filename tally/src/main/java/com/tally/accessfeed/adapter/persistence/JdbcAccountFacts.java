@@ -9,6 +9,7 @@ import com.tally.account.Standing;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,6 +43,11 @@ class JdbcAccountFacts implements AccountFactsStore {
                 + " WHERE account_id = ?", (rs, row) -> new Source(SourceKind.valueOf(rs.getString("kind")),
                         rs.getObject("source_id", UUID.class), SourceState.valueOf(rs.getString("state")),
                         rs.getObject("source_sequence", Long.class)), accountId);
+        sources = new ArrayList<>(sources);
+        sources.addAll(jdbc.query("SELECT kind, source_id, source_sequence FROM accessfeed.ended_source"
+                + " WHERE account_id = ?", (rs, row) -> new Source(SourceKind.valueOf(rs.getString("kind")),
+                        rs.getObject("source_id", UUID.class), SourceState.ENDED,
+                        rs.getObject("source_sequence", Long.class)), accountId));
         return new AccountFacts(accountId, locked.sequence(), locked.standing(), locked.standingSequence(),
                 locked.producedAt(), sources);
     }
@@ -54,6 +60,16 @@ class JdbcAccountFacts implements AccountFactsStore {
                 facts.producedAt() == null ? null : OffsetDateTime.ofInstant(facts.producedAt(), ZoneOffset.UTC),
                 facts.accountId());
         for (Source source : facts.sources()) {
+            if (!source.sent()) {
+                // Ended: it leaves fact_source, which the previous release reads, for ended_source (V38).
+                jdbc.update("DELETE FROM accessfeed.fact_source WHERE account_id = ? AND kind = ? AND source_id = ?",
+                        facts.accountId(), source.kind().name(), source.id());
+                jdbc.update("INSERT INTO accessfeed.ended_source (account_id, kind, source_id, source_sequence)"
+                        + " VALUES (?, ?, ?, ?) ON CONFLICT (account_id, kind, source_id)"
+                        + " DO UPDATE SET source_sequence = excluded.source_sequence",
+                        facts.accountId(), source.kind().name(), source.id(), source.sourceSequence());
+                continue;
+            }
             jdbc.update("INSERT INTO accessfeed.fact_source (account_id, kind, source_id, state, source_sequence)"
                     + " VALUES (?, ?, ?, ?, ?) ON CONFLICT (account_id, kind, source_id)"
                     + " DO UPDATE SET state = excluded.state, source_sequence = excluded.source_sequence",

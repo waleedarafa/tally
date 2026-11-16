@@ -13,7 +13,7 @@ class SubscriptionInvariants {
     static final String JOBS = "subscription.jobs";
 
     /**
-     * D1: every subscription is one renewal ahead. Each renewal schedules the next one, so a renewal that is never
+     * D1: every live subscription is one renewal ahead; an ended one is never renewed (design.md §5). Each renewal schedules the next one, so a renewal that is never
      * scheduled stops the subscription without a trace: no row is late, so D9's alarm cannot see it. Counts the
      * subscriptions with no unfinished renewal row for the period after their latest.
      *
@@ -32,6 +32,7 @@ class SubscriptionInvariants {
                     SELECT s.id::text || ',' || (coalesce(max(p.number), 0) + 1) AS payload
                     FROM subscription.subscription s
                     LEFT JOIN subscription.subscription_period p ON p.subscription_id = s.id
+                    WHERE s.status = 'ACTIVE'
                     GROUP BY s.id) expected
                 WHERE NOT EXISTS (SELECT 1 FROM subscription.renewal r
                                   WHERE r.payload = expected.payload AND r.status <> 'DONE')

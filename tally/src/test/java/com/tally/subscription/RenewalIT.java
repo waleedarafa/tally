@@ -63,9 +63,16 @@ class RenewalIT extends AbstractProviderIntegrationTest {
         return invoicing.invoicesFor(account);
     }
 
+    /** A renewal's key: {@code <account>:<subscription>:<period end>} (D-26). */
+    String key(UUID account, LocalDate billingDate) {
+        UUID subscription = jdbc.queryForObject("SELECT id FROM subscription.subscription WHERE account_id = ?",
+                UUID.class, account);
+        return account + ":" + subscription + ":" + billingDate;
+    }
+
     Instant dueAt(UUID account, LocalDate billingDate) {
         return jdbc.queryForObject("SELECT due_at FROM subscription.renewal WHERE queue_key = ?",
-                OffsetDateTime.class, account + ":" + billingDate).toInstant();
+                OffsetDateTime.class, key(account, billingDate)).toInstant();
     }
 
     @Test
@@ -103,15 +110,36 @@ class RenewalIT extends AbstractProviderIntegrationTest {
         Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(10));
 
         // As if the instance crashed after committing the renewal, before marking the item done.
-        QueueFaults.of(context).redeliver("renewals", account + ":" + renewal);
+        QueueFaults.of(context).redeliver("renewals", key(account, renewal));
 
         await().atMost(Duration.ofSeconds(10)).until(() -> "DONE".equals(jdbc.queryForObject(
-                "SELECT status FROM subscription.renewal WHERE queue_key = ?", String.class, account + ":" + renewal)));
+                "SELECT status FROM subscription.renewal WHERE queue_key = ?", String.class, key(account, renewal))));
         assertThat(invoicing.invoicesFor(account)).hasSize(2);
         // The renewal date and the one after it; the first invoice was issued at subscribe, not from the schedule.
         assertThat(jdbc.queryForList("SELECT queue_key FROM subscription.renewal WHERE queue_key LIKE ?",
                 String.class, account + ":%"))
-                .containsExactlyInAnyOrder(account + ":" + renewal, account + ":" + renewal.plusMonths(1));
+                .containsExactlyInAnyOrder(key(account, renewal), key(account, renewal.plusMonths(1)));
         assertThat(FakeProvider.chargeCount(invoicing.invoicesFor(account).get(1).paymentReference())).isEqualTo(1);
+    }
+
+    /** ENDED refuses a renewal (design.md §5): the renewal row that waits runs, and does nothing. */
+    @Test
+    void theRenewalOfAnEndedSubscriptionRunsAndDoesNothing() {
+        UUID account = subscribedAccount("UTC");
+        LocalDate renewal = paidInvoices(account, 1).getFirst().periodStart().plusMonths(1);
+        Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(10));
+        subscriptions.endLiveSubscriptions(account, EndReason.WRITE_OFF);
+
+        clock.set(renewal.atStartOfDay(ZoneId.of("UTC")).toInstant());
+        await().atMost(Duration.ofSeconds(10)).until(() -> "DONE".equals(jdbc.queryForObject(
+                "SELECT status FROM subscription.renewal WHERE queue_key = ?", String.class, key(account, renewal))));
+        Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(10));
+
+        assertThat(invoicing.invoicesFor(account)).as("no invoice after the end").hasSize(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM subscription.subscription_period p"
+                + " JOIN subscription.subscription s ON s.id = p.subscription_id WHERE s.account_id = ?", Long.class,
+                account)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM subscription.renewal WHERE queue_key LIKE ?",
+                Long.class, account + ":%")).as("and no next renewal").isEqualTo(1);
     }
 }

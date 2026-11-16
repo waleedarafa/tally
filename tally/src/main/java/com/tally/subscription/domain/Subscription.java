@@ -1,9 +1,12 @@
 package com.tally.subscription.domain;
 
+import com.tally.subscription.EndReason;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -61,6 +64,17 @@ public class Subscription {
     @Column(nullable = false)
     private int version;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private SubscriptionStatus status = SubscriptionStatus.ACTIVE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "end_reason")
+    private EndReason endReason;
+
+    @Column(name = "ended_at")
+    private Instant endedAt;
+
     protected Subscription() {
     }
 
@@ -81,11 +95,15 @@ public class Subscription {
 
     /**
      * Renews into period {@code number}: the period after the current one. Returns false and changes
-     * nothing if that period already exists, so a repeated renewal is harmless (ADR-003).
+     * nothing if that period already exists, so a repeated renewal is harmless (ADR-003), or if the subscription has
+     * ended: ENDED is never renewed (design.md §5).
      *
      * @throws IllegalStateException if {@code number} skips a period
      */
     public boolean renew(int number) {
+        if (status == SubscriptionStatus.ENDED) {
+            return false;
+        }
         SubscriptionPeriod current = currentPeriod();
         if (number <= current.number()) {
             return false;
@@ -96,6 +114,39 @@ public class Subscription {
         }
         periods.add(new SubscriptionPeriod(number, current.end(), calendar().nextBillingDate(current.end())));
         return true;
+    }
+
+    /**
+     * Ends the subscription (design.md §5: any live state to ENDED). Returns false and changes nothing if it has
+     * already ended: ENDED refuses everything, an end included, and keeps the first reason.
+     *
+     * @throws IllegalArgumentException if the reason is not known
+     */
+    public boolean end(EndReason reason, Instant now) {
+        if (reason == null || reason == EndReason.UNKNOWN) {
+            throw new IllegalArgumentException("An end needs a known reason: " + reason);
+        }
+        if (status == SubscriptionStatus.ENDED) {
+            return false;
+        }
+        status = SubscriptionStatus.ENDED;
+        endReason = reason;
+        endedAt = now;
+        return true;
+    }
+
+    public SubscriptionStatus status() {
+        return status;
+    }
+
+    /** Why it ended; null while it is live. */
+    public EndReason endReason() {
+        return endReason;
+    }
+
+    /** When it ended; null while it is live. */
+    public Instant endedAt() {
+        return endedAt;
     }
 
     public SubscriptionPeriod currentPeriod() {

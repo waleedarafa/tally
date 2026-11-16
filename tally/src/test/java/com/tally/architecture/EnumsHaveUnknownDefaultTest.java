@@ -45,6 +45,7 @@ class EnumsHaveUnknownDefaultTest {
                 "com.tally.invoicing.InvoiceStatus",
                 "com.tally.payment.AttemptState",
                 "com.tally.payment.FailureReason",
+                "com.tally.subscription.EndReason",
                 "com.tally.subscription.SubscriptionChangeType");
 
         Set<String> wrong = new TreeSet<>();

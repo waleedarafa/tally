@@ -92,4 +92,21 @@ class NextRenewalScheduledIT extends AbstractProviderIntegrationTest {
 
         assertThat(nextRenewalScheduled.violations()).isEqualTo(before + 1);
     }
+
+    /** An ended subscription is never renewed (design.md §5), so it needs no next renewal and is not counted. */
+    @Test
+    void anEndedSubscriptionIsNotCounted() {
+        UUID account = subscribedAccount();
+        LocalDate renewal = firstPeriodStart(account).plusMonths(1);
+        Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(10));
+        long before = nextRenewalScheduled.violations();
+        subscriptions.endLiveSubscriptions(account, EndReason.WRITE_OFF);
+
+        // Its renewal runs, finds it ended, and is done; no period 2 and no row for period 3.
+        clock.set(renewal.atStartOfDay(ZoneId.of("UTC")).toInstant());
+        await().atMost(Duration.ofSeconds(15)).until(() -> jdbc.queryForObject("SELECT count(*) FROM"
+                + " subscription.renewal WHERE queue_key LIKE ? AND status = 'DONE'", Long.class, account + ":%") == 1);
+
+        assertThat(nextRenewalScheduled.violations()).isEqualTo(before);
+    }
 }
