@@ -52,6 +52,43 @@ paths:
                 $ref: "#/components/schemas/Account"
         "404":
           description: No such account. No body.
+  /v1/accounts/{accountId}/collections/payment-requests:
+    post:
+      operationId: payNow
+      summary: Pay now. Asks again for the payment of every unpaid invoice of the account's Collections case.
+      description: >
+        Slice 3, decision 2. Works while a debt is open: in the case states OPEN, OVERDUE, BLOCKED and WRITTEN_OFF.
+        Collections asks Invoicing to request the payment again for every unpaid invoice of the case, with the case's
+        next retry number, using the card the account already has. The outcome arrives later: the invoice is paid, or
+        the payment is declined, which changes no state (the timetable decides). The Idempotency-Key is scoped by
+        account until callers are authenticated; the request and its stored response commit together.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "202":
+          description: Collections asked again; the outcome arrives later.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: The account has no debt open, or there is no such account.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          $ref: "#/components/responses/RequestInProgress"
+        "422":
+          $ref: "#/components/responses/KeyReused"
   /v1/payments/{reference}/status:
     get:
       operationId: getPaymentStatus
@@ -194,6 +231,24 @@ components:
         timeZone:
           type: string
           description: IANA time zone, for example Asia/Dubai.
+    PaymentRequest:
+      type: object
+      additionalProperties: false
+      required: [caseId, retry, invoiceIds]
+      properties:
+        caseId:
+          type: string
+          format: uuid
+        retry:
+          type: integer
+          minimum: 3
+          description: The case's retry number for this request. The timetable's retries are 1 (day 3) and 2 (day 7).
+        invoiceIds:
+          type: array
+          description: The unpaid invoices Collections asked for.
+          items:
+            type: string
+            format: uuid
     Account:
       type: object
       required: [id, currency, timeZone]

@@ -3,6 +3,7 @@ package com.tally.collections.application;
 import com.tally.collections.CaseStatus;
 import com.tally.collections.CaseView;
 import com.tally.collections.Collections;
+import com.tally.collections.PaymentRequestView;
 import com.tally.collections.domain.CollectionCase;
 import com.tally.collections.domain.CollectionCases;
 import com.tally.invoicing.InvoicePaid;
@@ -41,6 +42,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 class CollectionsService implements Collections, QueueHandler {
 
     private static final Logger log = LoggerFactory.getLogger(CollectionsService.class);
+
+    /** The retries of the timetable: 1 on day 3, 2 on day 7. "Pay now" numbers its retries after them. */
+    static final int TIMETABLE_RETRIES = 2;
 
     /** A decline finds its case closed while it waits only if the last invoice is paid at that moment. */
     static final int JOIN_ATTEMPTS = 3;
@@ -146,6 +150,22 @@ class CollectionsService implements Collections, QueueHandler {
             invoicing.requestPaymentAgain(invoiceId, retry);
         }
         return Outcome.done();
+    }
+
+    /**
+     * Under the case's row lock, so two requests at the same time get two numbers. The timetable owns retries 1 and 2
+     * (day 3 and day 7), so a request takes the number after the highest of those and of any recorded: 3, then 4.
+     * The retry's row is recorded here, as its permanent guard (rule 11), and the retry is queued, due now.
+     */
+    @Override
+    @Transactional
+    public Optional<PaymentRequestView> requestPayment(UUID accountId) {
+        return cases.lockCaseWithDebt(accountId).map(locked -> {
+            int retry = Math.max(cases.lastRetryOf(locked.id()), TIMETABLE_RETRIES) + 1;
+            cases.recordRetry(locked.id(), retry, clock.instant());
+            queue.enqueue(locked.id() + ":" + retry, clock.instant(), locked.id() + "," + retry);
+            return new PaymentRequestView(locked.id(), retry, cases.unpaidOf(locked.id()));
+        });
     }
 
     @Override

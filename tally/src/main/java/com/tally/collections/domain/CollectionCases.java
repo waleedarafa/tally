@@ -128,5 +128,11 @@ public interface CollectionCases extends JpaRepository<CollectionCase, UUID> {
     @Query(nativeQuery = true, value = "SELECT count(*) FROM collections.case_retry WHERE case_id = :caseId")
     int retriesOf(UUID caseId);
 
+    /** The highest retry number recorded for the case; 0 if none. */
+    @Query(nativeQuery = true, value = """
+            SELECT coalesce(max(number), 0) FROM collections.case_retry WHERE case_id = :caseId
+            """)
+    int lastRetryOf(UUID caseId);
+
     List<CollectionCase> findByAccountIdOrderByOpenedAtDesc(UUID accountId);
 }
