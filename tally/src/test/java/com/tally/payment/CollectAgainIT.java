@@ -72,6 +72,24 @@ class CollectAgainIT extends AbstractProviderIntegrationTest {
                 String.class, reference)).isEqualTo("SUCCEEDED");
     }
 
+    /**
+     * An invoice that joins a Collections case after day 3 gets retry 2 as its first retry (review of #78): Payment
+     * accepts a retry number that skips 1, and a lower one asked afterwards changes nothing.
+     */
+    @Test
+    void aFirstRetryThatSkipsANumberIsMade() {
+        String reference = declined("DECLINE_HARD(100)");
+
+        payments.collectAgain(reference, 2);
+
+        awaitLatest(reference, AttemptState.SUCCEEDED);
+        assertThat(attempts(reference)).containsExactly(reference + ":1=DECLINED", reference + ":2=SUCCEEDED");
+        payments.collectAgain(reference, 1);
+        assertThat(attempts(reference)).hasSize(2);
+        assertThat(jdbc.queryForObject("SELECT retries FROM payment.collection_request WHERE reference = ?",
+                Integer.class, reference)).isEqualTo(2);
+    }
+
     @Test
     void theSameRetryAskedForTwiceMakesOneAttempt() {
         String reference = declined("DECLINE_HARD(100)");

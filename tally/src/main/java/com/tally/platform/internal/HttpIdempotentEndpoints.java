@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -72,14 +73,20 @@ class HttpIdempotentEndpoints implements IdempotentEndpoints {
 
     /**
      * The act and its stored response in one transaction. A refusal rolls the act back, then is stored on its
-     * own: it changed nothing. An unexpected failure releases the key, so the client may try again at once; a
-     * request that dies without releasing it is taken over after the request timeout.
+     * own: it changed nothing. A concurrent change (a lost optimistic lock, a deadlock) releases the key and answers
+     * 409 with {@code Retry-After}, not stored. An unexpected failure releases the key, so the client may try again at
+     * once; a request that dies without releasing it is taken over after the request timeout.
      */
     private ResponseEntity<String> act(IdempotencyStore store, String scope, String key,
             Supplier<ResponseEntity<String>> act,
             Function<RuntimeException, Optional<ResponseEntity<String>>> refusals) {
         try {
             return transactions.execute(tx -> stored(store, scope, key, act.get()));
+        } catch (ConcurrencyFailureException conflict) {
+            // Another commit changed what the request read (WAR-57: a standing set during a sign-up). Nothing of
+            // the act is kept, and the key is released: the same request, sent again, acts again.
+            store.release(scope, key);
+            return tryAgain();
         } catch (RuntimeException failure) {
             Optional<ResponseEntity<String>> refusal = refusals.apply(failure);
             if (refusal.isEmpty()) {
@@ -88,6 +95,18 @@ class HttpIdempotentEndpoints implements IdempotentEndpoints {
             }
             return transactions.execute(tx -> stored(store, scope, key, refusal.get()));
         }
+    }
+
+    /** Seconds the client waits before it sends the request again, after a concurrent change. */
+    static final int CONCURRENT_CHANGE_RETRY_AFTER_SECONDS = 1;
+
+    private ResponseEntity<String> tryAgain() {
+        ResponseEntity<String> problem = problem(HttpStatus.CONFLICT, "/problems/concurrent-change",
+                "The request met a change made at the same time",
+                "Nothing was changed. Send the same request again, with the same Idempotency-Key.");
+        return ResponseEntity.status(problem.getStatusCode()).headers(problem.getHeaders())
+                .header(HttpHeaders.RETRY_AFTER, Integer.toString(CONCURRENT_CHANGE_RETRY_AFTER_SECONDS))
+                .body(problem.getBody());
     }
 
     private static ResponseEntity<String> stored(IdempotencyStore store, String scope, String key,

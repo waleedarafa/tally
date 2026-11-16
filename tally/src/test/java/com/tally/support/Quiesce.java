@@ -13,8 +13,8 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Waits until the given accounts have no work in progress: no billing item claimed or due, no
- * payment attempt REQUESTED or SENT, and no event publication naming the account still in flight (a FAILED
+ * Waits until the given accounts have no work in progress: no billing item claimed or due, no Collections retry
+ * or timer of their cases claimed or due, no payment attempt REQUESTED or SENT, and no event publication naming the account still in flight (a FAILED
  * one is not in progress: it waits for resubmission, as AT-8 relies on). The
  * last matters between a renewal and its payment attempt, where the work exists only as events
  * (SubscriptionChanged, then InvoiceIssued); every event carries its account ID (CLAUDE.md rule 7).
@@ -42,13 +42,21 @@ public final class Quiesce {
                     + " WHERE account_id = ANY (?) AND state IN ('REQUESTED', 'SENT')");
                  var events = c.prepareStatement("SELECT count(*) FROM event_publication"
                     + " WHERE completion_date IS NULL AND status IS DISTINCT FROM 'FAILED'"
-                    + " AND serialized_event LIKE ANY (?)")) {
+                    + " AND serialized_event LIKE ANY (?)");
+                 // Collections' retries and timers: their payload starts with the case.
+                 var collections = c.prepareStatement("SELECT count(*) FROM (SELECT payload, status, due_at"
+                    + " FROM collections.retry_queue UNION ALL SELECT payload, status, due_at FROM"
+                    + " collections.timer_queue) q WHERE split_part(q.payload, ',', 1) IN (SELECT id::text FROM"
+                    + " collections.collection_case WHERE account_id = ANY (?))"
+                    + " AND (q.status = 'IN_PROCESSING' OR (q.status = 'READY' AND q.due_at <= ?))")) {
                 billing.setArray(1, keys);
                 billing.setObject(2, clock.instant().atOffset(ZoneOffset.UTC));
                 attempts.setArray(1, ids);
                 events.setArray(1, mentions);
+                collections.setArray(1, ids);
+                collections.setObject(2, clock.instant().atOffset(ZoneOffset.UTC));
                 int busy = 0;
-                for (var statement : List.of(billing, attempts, events)) {
+                for (var statement : List.of(billing, attempts, events, collections)) {
                     try (var rs = statement.executeQuery()) {
                         rs.next();
                         busy += rs.getInt(1);

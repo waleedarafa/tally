@@ -16,33 +16,33 @@ import com.tally.platform.QueueDefinition;
 import com.tally.platform.QueueHandler;
 import com.tally.platform.QueueItem;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Collections, day 3 only (Slice 1R PR-8; ADR-005; design.md §5). One case per account covers every unpaid invoice
- * (Slice 3 PR-3): a declined invoice payment joins the open case, or opens one and schedules its day-3 retry on
- * Collections' own queue (a claimed row with a due time). The retry asks Invoicing to request payment again for each
- * unpaid invoice of the case. The case closes when none is unpaid.
+ * Collections (ADR-005; design.md §5, proposed in ADR-037). One case per account covers every unpaid invoice: a
+ * declined invoice payment joins the account's case with a debt open, or opens one and schedules its timetable on
+ * Collections' own queues (claimed rows with a due time), counted from that first decline. The retries (day 3 and day 7)
+ * ask Invoicing to request payment again for each unpaid invoice of the case; the steps that change the state are
+ * {@link CaseTimers}. The case closes when none of its invoices is unpaid, and the standing is GOOD again.
  */
 @Service
+@EnableConfigurationProperties(CollectionsTimetable.class)
 class CollectionsService implements Collections, QueueHandler {
 
     private static final Logger log = LoggerFactory.getLogger(CollectionsService.class);
 
-    /** Design.md §5: the first retry, on day 3 after the decline. Days 7, 10 and 30 come in a later slice. */
-    static final Duration DAY_THREE = Duration.ofDays(3);
-
-    /** A decline finds the open case closed while it waits only if the last invoice is paid at that moment. */
+    /** A decline finds its case closed while it waits only if the last invoice is paid at that moment. */
     static final int JOIN_ATTEMPTS = 3;
 
     // A money queue (FR-037): a retry collects money. The permanent guard is one case_retry row per case and
@@ -52,24 +52,31 @@ class CollectionsService implements Collections, QueueHandler {
 
     private final CollectionCases cases;
     private final InvoicingApi invoicing;
+    private final CaseSettlement settlement;
+    private final CaseTimers timers;
+    private final CollectionsTimetable timetable;
     private final DurableQueue queue;
     private final TransactionTemplate transactions;
     private final Clock clock;
 
-    CollectionsService(CollectionCases cases, InvoicingApi invoicing, DurableQueues queues,
-            TransactionTemplate transactions, Clock clock) {
+    CollectionsService(CollectionCases cases, InvoicingApi invoicing, CaseSettlement settlement, CaseTimers timers,
+            CollectionsTimetable timetable, DurableQueues queues, TransactionTemplate transactions, Clock clock) {
         this.cases = cases;
         this.invoicing = invoicing;
+        this.settlement = settlement;
+        this.timers = timers;
+        this.timetable = timetable;
         this.transactions = transactions;
         this.clock = clock;
         this.queue = queues.register(DEFINITION, this);
     }
 
     /**
-     * The invoice joins the account's open case, or opens one (Slice 3: one case covers every unpaid invoice). The
-     * case opens with an atomic insert, and only the call that opens it schedules its day-3 retry, in the same
-     * transaction. A repeated decline adds nothing. A decline of an invoice Invoicing says is paid (a publication
-     * resubmitted late) adds nothing: the case covers unpaid invoices only, and only {@code InvoicePaid} moves it back.
+     * The invoice joins the account's case with a debt open (OPEN, OVERDUE, BLOCKED; WRITTEN_OFF too, where only a
+     * repeat can arrive), or opens one. The case opens with an atomic insert, and only the call that opens it schedules
+     * its timetable, in the same transaction. A repeated decline adds nothing. A decline of an invoice Invoicing says is
+     * paid (a publication resubmitted late) adds nothing: the case covers unpaid invoices only, and only
+     * {@code InvoicePaid} moves it back. A join changes neither the case's state nor the standing.
      */
     @ApplicationModuleListener
     void on(InvoicePaymentDeclined declined) {
@@ -83,18 +90,25 @@ class CollectionsService implements Collections, QueueHandler {
             UUID caseId = UUID.randomUUID();
             if (cases.openIfNone(caseId, declined.accountId(), declined.invoiceId(), now)) {
                 cases.addInvoice(caseId, declined.invoiceId(), now);
-                queue.enqueue(caseId + ":1", declined.occurredAt().plus(DAY_THREE), caseId.toString());
+                schedule(caseId, declined.occurredAt());
                 return;
             }
-            Optional<CollectionCase> open = cases.lockOpenCase(declined.accountId());
-            if (open.isPresent()) {
-                cases.addInvoice(open.get().id(), declined.invoiceId(), now);
+            Optional<CollectionCase> withDebt = cases.lockCaseWithDebt(declined.accountId());
+            if (withDebt.isPresent()) {
+                cases.addInvoice(withDebt.get().id(), declined.invoiceId(), now);
                 return;
             }
-            // The open case closed while this call waited for its lock: open a new one.
+            // The case closed while this call waited for its lock: open a new one.
         }
-        throw new IllegalStateException("Account " + declined.accountId() + ": no open case to join after "
+        throw new IllegalStateException("Account " + declined.accountId() + ": no case to join after "
                 + JOIN_ATTEMPTS + " attempts");
+    }
+
+    private void schedule(UUID caseId, Instant firstDecline) {
+        // Retry 1 keeps the payload of Slice 1R: the case alone.
+        queue.enqueue(caseId + ":1", firstDecline.plus(timetable.firstRetry()), caseId.toString());
+        queue.enqueue(caseId + ":2", firstDecline.plus(timetable.secondRetry()), caseId + ",2");
+        timers.schedule(caseId, firstDecline);
     }
 
     private boolean paid(UUID accountId, UUID invoiceId) {
@@ -103,36 +117,33 @@ class CollectionsService implements Collections, QueueHandler {
     }
 
     /**
-     * One of the case's invoices is paid: the case closes once none of its invoices is unpaid (design.md §5). Under
-     * the case's lock, so a decline that joins at the same time is either in the case before the count, or finds the
-     * case closed and opens a new one.
+     * One of the case's invoices is paid, in any state with a debt open: the case closes once none of its invoices is
+     * unpaid, and the standing is GOOD in the same transaction (rule 5). After a write-off the subscription stays
+     * ended. Under the case's lock, so a decline that joins and a timer at the same time read the state this leaves.
      */
     @ApplicationModuleListener
     void on(InvoicePaid paid) {
-        Instant now = clock.instant();
-        cases.lockOpenCase(paid.accountId()).ifPresent(open -> {
-            cases.markPaid(open.id(), paid.invoiceId(), now);
-            if (cases.unpaidOf(open.id()).isEmpty()) {
-                open.close(now);
-            }
-        });
+        cases.lockCaseWithDebt(paid.accountId()).ifPresent(locked -> settlement.paid(locked, paid.invoiceId()));
     }
 
     /**
-     * The day-3 retry. Called with no transaction open (FR-005): records retry 1 of the case, then asks
-     * Invoicing again for each unpaid invoice of the case, which asks Payment, which may ask the provider. Run
-     * again after a crash, it asks again; Payment makes retry 1 of each invoice once.
+     * A retry: day 3 (retry 1) or day 7 (retry 2). Called with no transaction open (FR-005): records the case's retry,
+     * then asks Invoicing again for each unpaid invoice of the case, which asks Payment, which may ask the provider.
+     * Run again after a crash, it asks again; Payment makes each retry of each invoice once, and accepts a first
+     * retry of 2 for an invoice that joined after day 3. A retry changes no state: the timers decide.
      */
     @Override
     public Outcome handle(QueueItem item) {
-        UUID caseId = UUID.fromString(item.payload());
+        String[] payload = item.payload().split(",");
+        UUID caseId = UUID.fromString(payload[0]);
+        int retry = payload.length > 1 ? Integer.parseInt(payload[1]) : 1;
         List<UUID> unpaid = transactions.execute(tx -> {
-            Optional<CollectionCase> found = cases.findById(caseId).filter(c -> c.status() == CaseStatus.OPEN);
-            found.ifPresent(c -> cases.recordRetry(c.id(), 1, clock.instant()));
+            Optional<CollectionCase> found = cases.findById(caseId).filter(CollectionCase::hasDebt);
+            found.ifPresent(c -> cases.recordRetry(c.id(), retry, clock.instant()));
             return found.map(c -> cases.unpaidOf(c.id())).orElse(List.of());
         });
         for (UUID invoiceId : unpaid == null ? List.<UUID>of() : unpaid) {
-            invoicing.requestPaymentAgain(invoiceId, 1);
+            invoicing.requestPaymentAgain(invoiceId, retry);
         }
         return Outcome.done();
     }
@@ -141,7 +152,7 @@ class CollectionsService implements Collections, QueueHandler {
     @Transactional(readOnly = true)
     public Optional<CaseView> caseFor(UUID accountId) {
         return cases.findByAccountIdOrderByOpenedAtDesc(accountId).stream()
-                .sorted((a, b) -> Boolean.compare(b.status() == CaseStatus.OPEN, a.status() == CaseStatus.OPEN))
+                .sorted(Comparator.comparing((CollectionCase c) -> c.status() == CaseStatus.CLOSED))
                 .findFirst()
                 .map(c -> new CaseView(c.id(), c.accountId(), c.invoiceId(), c.status(), c.openedAt(),
                         c.closedAt(), cases.retriesOf(c.id()), cases.invoicesOf(c.id()), cases.unpaidOf(c.id())));
