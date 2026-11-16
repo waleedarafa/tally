@@ -23,12 +23,43 @@ public interface CollectionCases extends JpaRepository<CollectionCase, UUID> {
     }
 
     /**
-     * Records retry {@code number} of the case. Returns whether this call recorded it: the guard is the
-     * unique constraint {@code case_retry_one_per_case_and_number}, the retry queue's duplicate guard.
+     * Records a "pay now" request of the case with number {@code number}. Returns whether this call recorded it: the
+     * guard is the unique constraint {@code case_retry_one_per_case_and_number}, the retry queue's duplicate guard.
      */
     default boolean recordRetry(UUID caseId, int number, Instant now) {
         return insertRetry(caseId, number, now) == 1;
     }
+
+    /**
+     * The number of the case's scheduled retry {@code step}: the stored one if the step ran before, so a run after a
+     * crash asks with the same number; else the case's next number, recorded now. Call it under the case's row lock
+     * ({@link #lock}): the guard is the unique index {@code case_retry_one_per_case_and_step} (rule 11).
+     */
+    default int retryNumberOf(UUID caseId, RetryStep step, Instant now) {
+        Optional<Integer> stored = numberOfStep(caseId, step.name());
+        if (stored.isPresent()) {
+            return stored.get();
+        }
+        int next = lastRetryOf(caseId) + 1;
+        if (insertStepRetry(caseId, next, step.name(), now) != 1) {
+            throw new IllegalStateException("Retry " + step + " of case " + caseId + " was recorded meanwhile;"
+                    + " it must be asked under the case's lock");
+        }
+        return next;
+    }
+
+    @Query(nativeQuery = true, value = """
+            SELECT number FROM collections.case_retry WHERE case_id = :caseId AND step = :step
+            """)
+    Optional<Integer> numberOfStep(UUID caseId, String step);
+
+    @Modifying
+    @Query(nativeQuery = true, value = """
+            INSERT INTO collections.case_retry (case_id, number, step, requested_at)
+            VALUES (:caseId, :number, :step, :now)
+            ON CONFLICT (case_id, step) WHERE step IS NOT NULL DO NOTHING
+            """)
+    int insertStepRetry(UUID caseId, int number, String step, Instant now);
 
     /**
      * The account's case with a debt open (OPEN, OVERDUE, BLOCKED or WRITTEN_OFF), locked until the caller's

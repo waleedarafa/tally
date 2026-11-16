@@ -155,7 +155,7 @@ class CaseCoversEveryInvoiceIT extends AbstractReconcilingTest {
         assertThat(collections.caseFor(account).orElseThrow().unpaidInvoiceIds())
                 .as("with both invoices").containsExactlyInAnyOrder(first, second);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM collections.retry_queue WHERE payload IN"
-                + " (SELECT id::text FROM collections.collection_case WHERE account_id = ?)", Long.class, account))
+                + " (SELECT id || ',DAY_3' FROM collections.collection_case WHERE account_id = ?)", Long.class, account))
                 .as("one day-3 retry, for the case").isEqualTo(1);
     }
 

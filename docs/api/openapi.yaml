@@ -58,8 +58,9 @@ paths:
       summary: Pay now. Asks again for the payment of every unpaid invoice of the account's Collections case.
       description: >
         Slice 3, decision 2. Works while a debt is open: in the case states OPEN, OVERDUE, BLOCKED and WRITTEN_OFF.
-        Collections asks Invoicing to request the payment again for every unpaid invoice of the case, with the case's
-        next retry number, using the card the account already has. The outcome arrives later: the invoice is paid, or
+        Collections asks Invoicing to request the payment again for every unpaid invoice of the case, using the card
+        the account already has. Every request of a case, scheduled or "pay now", takes the next retry number at the
+        moment it is asked, so an early "pay now" changes nothing in the timetable. The outcome arrives later: the invoice is paid, or
         the payment is declined, which changes no state (the timetable decides). The Idempotency-Key is scoped by
         account until callers are authenticated; the request and its stored response commit together.
       parameters:
@@ -241,8 +242,10 @@ components:
           format: uuid
         retry:
           type: integer
-          minimum: 3
-          description: The case's retry number for this request. The timetable's retries are 1 (day 3) and 2 (day 7).
+          minimum: 1
+          description: >
+            The case's retry number for this request. Every request of a case, scheduled (day 3, day 7) or "pay now",
+            takes the next number at the moment it is asked.
         invoiceIds:
           type: array
           description: The unpaid invoices Collections asked for.

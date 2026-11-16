@@ -100,12 +100,13 @@ class PayNowIT extends AbstractReconcilingTest {
         PaymentRequestView asked = collections.requestPayment(account).orElseThrow();
         PaymentRequestView again = collections.requestPayment(account).orElseThrow();
 
-        assertThat(asked.retry()).as("after the timetable's retries 1 and 2").isEqualTo(3);
+        assertThat(asked.retry()).as("one sequence for each case (#80, option B): the case's first request")
+                .isEqualTo(1);
         assertThat(asked.invoiceIds()).containsExactly(first, second);
-        assertThat(again.retry()).isEqualTo(4);
-        verify(invoicingSpy, timeout(15_000)).requestPaymentAgain(first, 3);
-        verify(invoicingSpy, timeout(15_000)).requestPaymentAgain(second, 3);
-        verify(invoicingSpy, timeout(15_000)).requestPaymentAgain(second, 4);
+        assertThat(again.retry()).isEqualTo(2);
+        verify(invoicingSpy, timeout(15_000)).requestPaymentAgain(first, 1);
+        verify(invoicingSpy, timeout(15_000)).requestPaymentAgain(second, 1);
+        verify(invoicingSpy, timeout(15_000)).requestPaymentAgain(second, 2);
         assertThat(theCase(account).status()).as("asking changes no state").isEqualTo(CaseStatus.OPEN);
     }
 
@@ -174,6 +175,43 @@ class PayNowIT extends AbstractReconcilingTest {
         List<Integer> retries = new ArrayList<>();
         retries.add(one.get(15, TimeUnit.SECONDS).orElseThrow().retry());
         retries.add(two.get(15, TimeUnit.SECONDS).orElseThrow().retry());
-        assertThat(retries).containsExactlyInAnyOrder(3, 4);
+        assertThat(retries).containsExactlyInAnyOrder(1, 2);
+    }
+
+    /**
+     * Option B of the #80 review (one sequence of retry numbers for each case): an early, declined "pay now" changes
+     * nothing in the timetable. Pay now on day 1 is declined; the card works from day 2; the day-3 retry is sent, with
+     * the case's next number, and succeeds; the case closes.
+     */
+    @Test
+    void anEarlyDeclinedPayNowLeavesTheDayThreeRetryToBeMade() {
+        FakeProvider.mode("DECLINE_HARD(100)");
+        UUID account = subscribedAccount();
+        InvoiceView invoice = firstInvoice(account);
+        awaitAttempt(invoice.paymentReference(), AttemptState.DECLINED, Duration.ofSeconds(15));
+        await().atMost(Duration.ofSeconds(15)).until(() -> collections.caseFor(account).isPresent());
+        Instant first = theCase(account).openedAt();
+        clock.set(first.plus(Duration.ofDays(1)));
+        Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(30));
+
+        assertThat(collections.requestPayment(account).orElseThrow().retry()).as("the case's first request").isEqualTo(1);
+        await().atMost(Duration.ofSeconds(15)).until(() -> jdbc.queryForObject("SELECT count(*) FROM"
+                + " payment.payment_attempt WHERE reference = ? AND state = 'DECLINED'", Long.class,
+                invoice.paymentReference()) == 2);
+        Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(30));
+
+        FakeProvider.mode("NORMAL");
+        clock.set(first.plus(Duration.ofDays(2)));
+        Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(30));
+        clock.set(first.plus(Duration.ofDays(3)).plus(Duration.ofHours(1)));
+        Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(30));
+
+        assertThat(jdbc.queryForList("SELECT number || '=' || state FROM payment.payment_attempt WHERE reference = ?"
+                + " ORDER BY number", String.class, invoice.paymentReference()))
+                .as("the first charge, pay now, the day-3 retry").containsExactly("1=DECLINED", "2=DECLINED", "3=SUCCEEDED");
+        assertThat(jdbc.queryForList("SELECT number || ' ' || coalesce(step, 'pay now') FROM collections.case_retry"
+                + " WHERE case_id = ? ORDER BY number", String.class, theCase(account).caseId()))
+                .containsExactly("1 pay now", "2 DAY_3");
+        await().atMost(Duration.ofSeconds(15)).until(() -> theCase(account).status() == CaseStatus.CLOSED);
     }
 }

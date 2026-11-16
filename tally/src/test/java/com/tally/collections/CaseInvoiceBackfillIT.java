@@ -75,4 +75,22 @@ class CaseInvoiceBackfillIT {
                         open + ":BLOCKED " + open + ",BLOCKED 10 days",
                         open + ":WRITTEN_OFF " + open + ",WRITTEN_OFF 30 days");
     }
+
+    /** #80, option B (V42): the retry rows of today were the timetable's, so retry 1 is day 3 and retry 2 is day 7. */
+    @Test
+    void theRetriesOfTodayKeepTheirNumbersAndGetTheirSteps() {
+        ChaosDatabase db = ChaosDatabase.create("case_retry_steps");
+        flyway(db, "41").migrate();
+        JdbcTemplate jdbc = db.jdbc();
+        UUID open = oneCase(jdbc, UUID.randomUUID(), "OPEN", null);
+        for (int number = 1; number <= 2; number++) {
+            jdbc.update("INSERT INTO collections.case_retry (case_id, number, requested_at) VALUES (?, ?, ?)", open,
+                    number, OffsetDateTime.parse("2026-11-04T00:00:00Z"));
+        }
+
+        flyway(db, "42").migrate();
+
+        assertThat(jdbc.queryForList("SELECT number || ' ' || step FROM collections.case_retry ORDER BY number",
+                String.class)).containsExactly("1 DAY_3", "2 DAY_7");
+    }
 }
