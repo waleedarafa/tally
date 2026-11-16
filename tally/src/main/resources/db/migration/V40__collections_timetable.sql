@@ -9,10 +9,14 @@ ALTER TABLE collections.collection_case ADD CONSTRAINT collection_case_status_ch
     CHECK (status IN ('OPEN', 'OVERDUE', 'BLOCKED', 'WRITTEN_OFF', 'CLOSED'));
 
 -- The guard of "one case per account" (CLAUDE.md rule 11) now covers every state with a debt open, so a decline while
--- a case is OVERDUE or BLOCKED joins it. The index of V24 (status = 'OPEN') stays: the previous release's insert names
--- it in its ON CONFLICT clause during a rolling deploy (ADR-009), and every row it guards this one guards too.
+-- a case is OVERDUE or BLOCKED joins it. It replaces V24's index (status = 'OPEN'): two unique indexes on the same
+-- account would leave the old one outside the insert's ON CONFLICT arbiter, and two declines at the same time would
+-- fail on it instead of one doing nothing. The previous release's insert (ON CONFLICT (account_id) WHERE status =
+-- 'OPEN') still finds this index during a rolling deploy (ADR-009): PostgreSQL infers it, since status = 'OPEN' implies
+-- status <> 'CLOSED'. The new index is built first, so the account is never without a guard.
 CREATE UNIQUE INDEX collection_case_one_unsettled_per_account ON collections.collection_case (account_id)
     WHERE status <> 'CLOSED';
+DROP INDEX collections.collection_case_one_open_per_account;
 
 -- Each step of a case's timetable, once: the timer queue's permanent duplicate guard (FR-037). OVERDUE, BLOCKED and
 -- WRITTEN_OFF; the retries keep their own guard, case_retry_one_per_case_and_number.
