@@ -14,8 +14,8 @@ import org.springframework.data.jpa.repository.Query;
 public interface CollectionCases extends JpaRepository<CollectionCase, UUID> {
 
     /**
-     * Opens a case for the account unless one is open, atomically: the guard is the partial unique index
-     * {@code collection_case_one_open_per_account}, and only a clash on it is absorbed (CLAUDE.md rule 11).
+     * Opens a case for the account unless it has one with a debt open, atomically: the guard is the partial unique
+     * index {@code collection_case_one_unsettled_per_account}, and only a clash on it is absorbed (CLAUDE.md rule 11).
      * Returns whether this call opened it.
      */
     default boolean openIfNone(UUID id, UUID accountId, UUID invoiceId, Instant now) {
@@ -31,15 +31,39 @@ public interface CollectionCases extends JpaRepository<CollectionCase, UUID> {
     }
 
     /**
-     * The account's open case, locked until the caller's transaction ends: a decline that joins the case and a payment
-     * that may close it wait for each other (CLAUDE.md rule 7). Empty if no case is open, also when the one this call
-     * waited for closed. The case's opening invoice is in the case, also for a case the previous release opened (V39).
+     * The account's case with a debt open (OPEN, OVERDUE, BLOCKED or WRITTEN_OFF), locked until the caller's
+     * transaction ends: a decline that joins the case, a payment that may close it and a timer wait for each other
+     * (CLAUDE.md rule 7). Empty if it has none, also when the one this call waited for closed. The case's opening
+     * invoice is in the case, also for a case the previous release opened (V39).
      */
-    default Optional<CollectionCase> lockOpenCase(UUID accountId) {
-        Optional<CollectionCase> open = findOpenForUpdate(accountId, com.tally.collections.CaseStatus.OPEN);
-        open.ifPresent(c -> insertInvoice(c.id(), c.invoiceId(), c.openedAt()));
-        return open;
+    default Optional<CollectionCase> lockCaseWithDebt(UUID accountId) {
+        return withOpeningInvoice(findWithDebtForUpdate(accountId));
     }
+
+    /** The case, locked until the caller's transaction ends, as {@link #lockCaseWithDebt}; in any state. */
+    default Optional<CollectionCase> lock(UUID caseId) {
+        return withOpeningInvoice(findByIdForUpdate(caseId));
+    }
+
+    private Optional<CollectionCase> withOpeningInvoice(Optional<CollectionCase> locked) {
+        locked.ifPresent(c -> insertInvoice(c.id(), c.invoiceId(), c.openedAt()));
+        return locked;
+    }
+
+    /**
+     * Records that the case took the step. Returns whether this call recorded it: the guard is the unique constraint
+     * {@code case_step_one_per_case_and_step}, the timer queue's duplicate guard (CLAUDE.md rule 11).
+     */
+    default boolean recordStep(UUID caseId, CaseStep step, Instant now) {
+        return insertStep(caseId, step.name(), now) == 1;
+    }
+
+    @Modifying
+    @Query(nativeQuery = true, value = """
+            INSERT INTO collections.case_step (case_id, step, done_at) VALUES (:caseId, :step, :now)
+            ON CONFLICT ON CONSTRAINT case_step_one_per_case_and_step DO NOTHING
+            """)
+    int insertStep(UUID caseId, String step, Instant now);
 
     /**
      * Adds the invoice to the case, unpaid. Returns whether this call added it: the guard is the unique constraint
@@ -50,8 +74,13 @@ public interface CollectionCases extends JpaRepository<CollectionCase, UUID> {
     }
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT c FROM CollectionCase c WHERE c.accountId = :accountId AND c.status = :status")
-    Optional<CollectionCase> findOpenForUpdate(UUID accountId, com.tally.collections.CaseStatus status);
+    @Query("SELECT c FROM CollectionCase c WHERE c.accountId = :accountId"
+            + " AND c.status <> com.tally.collections.CaseStatus.CLOSED")
+    Optional<CollectionCase> findWithDebtForUpdate(UUID accountId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM CollectionCase c WHERE c.id = :caseId")
+    Optional<CollectionCase> findByIdForUpdate(UUID caseId);
 
     @Modifying
     @Query(nativeQuery = true, value = """
@@ -85,7 +114,7 @@ public interface CollectionCases extends JpaRepository<CollectionCase, UUID> {
     @Query(nativeQuery = true, value = """
             INSERT INTO collections.collection_case (id, account_id, invoice_id, status, opened_at, version)
             VALUES (:id, :accountId, :invoiceId, 'OPEN', :now, 0)
-            ON CONFLICT (account_id) WHERE status = 'OPEN' DO NOTHING
+            ON CONFLICT (account_id) WHERE status <> 'CLOSED' DO NOTHING
             """)
     int insertOpenIfNone(UUID id, UUID accountId, UUID invoiceId, Instant now);
 

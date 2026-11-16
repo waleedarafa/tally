@@ -41,6 +41,9 @@ import org.springframework.test.context.TestPropertySource;
  * declined). Days 7, 10 and 30 have no code yet, so three timers on the platform's test queue stand in for them, due
  * at the same times, claimed and handled by the same pollers. The clock moves one day at a time, as AT-22 will, and the
  * test waits until the work of the day is done (Quiesce) before each move.
+ *
+ * <p>Since Slice 3 PR-4 the real timers run beside the stand-ins, and the day-30 write-off ends the subscription
+ * before its renewal date, so no renewal invoice follows. The spike now measures that; AT-22 is D10's real test.
  */
 @Import(SpikeCollectionsS3ThirtyDaysIT.Timers.class)
 @TestPropertySource(properties = "tally.test.context=spike-collections-s3")
@@ -113,16 +116,18 @@ class SpikeCollectionsS3ThirtyDaysIT extends AbstractReconcilingTest {
                 reachedAtMillis.put(day, Duration.ofNanos(System.nanoTime() - started).toMillis());
             }
         }
-        await().atMost(Duration.ofSeconds(15)).until(() -> invoicing.invoicesFor(account).size() == 2);
-        InvoiceView renewal = invoicing.invoicesFor(account).get(1);
-        awaitAttempt(renewal.paymentReference(), AttemptState.DECLINED, Duration.ofSeconds(15));
         Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
+        String subscription = jdbc.queryForObject("SELECT status || ' ' || coalesce(end_reason, '-')"
+                + " FROM subscription.subscription WHERE account_id = ?", String.class, account);
 
-        System.out.printf("SPIKE-C-S3 set-up %d ms; milestones (day=ms since start) %s; renewal of period %s to %s"
-                + " (first period from %s) invoiced on day %d, its charge declined; total %d ms for 32 days%n",
-                Duration.ofNanos(setUp - started).toMillis(), reachedAtMillis, renewal.periodStart(),
-                renewal.periodEnd(), first.periodStart(), renewedOnDay, elapsed.toMillis());
-        assertThat(renewal.periodStart()).isEqualTo(first.periodEnd());
+        System.out.printf("SPIKE-C-S3 set-up %d ms; milestones (day=ms since start) %s; first period %s to %s;"
+                + " subscription %s; %d invoices; total %d ms for 32 days%n",
+                Duration.ofNanos(setUp - started).toMillis(), reachedAtMillis, first.periodStart(), first.periodEnd(),
+                subscription, invoicing.invoicesFor(account).size(), elapsed.toMillis());
+        // Since Slice 3 PR-4 the real day-30 timer writes the case off and ends the subscription, before the renewal
+        // date: the renewal runs, finds it ended, and makes no invoice (AT-22 asserts the same).
+        assertThat(renewedOnDay).as("no renewal invoice").isEqualTo(-1);
+        assertThat(subscription).isEqualTo("ENDED WRITE_OFF");
         assertThat(reachedAtMillis).containsOnlyKeys(3, 7, 10, 30);
         assertThat(elapsed).as("D10: 30 days in under a minute").isLessThan(Duration.ofMinutes(1));
     }

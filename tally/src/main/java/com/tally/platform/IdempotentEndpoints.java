@@ -21,8 +21,11 @@ public interface IdempotentEndpoints {
      *       {@code Retry-After} the seconds left of its request timeout;</li>
      *   <li>the same request already answered: the stored response;</li>
      *   <li>otherwise {@code act}, and its response stored, in one transaction. An exception {@code refusals}
-     *       maps to a response rolls {@code act} back; that response is then stored on its own. Any other
-     *       exception releases the key and is rethrown.</li>
+     *       maps to a response rolls {@code act} back; that response is then stored on its own. A concurrent change
+     *       ({@code ConcurrencyFailureException}: another commit changed what {@code act} read) rolls it back,
+     *       releases the key and answers 409 {@code /problems/concurrent-change} with {@code Retry-After}, not
+     *       stored, so the same request sent again acts again (WAR-57). Any other exception releases the key and is
+     *       rethrown.</li>
      * </ul>
      *
      * @param scope   who the key belongs to: the account, until callers are authenticated

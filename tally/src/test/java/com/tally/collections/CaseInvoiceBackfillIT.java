@@ -54,4 +54,25 @@ class CaseInvoiceBackfillIT {
         assertThat(jdbc.queryForObject("SELECT status FROM collections.collection_case WHERE id = ?", String.class,
                 open)).isEqualTo("OPEN");
     }
+
+    /** Slice 3 PR-4's migration (V40): an open case of today, which had only its day-3 retry, gets the rest. */
+    @Test
+    void anOpenCaseOfTodayGetsTheRestOfTheTimetable() {
+        ChaosDatabase db = ChaosDatabase.create("case_timetable_backfill");
+        flyway(db, "39").migrate();
+        JdbcTemplate jdbc = db.jdbc();
+        UUID open = oneCase(jdbc, UUID.randomUUID(), "OPEN", null);
+        oneCase(jdbc, UUID.randomUUID(), "CLOSED", "2026-11-04T00:00:00Z");
+
+        flyway(db, "40").migrate();
+
+        assertThat(jdbc.queryForList("SELECT queue_key || ' ' || payload || ' ' || (due_at - '2026-11-01T00:00:00Z')"
+                + " FROM (SELECT queue_key, payload, due_at FROM collections.retry_queue UNION ALL"
+                + " SELECT queue_key, payload, due_at FROM collections.timer_queue) q ORDER BY due_at", String.class))
+                .as("the closed case gets none")
+                .containsExactly(open + ":2 " + open + ",2 7 days",
+                        open + ":OVERDUE " + open + ",OVERDUE 7 days 01:00:00",
+                        open + ":BLOCKED " + open + ",BLOCKED 10 days",
+                        open + ":WRITTEN_OFF " + open + ",WRITTEN_OFF 30 days");
+    }
 }

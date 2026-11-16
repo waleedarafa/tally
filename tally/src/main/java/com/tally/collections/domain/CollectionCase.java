@@ -48,14 +48,43 @@ public class CollectionCase {
     protected CollectionCase() {
     }
 
-    /** Closes the case. Returns false, changing nothing, if it is not open. */
+    /** Closes the case: none of its invoices is unpaid. Returns false, changing nothing, if it is closed already. */
     public boolean close(Instant now) {
-        if (status != CaseStatus.OPEN) {
+        if (!hasDebt()) {
             return false;
         }
         status = CaseStatus.CLOSED;
         closedAt = now;
         return true;
+    }
+
+    /**
+     * A step of the timetable, by its rule, not by one start state (review of #76): it moves a case with a debt open
+     * forward to its state, and never back. The day-10 step blocks a case that is OPEN or OVERDUE; the day-30 step
+     * writes off one that is OPEN, OVERDUE or BLOCKED. Returns false, changing nothing, if the case is there already,
+     * further on, or closed.
+     */
+    public boolean take(CaseStep step) {
+        if (!hasDebt() || rank(status) >= rank(step.state())) {
+            return false;
+        }
+        status = step.state();
+        return true;
+    }
+
+    /** Every state but CLOSED has a debt open. */
+    public boolean hasDebt() {
+        return status != CaseStatus.CLOSED;
+    }
+
+    private static int rank(CaseStatus status) {
+        return switch (status) {
+            case OPEN -> 0;
+            case OVERDUE -> 1;
+            case BLOCKED -> 2;
+            case WRITTEN_OFF -> 3;
+            case CLOSED, UNKNOWN -> throw new IllegalStateException("No rank for " + status);
+        };
     }
 
     public UUID id() {

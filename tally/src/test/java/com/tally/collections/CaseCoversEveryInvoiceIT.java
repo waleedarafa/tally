@@ -17,6 +17,8 @@ import com.tally.support.AbstractReconcilingTest;
 import com.tally.support.FakeProvider;
 import java.sql.Connection;
 import java.time.Duration;
+import java.time.ZoneId;
+import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -58,6 +60,11 @@ class CaseCoversEveryInvoiceIT extends AbstractReconcilingTest {
     @AfterEach
     void providerNormal() {
         FakeProvider.mode("NORMAL");
+    }
+
+    /** A real account: closing a case sets its standing (Slice 3 PR-4). It has no subscription. */
+    UUID account() {
+        return accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
     }
 
     void publish(DomainEvent event) {
@@ -104,7 +111,7 @@ class CaseCoversEveryInvoiceIT extends AbstractReconcilingTest {
 
     @Test
     void aDeclineWhileACaseIsOpenJoinsTheCase() {
-        UUID account = UUID.randomUUID();
+        UUID account = account();
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
 
@@ -130,7 +137,7 @@ class CaseCoversEveryInvoiceIT extends AbstractReconcilingTest {
      */
     @Test
     void twoDeclinesAtTheSameTimeGiveOneCaseWithTwoInvoices() throws Exception {
-        UUID account = UUID.randomUUID();
+        UUID account = account();
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
 
@@ -154,7 +161,7 @@ class CaseCoversEveryInvoiceIT extends AbstractReconcilingTest {
 
     @Test
     void theCaseClosesOnlyWhenNoInvoiceIsUnpaid() {
-        UUID account = UUID.randomUUID();
+        UUID account = account();
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
         publish(declined(account, first));
@@ -185,7 +192,7 @@ class CaseCoversEveryInvoiceIT extends AbstractReconcilingTest {
      */
     @Test
     void aPaymentAndAnotherDeclineAtTheSameTimeNeverLeaveAClosedCaseWithAnUnpaidInvoice() throws Exception {
-        UUID account = UUID.randomUUID();
+        UUID account = account();
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
         publish(declined(account, first));
