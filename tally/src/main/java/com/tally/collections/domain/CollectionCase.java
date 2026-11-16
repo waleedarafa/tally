@@ -12,8 +12,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * One Collections case: one open case per account (design.md §5), opened on a declined invoice payment,
- * closed when that invoice is paid. Opened by an atomic insert ({@link CollectionCases#openIfNone}), so
+ * One Collections case: one open case per account (design.md §5), opened on a declined invoice payment.
+ * It covers every unpaid invoice of the account (Slice 3 PR-3; {@code collections.case_invoice}), and closes when
+ * none is unpaid. Opened by an atomic insert ({@link CollectionCases#openIfNone}), so
  * two declines delivered at the same time open one case (CLAUDE.md rule 7).
  */
 @Entity
@@ -26,7 +27,7 @@ public class CollectionCase {
     @Column(name = "account_id", nullable = false)
     private UUID accountId;
 
-    /** The invoice whose payment was declined: the one Collections asks to be collected again. */
+    /** The invoice whose decline opened the case. The case's invoices are in {@code collections.case_invoice}. */
     @Column(name = "invoice_id", nullable = false)
     private UUID invoiceId;
 
