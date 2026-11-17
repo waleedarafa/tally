@@ -782,3 +782,42 @@ tests:
   - eval_time: 7m
     alertname: EventListenerGone
     exp_alerts: []
+- name: CollectionsStepLate fires when a Collections step has been due for over an hour, for 5 minutes
+  interval: 30s
+  input_series:
+  # The timers are not claimed: the oldest due step ages 30 s a sample, from due (0) on.
+  - series: tally_queue_oldest_due_age_seconds{job="tally", instance="tally-1", queue="collections-timers", money="false"}
+    values: 0+30x140
+  alert_rule_test:
+  - eval_time: 65m
+    alertname: CollectionsStepLate
+    exp_alerts: []
+  - eval_time: 65m30s
+    alertname: CollectionsStepLate
+    exp_alerts:
+    - exp_labels:
+        job: tally
+        instance: tally-1
+        queue: collections-timers
+        money: "false"
+        severity: ticket
+        driver: ADR-037
+      exp_annotations:
+        summary: "A Collections step (OVERDUE, BLOCKED or WRITTEN_OFF) has been due for over an hour and has not run."
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/collections-step-late.md
+- name: CollectionsStepLate stays quiet for a step run late but within the hour, and for other queues
+  interval: 30s
+  input_series:
+  # A step 50 minutes late, then run: the age drops to 0.
+  - series: tally_queue_oldest_due_age_seconds{job="tally", instance="tally-1", queue="collections-timers", money="false"}
+    values: 0+30x100 0x40
+  # The retries are a money queue: BillingStalled and BillingBehind cover them.
+  - series: tally_queue_oldest_due_age_seconds{job="tally", instance="tally-1", queue="collections-retry", money="true"}
+    values: 0+30x140
+  # A renewal that waits while its account is BLOCKED moves its due time forward: its age stays near 0 (Slice 3 PR-6).
+  - series: tally_queue_oldest_due_age_seconds{job="tally", instance="tally-1", queue="renewals", money="true"}
+    values: 0x140
+  alert_rule_test:
+  - eval_time: 70m
+    alertname: CollectionsStepLate
+    exp_alerts: []

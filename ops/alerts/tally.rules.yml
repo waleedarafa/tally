@@ -7,6 +7,9 @@
 # - the scrape job is named tally (TallyDown reads up{job="tally"});
 # - Access, the second deployable (ADR-001), is scraped as the job access (AccessDown reads up{job="access"});
 # - honor_labels is false (Prometheus's default), so Tally's own job tag on tally_job_* arrives as exported_job.
+#
+# No rule reads a queue's attempts as failures (#81 review): a renewal that waits while its account is BLOCKED returns
+# to the queue every hour, so its attempts count hours of waiting. Failures are tally_queue_failed. F14 checks it.
 groups:
   - name: tally
     rules:
@@ -87,6 +90,20 @@ groups:
         annotations:
           summary: "Money queue {{ $labels.queue }} has failed items; each waits for a person."
           runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/queue-items-failed.md
+
+      # Slice 3 PR-8 (ADR-037): a step of a Collections case (OVERDUE, BLOCKED, WRITTEN_OFF) is due and has not run.
+      # The timer queue is not a money queue, so BillingStalled does not see it; a stopped poller shows here too. The
+      # retries are on the money retry queue, which BillingStalled and BillingBehind cover. A ticket: a late step
+      # delays a block or a write-off, and the timer acts on its rule from the state it finds when it runs.
+      - alert: CollectionsStepLate
+        expr: tally_queue_oldest_due_age_seconds{queue="collections-timers"} > 3600
+        for: 5m
+        labels:
+          severity: ticket
+          driver: ADR-037
+        annotations:
+          summary: "A Collections step (OVERDUE, BLOCKED or WRITTEN_OFF) has been due for over an hour and has not run."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/collections-step-late.md
 
       - alert: QueueItemsFailed
         expr: tally_queue_failed{money="false"} > 0
