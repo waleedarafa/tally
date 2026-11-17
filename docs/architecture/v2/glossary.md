@@ -42,7 +42,9 @@ From the Step 7 canvas and `design.md` §2 and §4.
 | Billing time | 00:00 on the billing day in the account's time zone, when a renewal falls due (H8, `BillingCalendar`) |
 | Plan change | An upgrade or downgrade, with its effective date. Upgrade at once; downgrade at period end (S3) |
 | Cancellation | An end date, always a period end; no refund for the current period (S4, H11) |
-| States | TRIAL, ACTIVE, CANCELLING, ENDED; ENDED refuses everything (`design.md` §5; not built yet) |
+| States | TRIAL, ACTIVE, CANCELLING, ENDED; ENDED refuses everything (`design.md` §5). Slice 3 builds ACTIVE and ENDED only (proposed ADR-038) |
+| Ended | A subscription that will never renew: written off (`WRITE_OFF`) or its first invoice declined (`FIRST_PAYMENT_DECLINED`, 025). The account may sign up again: one **live** subscription per account |
+| Waiting renewal | A renewal due while the account is BLOCKED: no new period and no invoice; it runs once the standing is GOOD again, and the period keeps its dates (decision 3, I6) |
 
 ## Access (the deployable in `access/`, `com.tallyaccess`)
 
@@ -90,10 +92,13 @@ Billing's side of the access facts (ADR-033). It holds no access rule.
 
 | Word | Meaning |
 |---|---|
-| Case | One per account: opened on a declined payment, closed when the invoice is paid (`design.md` §5) |
-| Schedule | Finance's steps: retry on day 3 and day 7, overdue on day 7, block on day 10, write off on day 30 (H4) |
-| Overdue | Unpaid after the second retry |
-| Write-off | Debt given up; the account is closed. A payment after write-off clears the debt but does not bring the subscription back (H11) |
+| Case | One per account, covering every unpaid invoice of the account: opened on a declined payment of a renewal, closed when none of its invoices is unpaid (`design.md` §5; proposed ADR-037). A declined first invoice opens no case: the subscription ends (025) |
+| Schedule | Finance's steps, counted from the case's first decline: retry on day 3 and day 7, overdue one hour after the day-7 retry is asked, block on day 10, write off on day 30, each only if a debt is still open (H4) |
+| Step | A timer of the schedule that changes the case's state, and the standing with it: OVERDUE, BLOCKED, WRITTEN_OFF. It acts on its rule from the state it finds, after asking Invoicing what is still unpaid |
+| Overdue | Unpaid one hour after the second retry was asked: a state of the case, and a standing |
+| Write-off | Debt given up on day 30: the subscription ends, and the standing stays BLOCKED until the debt is paid (decision 4). A payment after write-off clears the debt and makes the standing GOOD, but does not bring the subscription back (H11) |
+| Pay now | The household asks Tally to try the payment again, with the card the account has, for every unpaid invoice of its case, in any state with a debt open (decision 2). A decline changes no state |
+| Retry number | One sequence for each case: every request, scheduled or "pay now", takes the next number at the moment it is asked (#80, option B) |
 
 ## Payment (`payment`)
 
@@ -113,8 +118,8 @@ Billing's side of the access facts (ADR-033). It holds no access rule.
 | Word | Meaning |
 |---|---|
 | Account | Who pays |
-| Standing | Good, overdue, blocked, written off. Only Collections changes it (R3) |
-| Blocked | A standing: no new invoices, and Tally-billed sources of access stop counting (I6; Access rule 2) |
+| Standing | Good, overdue or blocked. Only Collections changes it (R3), in the same transaction as the case (rule 5). A written-off case keeps the standing blocked |
+| Blocked | A standing: no new invoices (a renewal waits), and Tally-billed sources of access stop counting (I6; Access rule 2) |
 | Time zone | The account's zone; it decides what "due" means (H8) |
 
 ## Platform and events (`platform`, `shared`)

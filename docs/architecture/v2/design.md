@@ -88,12 +88,12 @@ What the picture shows: one hub (Account, conformed to by every context), no cyc
 | Module | Public API | Events |
 |---|---|---|
 | `offers` | `Pricing.quote(QuoteRequest) → PriceQuote`; `Offers.currentVersion(offerId, accountId)` | `OfferVersionPublished` |
-| `subscription` | `SubscriptionApi.subscribe(accountId, offerId)` (the design's `Subscriptions.start`), `changePlan`, `cancel(id, requestedAt)`, `cancelForWriteOff` | `SubscriptionChanged` with types: started, plan changed, period renewed, renewal reversed, cancelled. Since Slice 1R PR-5 it carries the offer version and the current period (number, start, end) |
-| `invoicing` | `InvoicingApi.requestPaymentAgain(invoiceId, retry)` (the retry number makes a repeated call harmless), `invoicesFor(accountId)` | `InvoiceIssued`, `InvoicePaymentDeclined`, `InvoicePaid`, `CreditNoteIssued` |
+| `subscription` | `SubscriptionApi.subscribe(accountId, offerId)` (the design's `Subscriptions.start`), `changePlan`, `cancel(id, requestedAt)`; since Slice 3: `endLiveSubscriptions(accountId, reason)` and `end(subscriptionId, reason)`, reason `WRITE_OFF` or `FIRST_PAYMENT_DECLINED` (the design's `cancelForWriteOff`; Collections is the one caller) | `SubscriptionChanged` with types: started, plan changed, period renewed, renewal reversed, cancelled; built so far: `STARTED`, `PERIOD_RENEWED`, `ENDED` (Slice 3). Since Slice 1R PR-5 it carries the offer version and the current period (number, start, end) |
+| `invoicing` | `InvoicingApi.requestPaymentAgain(invoiceId, retry)` (the retry number makes a repeated call harmless), `invoicesFor(accountId)`, `invoicesForSubscription(subscriptionId)` (Collections tells the first invoice: the earliest period, 025) | `InvoiceIssued`, `InvoicePaymentDeclined`, `InvoicePaid`, `CreditNoteIssued` |
 | `payment` | `PaymentApi.requestCollection(reference, accountId, amount, paymentToken)` (the design's `Payments.collect`), `collectAgain(reference, retry)` (Collections' retry of a declined reference, via Invoicing; looks the reference up first, ADR-026), `status(reference)` | `PaymentSucceeded`, `PaymentFailed` with reason declined; technical failures publish nothing |
 | `account` | `Accounts.get(id)`; `AccountStanding.set(id, standing, cause)` | `StandingChanged`: event ID, time, account ID, sequence (the account's version), standing. Published in `AccountStanding.set`'s transaction, only when the standing changes; no cause text |
 | `accessfeed` | none | none in process. Sends `AccessFacts` to the event log (ADR-033) |
-| `collections` | `Collections.caseFor(accountId)` | none |
+| `collections` | `Collections.caseFor(accountId)` (state, invoices, unpaid invoices, retries); `requestPayment(accountId)` ("pay now", Slice 3) | none. Calls `AccountStanding.set` in the case's transaction, and `SubscriptionApi.end…` for a write-off or a declined first invoice |
 
 ```java
 public record PriceQuote(UUID subscriptionId, String offerId, int offerVersion,
