@@ -1,6 +1,7 @@
 package com.tally.subscription.application;
 
 import com.tally.account.AccountApi;
+import com.tally.account.Standing;
 import com.tally.platform.DurableQueue;
 import com.tally.platform.DurableQueues;
 import com.tally.platform.Outcome;
@@ -13,6 +14,8 @@ import com.tally.subscription.domain.Subscription;
 import com.tally.subscription.domain.SubscriptionPeriod;
 import com.tally.subscription.domain.SubscriptionStatus;
 import com.tally.subscription.domain.Subscriptions;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -46,13 +49,17 @@ class Renewals implements QueueHandler {
     private final SubscriptionChangeLog changes;
     private final AccountApi accounts;
     private final TransactionTemplate transactions;
+    private final Duration blockedRecheck;
+    private final Clock clock;
 
     Renewals(DurableQueues queues, RenewalProperties properties, Subscriptions subscriptions,
-            SubscriptionChangeLog changes, AccountApi accounts, TransactionTemplate transactions) {
+            SubscriptionChangeLog changes, AccountApi accounts, TransactionTemplate transactions, Clock clock) {
         this.subscriptions = subscriptions;
         this.changes = changes;
         this.accounts = accounts;
         this.transactions = transactions;
+        this.blockedRecheck = properties.blockedRecheck();
+        this.clock = clock;
         // Pollers start only once the application is up, so registering here is safe.
         this.queue = queues.register(DEFINITION.withWorkers(properties.renewalWorkers()), this);
     }
@@ -76,6 +83,12 @@ class Renewals implements QueueHandler {
         String[] payload = item.payload().split(",");
         UUID subscriptionId = UUID.fromString(payload[0]);
         int period = Integer.parseInt(payload[1]);
+        if (blocked(subscriptionId)) {
+            // Decision 3 (I6): no new period and no new invoice while the account is BLOCKED. The item comes back
+            // and looks again; the period keeps its dates. Not a failure: the renewal row stays scheduled.
+            log.info("The account of subscription {} is BLOCKED: period {} waits", subscriptionId, period);
+            return Outcome.retryAt(clock.instant().plus(blockedRecheck));
+        }
         try {
             transactions.executeWithoutResult(tx -> renew(subscriptionId, period));
         } catch (OptimisticLockingFailureException | DataIntegrityViolationException e) {
@@ -88,6 +101,17 @@ class Renewals implements QueueHandler {
             log.info("Period {} of subscription {} was already renewed", period, subscriptionId);
         }
         return Outcome.done();
+    }
+
+    /**
+     * Whether the subscription's account is BLOCKED now. A policy, not an invariant (design.md §2, I6): a standing set
+     * just after this read lets one renewal through, and its invoice joins the case.
+     */
+    private boolean blocked(UUID subscriptionId) {
+        return Boolean.TRUE.equals(transactions.execute(tx -> subscriptions.find(subscriptionId)
+                .filter(s -> s.status() == SubscriptionStatus.ACTIVE)
+                .flatMap(s -> accounts.get(s.accountId()))
+                .map(account -> account.standing() == Standing.BLOCKED).orElse(false)));
     }
 
     /** In a fresh transaction, after the failed one rolled back. */
