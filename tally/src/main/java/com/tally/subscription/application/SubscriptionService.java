@@ -89,6 +89,17 @@ class SubscriptionService implements SubscriptionApi {
         return ended;
     }
 
+    /** Under the subscription's row lock: of two ends at the same time, the second finds it ended. */
+    @Override
+    @Transactional
+    public boolean end(UUID subscriptionId, EndReason reason) {
+        return subscriptions.lock(subscriptionId).filter(s -> s.end(reason, clock.instant())).map(ended -> {
+            subscriptions.update(ended);
+            changeLog.record(ended, SubscriptionChangeType.ENDED);
+            return true;
+        }).orElse(false);
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<TimelineEntry> timeline(UUID subscriptionId) {

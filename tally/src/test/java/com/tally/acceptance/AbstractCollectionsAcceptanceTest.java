@@ -90,14 +90,19 @@ abstract class AbstractCollectionsAcceptanceTest extends AbstractProviderIntegra
     UUID signUpAtTheStartOfAMonth() {
         LocalDate first = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC).plusMonths(1).withDayOfMonth(1);
         clock.set(first.atTime(9, 0).toInstant(ZoneOffset.UTC));
-        UUID account = UUID.fromString((String) tally().post().uri("/v1/accounts")
-                .header("Idempotency-Key", UUID.randomUUID().toString())
-                .body(Map.of("currency", "USD", "timeZone", "UTC"))
-                .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { }).get("id"));
+        UUID account = openAccount();
         assertThat(signUp(account)).isEqualTo(201);
         await().atMost(Duration.ofSeconds(15)).until(() -> invoicing.invoicesFor(account).stream()
                 .anyMatch(i -> i.status() == InvoiceStatus.PAID));
         return account;
+    }
+
+    /** Opens an account over HTTP, in USD and UTC. */
+    UUID openAccount() {
+        return UUID.fromString((String) tally().post().uri("/v1/accounts")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .body(Map.of("currency", "USD", "timeZone", "UTC"))
+                .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { }).get("id"));
     }
 
     int signUp(UUID account) {

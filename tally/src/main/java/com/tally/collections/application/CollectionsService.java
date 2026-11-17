@@ -10,6 +10,7 @@ import com.tally.collections.domain.RetryStep;
 import com.tally.invoicing.InvoicePaid;
 import com.tally.invoicing.InvoicePaymentDeclined;
 import com.tally.invoicing.InvoiceStatus;
+import com.tally.invoicing.InvoiceView;
 import com.tally.invoicing.InvoicingApi;
 import com.tally.platform.DurableQueue;
 import com.tally.platform.DurableQueues;
@@ -17,6 +18,8 @@ import com.tally.platform.Outcome;
 import com.tally.platform.QueueDefinition;
 import com.tally.platform.QueueHandler;
 import com.tally.platform.QueueItem;
+import com.tally.subscription.EndReason;
+import com.tally.subscription.SubscriptionApi;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
@@ -60,12 +63,15 @@ class CollectionsService implements Collections, QueueHandler {
     private final CaseSettlement settlement;
     private final CaseTimers timers;
     private final CollectionsTimetable timetable;
+    private final SubscriptionApi subscriptions;
     private final DurableQueue queue;
     private final TransactionTemplate transactions;
     private final Clock clock;
 
     CollectionsService(CollectionCases cases, InvoicingApi invoicing, CaseSettlement settlement, CaseTimers timers,
-            CollectionsTimetable timetable, DurableQueues queues, TransactionTemplate transactions, Clock clock) {
+            CollectionsTimetable timetable, SubscriptionApi subscriptions, DurableQueues queues,
+            TransactionTemplate transactions, Clock clock) {
+        this.subscriptions = subscriptions;
         this.cases = cases;
         this.invoicing = invoicing;
         this.settlement = settlement;
@@ -82,12 +88,25 @@ class CollectionsService implements Collections, QueueHandler {
      * its timetable, in the same transaction. A repeated decline adds nothing. A decline of an invoice Invoicing says is
      * paid (a publication resubmitted late) adds nothing: the case covers unpaid invoices only, and only
      * {@code InvoicePaid} moves it back. A join changes neither the case's state nor the standing.
+     *
+     * <p>A decline of a subscription's first invoice opens no case (025, decision 1 option A): the subscription ends,
+     * with reason {@code FIRST_PAYMENT_DECLINED}, and the household signs up again with a card that works. An invoice
+     * {@code InvoicingApi} does not know is not a first invoice.
      */
     @ApplicationModuleListener
     void on(InvoicePaymentDeclined declined) {
-        if (paid(declined.accountId(), declined.invoiceId())) {
+        Optional<InvoiceView> invoice = invoicing.invoicesFor(declined.accountId()).stream()
+                .filter(i -> i.id().equals(declined.invoiceId())).findFirst();
+        if (invoice.map(i -> i.status() == InvoiceStatus.PAID).orElse(false)) {
             log.info("Invoice {} of account {} is paid; its decline joins no case", declined.invoiceId(),
                     declined.accountId());
+            return;
+        }
+        if (invoice.map(this::firstOfItsSubscription).orElse(false)) {
+            // 025 (decision 1, option A): no case; the subscription ends, and the household signs up again.
+            boolean ended = subscriptions.end(invoice.get().subscriptionId(), EndReason.FIRST_PAYMENT_DECLINED);
+            log.info("The first invoice {} of subscription {} was declined: no case; {}", declined.invoiceId(),
+                    invoice.get().subscriptionId(), ended ? "the subscription ended" : "it had ended already");
             return;
         }
         Instant now = clock.instant();
@@ -117,9 +136,14 @@ class CollectionsService implements Collections, QueueHandler {
         timers.schedule(caseId, firstDecline);
     }
 
-    private boolean paid(UUID accountId, UUID invoiceId) {
-        return invoicing.invoicesFor(accountId).stream()
-                .anyMatch(i -> i.id().equals(invoiceId) && i.status() == InvoiceStatus.PAID);
+    /**
+     * Whether the invoice is its subscription's first: the earliest period of the subscription's invoices, as
+     * {@code InvoicingApi} tells (decided on #75; spike S-1). No field on {@code InvoicePaymentDeclined} says so.
+     */
+    private boolean firstOfItsSubscription(InvoiceView invoice) {
+        return invoice.subscriptionId() != null && invoicing.invoicesForSubscription(invoice.subscriptionId()).stream()
+                .min(Comparator.comparing(InvoiceView::periodStart))
+                .map(earliest -> earliest.id().equals(invoice.id())).orElse(false);
     }
 
     /**

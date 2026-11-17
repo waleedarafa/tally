@@ -215,9 +215,8 @@ class CaseCoversEveryInvoiceIT extends AbstractReconcilingTest {
     /** The retry asks for each unpaid invoice of the case, with the case's retry number. */
     @Test
     void theRetryAsksForEveryUnpaidInvoice() {
-        FakeProvider.mode("DECLINE_HARD(100)");
-        UUID account = subscribedAccount();
-        InvoiceView first = firstInvoice(account);
+        InvoiceView first = declinedRenewal("DECLINE_HARD(100)");
+        UUID account = first.accountId();
         awaitAttempt(first.paymentReference(), AttemptState.DECLINED, Duration.ofSeconds(15));
         await().atMost(Duration.ofSeconds(15)).until(() -> collections.caseFor(account).isPresent());
         UUID second = UUID.randomUUID();

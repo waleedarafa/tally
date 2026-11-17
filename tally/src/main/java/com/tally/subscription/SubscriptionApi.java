@@ -23,6 +23,13 @@ public interface SubscriptionApi {
      */
     List<UUID> endLiveSubscriptions(UUID accountId, EndReason reason);
 
+    /**
+     * Ends this subscription if it is live, and publishes {@link SubscriptionChanged} of type ENDED. Returns whether
+     * this call ended it: false if it has ended already or does not exist, so a repeated end changes nothing. Ends no
+     * other subscription of the account (Slice 3 PR-7: a late repeat of an old decline never ends a newer one).
+     */
+    boolean end(UUID subscriptionId, EndReason reason);
+
     /** Every change to the subscription, oldest first. Empty for an unknown subscription. */
     List<TimelineEntry> timeline(UUID subscriptionId);
 }

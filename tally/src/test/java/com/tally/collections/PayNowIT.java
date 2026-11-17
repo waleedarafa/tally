@@ -127,9 +127,8 @@ class PayNowIT extends AbstractReconcilingTest {
     /** A declined "pay now" changes no state; the timers decide. */
     @Test
     void aDeclinedPayNowChangesNoState() {
-        FakeProvider.mode("DECLINE_HARD(100)");
-        UUID account = subscribedAccount();
-        InvoiceView invoice = firstInvoice(account);
+        InvoiceView invoice = declinedRenewal("DECLINE_HARD(100)");
+        UUID account = invoice.accountId();
         awaitAttempt(invoice.paymentReference(), AttemptState.DECLINED, Duration.ofSeconds(15));
         await().atMost(Duration.ofSeconds(15)).until(() -> collections.caseFor(account).isPresent());
         Instant first = theCase(account).openedAt();
@@ -185,9 +184,8 @@ class PayNowIT extends AbstractReconcilingTest {
      */
     @Test
     void anEarlyDeclinedPayNowLeavesTheDayThreeRetryToBeMade() {
-        FakeProvider.mode("DECLINE_HARD(100)");
-        UUID account = subscribedAccount();
-        InvoiceView invoice = firstInvoice(account);
+        InvoiceView invoice = declinedRenewal("DECLINE_HARD(100)");
+        UUID account = invoice.accountId();
         awaitAttempt(invoice.paymentReference(), AttemptState.DECLINED, Duration.ofSeconds(15));
         await().atMost(Duration.ofSeconds(15)).until(() -> collections.caseFor(account).isPresent());
         Instant first = theCase(account).openedAt();

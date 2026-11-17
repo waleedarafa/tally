@@ -97,12 +97,13 @@ class CaseTimetableIT extends AbstractReconcilingTest {
     }
 
     /**
-     * Moves the clock to noon on the 1st of a month of 31 days, so a subscription started now renews after day 30 of a
-     * case opened on its first invoice. The clock is the context's: earlier tests of the class have moved it.
+     * Moves the clock to noon on the 1st of a month followed by one of 31 days, so a subscription started now renews on
+     * the 1st of that long month and renews again after day 30 of a case opened on that renewal. The clock is the
+     * context's: earlier tests of the class have moved it.
      */
     void atTheStartOfALongMonth() {
         LocalDate first = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC).plusMonths(1).withDayOfMonth(1);
-        while (first.lengthOfMonth() != 31) {
+        while (first.plusMonths(1).lengthOfMonth() != 31) {
             first = first.plusMonths(1);
         }
         clock.set(first.atTime(12, 0).toInstant(ZoneOffset.UTC));
@@ -183,9 +184,8 @@ class CaseTimetableIT extends AbstractReconcilingTest {
      */
     @Test
     void aTimerAsksInvoicingAndClosesACaseWhoseInvoiceIsPaid() {
-        FakeProvider.mode("DECLINE_HARD(100)");
-        UUID account = subscribedAccount();
-        InvoiceView invoice = firstInvoice(account);
+        InvoiceView invoice = declinedRenewal("DECLINE_HARD(100)");
+        UUID account = invoice.accountId();
         awaitAttempt(invoice.paymentReference(), AttemptState.DECLINED, Duration.ofSeconds(15));
         await().atMost(Duration.ofSeconds(15)).until(() -> collections.caseFor(account).isPresent());
         Instant first = theCase(account).openedAt();
@@ -196,7 +196,7 @@ class CaseTimetableIT extends AbstractReconcilingTest {
         jdbc.update("UPDATE collections.collection_case SET status = 'OPEN', closed_at = NULL WHERE account_id = ?",
                 account);
         jdbc.update("UPDATE collections.case_invoice SET paid_at = NULL WHERE invoice_id = ?", invoice.id());
-        assertThat(invoicing.invoicesFor(account).getFirst().status()).isEqualTo(InvoiceStatus.PAID);
+        assertThat(invoicing.invoicesFor(account).getLast().status()).isEqualTo(InvoiceStatus.PAID);
 
         day(first, 10, account);
 
@@ -260,9 +260,8 @@ class CaseTimetableIT extends AbstractReconcilingTest {
     @Test
     void theWriteOffEndsTheSubscriptionAndAPaymentLaterMakesTheStandingGood() {
         atTheStartOfALongMonth();
-        FakeProvider.mode("DECLINE_HARD(100)");
-        UUID account = subscribedAccount();
-        InvoiceView invoice = firstInvoice(account);
+        InvoiceView invoice = declinedRenewal("DECLINE_HARD(100)");
+        UUID account = invoice.accountId();
         awaitAttempt(invoice.paymentReference(), AttemptState.DECLINED, Duration.ofSeconds(15));
         await().atMost(Duration.ofSeconds(15)).until(() -> collections.caseFor(account).isPresent());
         Instant first = theCase(account).openedAt();

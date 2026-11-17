@@ -3,6 +3,8 @@ package com.tally.support;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.account.AccountApi;
+import com.tally.collections.Collections;
+import com.tally.invoicing.InvoiceStatus;
 import com.tally.invoicing.InvoiceView;
 import com.tally.invoicing.InvoicingApi;
 import com.tally.payment.AttemptState;
@@ -13,6 +15,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Currency;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,11 +61,35 @@ public abstract class AbstractReconcilingTest extends AbstractProviderIntegratio
     }
 
     protected UUID subscribedAccount() {
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("Europe/London")).id();
+        UUID account = accounts.open(Currency.getInstance("USD"), LONDON).id();
         accounts.recordPaymentToken(account, FakeProvider.token());
         subscriptions.subscribe(account, "STANDARD");
         return account;
     }
+
+    /**
+     * A subscribed account whose first invoice is paid and whose renewal, a month later, is declined in {@code mode}:
+     * since Slice 3 PR-7 a declined first invoice ends the subscription and opens no case (025), so a Collections case
+     * starts from a renewal. Moves the clock to the renewal; returns the renewal's invoice once its attempt is
+     * declined and the case is open. The fake stays in {@code mode}.
+     */
+    protected InvoiceView declinedRenewal(String mode) {
+        UUID account = subscribedAccount();
+        await().atMost(Duration.ofSeconds(15)).until(() -> firstInvoice(account).status() == InvoiceStatus.PAID);
+        Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(15));
+        FakeProvider.mode(mode);
+        clock.set(firstInvoice(account).periodEnd().atStartOfDay(LONDON).toInstant());
+        await().atMost(Duration.ofSeconds(15)).until(() -> invoicing.invoicesFor(account).size() == 2);
+        InvoiceView renewal = invoicing.invoicesFor(account).getLast();
+        await().atMost(Duration.ofSeconds(15)).until(() -> cases.caseFor(account).isPresent());
+        return renewal;
+    }
+
+    /** The time zone of {@link #subscribedAccount()}. */
+    protected static final ZoneId LONDON = ZoneId.of("Europe/London");
+
+    @Autowired
+    private Collections cases;
 
     protected InvoiceView firstInvoice(UUID account) {
         await().atMost(Duration.ofSeconds(10)).until(() -> !invoicing.invoicesFor(account).isEmpty());

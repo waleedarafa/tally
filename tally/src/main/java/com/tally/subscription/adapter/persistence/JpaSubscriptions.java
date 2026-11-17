@@ -54,6 +54,11 @@ class JpaSubscriptions implements Subscriptions {
     }
 
     @Override
+    public Optional<Subscription> lock(UUID subscriptionId) {
+        return Optional.ofNullable(entities.find(Subscription.class, subscriptionId, LockModeType.PESSIMISTIC_WRITE));
+    }
+
+    @Override
     public List<Subscription> lockLive(UUID accountId) {
         return entities.createQuery("SELECT s FROM Subscription s WHERE s.accountId = :account AND s.status = :live",
                 Subscription.class).setParameter("account", accountId).setParameter("live", SubscriptionStatus.ACTIVE)
