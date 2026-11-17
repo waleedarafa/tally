@@ -4,13 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.account.AccountApi;
+import com.tally.account.AccountStanding;
+import com.tally.account.Standing;
 import com.tally.invoicing.InvoiceStatus;
+import com.tally.invoicing.InvoiceView;
 import com.tally.invoicing.InvoicingApi;
 import com.tally.platform.InvariantCheck;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -107,6 +111,45 @@ class NextRenewalScheduledIT extends AbstractProviderIntegrationTest {
         await().atMost(Duration.ofSeconds(15)).until(() -> jdbc.queryForObject("SELECT count(*) FROM"
                 + " subscription.renewal WHERE queue_key LIKE ? AND status = 'DONE'", Long.class, account + ":%") == 1);
 
+        assertThat(nextRenewalScheduled.violations()).isEqualTo(before);
+    }
+
+    @Autowired
+    AccountStanding standing;
+
+    /**
+     * Slice 3 PR-6 (decision 3; I6): the renewal waits while the account is BLOCKED. No new period and no new invoice;
+     * the renewal row stays scheduled, so the invariant still holds. Once the standing is GOOD again, the renewal runs
+     * within one day, and the period keeps its dates.
+     */
+    @Test
+    void aRenewalWaitsWhileTheAccountIsBlockedAndRunsWithinOneDayOfGood() {
+        UUID account = subscribedAccount();
+        LocalDate renewal = firstPeriodStart(account).plusMonths(1);
+        Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(10));
+        long before = nextRenewalScheduled.violations();
+        standing.set(account, Standing.BLOCKED, "NextRenewalScheduledIT");
+
+        Instant due = renewal.atStartOfDay(ZoneId.of("UTC")).toInstant();
+        for (int day = 0; day <= 3; day++) {
+            clock.set(due.plus(Duration.ofDays(day)).plus(Duration.ofMinutes(5)));
+            Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(10));
+            assertThat(invoicing.invoicesFor(account)).as("no new invoice while blocked, day %d", day).hasSize(1);
+        }
+        assertThat(nextRenewalScheduled.violations()).as("the renewal still waits, scheduled").isEqualTo(before);
+
+        standing.set(account, Standing.GOOD, "NextRenewalScheduledIT, paid");
+        Instant good = clock.instant();
+        while (invoicing.invoicesFor(account).size() < 2 && clock.instant().isBefore(good.plus(Duration.ofDays(1)))) {
+            clock.advance(Duration.ofMinutes(30));
+            Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(10));
+        }
+
+        assertThat(Duration.between(good, clock.instant())).as("within one day of GOOD")
+                .isLessThanOrEqualTo(Duration.ofDays(1));
+        InvoiceView renewed = invoicing.invoicesFor(account).get(1);
+        assertThat(renewed.periodStart()).as("the period keeps its dates").isEqualTo(renewal);
+        Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(10));
         assertThat(nextRenewalScheduled.violations()).isEqualTo(before);
     }
 }
