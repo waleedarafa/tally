@@ -30,7 +30,8 @@ FROM payment.collection_queue
 WHERE due_at <= now() OR status IN ('IN_PROCESSING', 'FAILED')
 GROUP BY status;
 
--- Items a worker holds, oldest first: a hung worker shows here.
+-- Items a worker holds, oldest first: a hung worker shows here. On subscription.renewal, attempts are not failures:
+-- a renewal that waits while its account is BLOCKED returns to the queue every hour (Slice 3 PR-6).
 SELECT id, queue_key, claimed_by, claimed_at, attempts
 FROM payment.collection_queue
 WHERE status = 'IN_PROCESSING'

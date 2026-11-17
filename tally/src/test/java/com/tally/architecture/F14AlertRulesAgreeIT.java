@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -36,7 +37,10 @@ import org.yaml.snakeyaml.Yaml;
  *   <li>a rule reads a {@code tally_} metric that billing does not export. A {@code tally_access_} metric is
  *       Access's, the second deployable: F14's Access side ({@code com.tallyaccess.F14AccessMetricsIT}) checks it
  *       against a scrape of Access (Slice 2 PR-8);</li>
- *   <li>a {@code page} alert has no unit test where it fires and none where it stays quiet.</li>
+ *   <li>a {@code page} alert has no unit test where it fires and none where it stays quiet;</li>
+ *   <li>a rule reads a queue's attempts (#81 review): a renewal that waits while its account is BLOCKED returns to
+ *       the queue every hour, so its attempts count hours of waiting, not failures. Failures are
+ *       {@code tally_queue_failed}.</li>
  * </ol>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -65,6 +69,13 @@ class F14AlertRulesAgreeIT extends AbstractIntegrationTest {
     @BeforeEach
     void readRules() throws IOException {
         rules = rules(RULES);
+    }
+
+    /** #81 review: a queue's attempts count hours of waiting for a renewal of a BLOCKED account, not failures. */
+    @Test
+    void noRuleReadsAQueuesAttempts() {
+        assertThat(rules).extracting(rule -> rule.get("alert") + ": " + rule.get("expr"))
+                .noneMatch(rule -> rule.toLowerCase(Locale.ROOT).contains("attempt"));
     }
 
     @Test
