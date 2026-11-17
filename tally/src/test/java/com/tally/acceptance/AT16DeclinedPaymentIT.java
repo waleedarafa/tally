@@ -23,8 +23,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * the payment closes the case. Extended (PR-6 review, ADR-026): a decline the provider reported
  * for a charge that went through, followed by the day-3 retry, charges once and closes the case.
  *
- * <p>The decline is made with the fake in a decline mode, which is reset as soon as the attempt is
- * declined: other test contexts, on later clocks, may run the day-3 timer early.
+ * <p>Changed in Slice 3 PR-7: the decline is on a renewal, not on the first invoice, whose decline now ends the
+ * subscription and opens no case (025; AT-24). The rest is as before. The decline is made with the fake in a decline
+ * mode, which is reset as soon as the attempt is declined.
  */
 class AT16DeclinedPaymentIT extends AbstractReconcilingTest {
 
@@ -37,13 +38,16 @@ class AT16DeclinedPaymentIT extends AbstractReconcilingTest {
         return collections.caseFor(account).orElseThrow();
     }
 
-    InvoiceView declinedFirstInvoice(String mode) {
-        FakeProvider.mode(mode);
-        UUID account = subscribedAccount();
-        InvoiceView invoice = firstInvoice(account);
+    InvoiceView declinedRenewalInvoice(String mode) {
+        InvoiceView invoice = declinedRenewal(mode);
         awaitAttempt(invoice.paymentReference(), AttemptState.DECLINED, Duration.ofSeconds(15));
         FakeProvider.mode("NORMAL");
         return invoice;
+    }
+
+    InvoiceView now(InvoiceView invoice) {
+        return invoicing.invoicesFor(invoice.accountId()).stream().filter(i -> i.id().equals(invoice.id()))
+                .findFirst().orElseThrow();
     }
 
     List<String> attempts(String reference) {
@@ -62,7 +66,7 @@ class AT16DeclinedPaymentIT extends AbstractReconcilingTest {
 
     @Test
     void aDeclineOpensOneCaseTheDayThreeRetryCollectsAndThePaymentClosesIt() {
-        InvoiceView invoice = declinedFirstInvoice("DECLINE_HARD(100)");
+        InvoiceView invoice = declinedRenewalInvoice("DECLINE_HARD(100)");
         UUID account = invoice.accountId();
         CaseView opened = awaitCase(account, CaseStatus.OPEN);
         assertThat(opened.invoiceId()).isEqualTo(invoice.id());
@@ -72,7 +76,7 @@ class AT16DeclinedPaymentIT extends AbstractReconcilingTest {
 
         CaseView closed = awaitCase(account, CaseStatus.CLOSED);
         System.out.println("AT-16 declined: " + attempts(invoice.paymentReference()) + ", case " + closed);
-        assertThat(invoicing.invoicesFor(account).getFirst().status()).isEqualTo(InvoiceStatus.PAID);
+        assertThat(now(invoice).status()).isEqualTo(InvoiceStatus.PAID);
         assertThat(attempts(invoice.paymentReference())).as("a new attempt, same reference, its own key")
                 .containsExactly(invoice.paymentReference() + ":1=DECLINED", invoice.paymentReference() + ":2=SUCCEEDED");
         assertThat(cases(account)).as("one case").isEqualTo(1);
@@ -87,7 +91,7 @@ class AT16DeclinedPaymentIT extends AbstractReconcilingTest {
      */
     @Test
     void aLyingDeclineFollowedByTheDayThreeRetryChargesOnceAndClosesTheCase() {
-        InvoiceView invoice = declinedFirstInvoice("LIE");
+        InvoiceView invoice = declinedRenewalInvoice("LIE");
         UUID account = invoice.accountId();
         awaitCase(account, CaseStatus.OPEN);
 
@@ -96,7 +100,7 @@ class AT16DeclinedPaymentIT extends AbstractReconcilingTest {
         awaitCase(account, CaseStatus.CLOSED);
         System.out.println("AT-16 lying decline: " + attempts(invoice.paymentReference()) + ", charges "
                 + FakeProvider.chargeCount(invoice.paymentReference()));
-        assertThat(invoicing.invoicesFor(account).getFirst().status()).isEqualTo(InvoiceStatus.PAID);
+        assertThat(now(invoice).status()).isEqualTo(InvoiceStatus.PAID);
         assertThat(attempts(invoice.paymentReference())).as("no new attempt")
                 .containsExactly(invoice.paymentReference() + ":1=SUCCEEDED");
         assertThat(FakeProvider.chargeCount(invoice.paymentReference())).as("charged once").isEqualTo(1);

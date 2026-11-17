@@ -43,7 +43,8 @@ import org.springframework.test.context.TestPropertySource;
  * test waits until the work of the day is done (Quiesce) before each move.
  *
  * <p>Since Slice 3 PR-4 the real timers run beside the stand-ins, and the day-30 write-off ends the subscription
- * before its renewal date, so no renewal invoice follows. The spike now measures that; AT-22 is D10's real test.
+ * before its renewal date, so no renewal invoice follows. The spike now measures that; AT-22 is D10's real test. Since
+ * PR-7 the case starts from a declined renewal: a declined first invoice ends the subscription and opens no case.
  */
 @Import(SpikeCollectionsS3ThirtyDaysIT.Timers.class)
 @TestPropertySource(properties = "tally.test.context=spike-collections-s3")
@@ -80,9 +81,8 @@ class SpikeCollectionsS3ThirtyDaysIT extends AbstractReconcilingTest {
     @Test
     void thirtyDaysWithFourTimersAndARenewalRunInUnderOneMinute() {
         long started = System.nanoTime();
-        FakeProvider.mode("DECLINE_HARD(100)");
-        UUID account = subscribedAccount();
-        InvoiceView first = firstInvoice(account);
+        InvoiceView first = declinedRenewal("DECLINE_HARD(100)");
+        UUID account = first.accountId();
         awaitAttempt(first.paymentReference(), AttemptState.DECLINED, Duration.ofSeconds(15));
         await().atMost(Duration.ofSeconds(15)).until(() -> collections.caseFor(account)
                 .map(c -> c.status() == CaseStatus.OPEN).orElse(false));
@@ -103,7 +103,7 @@ class SpikeCollectionsS3ThirtyDaysIT extends AbstractReconcilingTest {
         for (int day = 1; day <= 33; day++) {
             Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(30));
             // The work of the day before is done: was the renewal among it?
-            if (renewedOnDay < 0 && invoicing.invoicesFor(account).size() == 2) {
+            if (renewedOnDay < 0 && invoicing.invoicesFor(account).size() == 3) {
                 renewedOnDay = day - 1;
             }
             if (day == 33) {
@@ -120,12 +120,12 @@ class SpikeCollectionsS3ThirtyDaysIT extends AbstractReconcilingTest {
         String subscription = jdbc.queryForObject("SELECT status || ' ' || coalesce(end_reason, '-')"
                 + " FROM subscription.subscription WHERE account_id = ?", String.class, account);
 
-        System.out.printf("SPIKE-C-S3 set-up %d ms; milestones (day=ms since start) %s; first period %s to %s;"
+        System.out.printf("SPIKE-C-S3 set-up %d ms; milestones (day=ms since start) %s; declined renewal's period %s to %s;"
                 + " subscription %s; %d invoices; total %d ms for 32 days%n",
                 Duration.ofNanos(setUp - started).toMillis(), reachedAtMillis, first.periodStart(), first.periodEnd(),
                 subscription, invoicing.invoicesFor(account).size(), elapsed.toMillis());
-        // Since Slice 3 PR-4 the real day-30 timer writes the case off and ends the subscription, before the renewal
-        // date: the renewal runs, finds it ended, and makes no invoice (AT-22 asserts the same).
+        // Since Slice 3 PR-4 the real day-30 timer writes the case off and ends the subscription; since PR-6 the next
+        // renewal, due while the account is BLOCKED, waits, and then finds the subscription ended: no invoice.
         assertThat(renewedOnDay).as("no renewal invoice").isEqualTo(-1);
         assertThat(subscription).isEqualTo("ENDED WRITE_OFF");
         assertThat(reachedAtMillis).containsOnlyKeys(3, 7, 10, 30);

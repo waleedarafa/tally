@@ -100,10 +100,9 @@ class SpikeCollectionsS1DeclineDataIT extends AbstractReconcilingTest {
 
     @Test
     void aDeclinedRetryPublishesNoSecondInvoicePaymentDeclinedAndTheFirstInvoiceIsFoundThroughInvoicingApi() {
-        // Every charge is declined: the first one, then the day-3 retry.
-        FakeProvider.mode("DECLINE_HARD(100)");
-        UUID account = subscribedAccount();
-        InvoiceView invoice = firstInvoice(account);
+        // The renewal's charge is declined, then the day-3 retry (since Slice 3 PR-7 a case starts from a renewal).
+        InvoiceView invoice = declinedRenewal("DECLINE_HARD(100)");
+        UUID account = invoice.accountId();
         awaitAttempt(invoice.paymentReference(), AttemptState.DECLINED, Duration.ofSeconds(15));
         await().atMost(Duration.ofSeconds(15)).until(() -> collections.caseFor(account)
                 .map(c -> c.status() == CaseStatus.OPEN).orElse(false));
@@ -117,18 +116,20 @@ class SpikeCollectionsS1DeclineDataIT extends AbstractReconcilingTest {
                 + " WHERE reference = ? ORDER BY number", String.class, invoice.paymentReference());
         System.out.println("SPIKE-C-S1 attempts " + attempts + "; PaymentFailed " + failedFor(account).size()
                 + " (" + failedFor(account).stream().map(PaymentFailed::reason).toList() + "); InvoicePaymentDeclined "
-                + declinedFor(account).size() + "; invoice " + invoicing.invoicesFor(account).getFirst().status());
+                + declinedFor(account).size() + "; invoice " + invoicing.invoicesFor(account).getLast().status());
         assertThat(attempts).containsExactly("1=DECLINED", "2=DECLINED");
         assertThat(failedFor(account)).extracting(PaymentFailed::reason)
                 .allMatch(reason -> reason != FailureReason.UNKNOWN);
         assertThat(declinedFor(account)).as("the retry's decline reaches Collections").hasSize(1);
         assertThat(collections.caseFor(account).orElseThrow().retries()).isEqualTo(1);
 
-        // "First invoice", through the API Collections already has: the earliest period of its subscription.
+        // "First invoice", through the API Collections already has: the earliest period of its subscription. Since
+        // Slice 3 PR-7 a declined first invoice opens no case (025), so the case here is a renewal's: not the earliest.
         InvoiceView declined = invoicing.invoicesFor(account).stream()
                 .filter(i -> i.id().equals(declinedFor(account).getFirst().invoiceId())).findFirst().orElseThrow();
         InvoiceView earliest = invoicing.invoicesForSubscription(declined.subscriptionId()).stream()
                 .min(Comparator.comparing(InvoiceView::periodStart)).orElseThrow();
-        assertThat(earliest.id()).as("the declined invoice is its subscription's first").isEqualTo(declined.id());
+        assertThat(earliest.id()).as("the declined renewal is not its subscription's first").isNotEqualTo(declined.id());
+        assertThat(declined.periodStart()).isEqualTo(earliest.periodEnd());
     }
 }

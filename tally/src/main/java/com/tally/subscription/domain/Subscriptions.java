@@ -24,6 +24,9 @@ public interface Subscriptions {
      */
     List<Subscription> lockLive(UUID accountId);
 
+    /** The subscription, locked until the caller's transaction ends; empty if there is no such subscription. */
+    Optional<Subscription> lock(UUID subscriptionId);
+
     /**
      * Writes a changed subscription now, so its version is final and a concurrent change of the same
      * version fails here (optimistic lock).
