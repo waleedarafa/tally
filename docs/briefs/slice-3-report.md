@@ -12,7 +12,7 @@ Slice 3 built the Collections timetable: a household that does not pay is OVERDU
 | A write-off ends the subscription; no renewal follows | Yes | AT-22 (day 30; no invoice after the next renewal date) |
 | A test runs the 30 days in under 1 minute (D10) | Yes | AT-22: 33 days in 9.0 s |
 | Access does not change | Yes | No change in `access/src/main` or in `contracts/access-facts/v1/schema.json` in the whole slice. One example file was added (#77) |
-| Slice 2's step 0b: the nightly run | **Not finished** | Unchanged since the Slice 2 report: the workflow `Nightly load` is `disabled_manually`, and no tool here enables it |
+| Slice 2's step 0b: the nightly run | **Finished** (15 November, before this slice) | The user enabled the workflow `Nightly load` on 15 November; its state is `active`. Two runs by hand on `main` (1b18edc) passed: 43696821632 and 43698158614, with AT-10 at 10,000 renewals. Two scheduled runs passed since: 43843115838 (16 November) and 44067979012 (17 November). The Slice 2 report said "Not finished" and was corrected in this pull request (#84 review) |
 
 **Builds at the end of the slice** (`main` at 7ae7017, after #83): `./mvnw verify`, JDK 25, BUILD SUCCESS. Billing 156 unit and 264 integration tests; Access one more unit test than at the end of Slice 2 (`ExamplesTest.anEndedSubscriptionLeavesNoSource`, with the new example `subscription-ended.json`). Billing's acceptance stage: 64 acceptance and spike tests (#83). promtool: 24 rules, every unit test passing (#83). CI green on every merged head; one commit stage was red on the way (#79, §3.3).
 
