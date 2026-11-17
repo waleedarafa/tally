@@ -1,6 +1,7 @@
 package com.tally.contract;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
@@ -13,6 +14,8 @@ import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountStanding;
 import com.tally.account.Standing;
+import com.tally.collections.Collections;
+import com.tally.invoicing.InvoicePaymentDeclined;
 import com.tally.payment.PaymentApi;
 import com.tally.shared.Money;
 import io.swagger.v3.oas.models.PathItem.HttpMethod;
@@ -20,6 +23,7 @@ import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.parser.OpenAPIV3Parser;
 import io.swagger.v3.parser.core.models.ParseOptions;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Currency;
@@ -30,6 +34,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -37,6 +42,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.RequestBuilder;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
@@ -56,7 +62,8 @@ class ContractIT extends AbstractIntegrationTest {
     /** Every operation this class tests; it must be exactly the operations in the specification. */
     static final Set<String> TESTED = Set.of(
             "POST /v1/accounts", "GET /v1/accounts/{id}",
-            "GET /v1/payments/{reference}/status", "POST /v1/subscriptions");
+            "GET /v1/payments/{reference}/status", "POST /v1/subscriptions",
+            "POST /v1/accounts/{accountId}/collections/payment-requests");
 
     static final OpenApiInteractionValidator VALIDATOR = OpenApiInteractionValidator
             .createForSpecificationUrl(SPECIFICATION.toUri().toString()).build();
@@ -264,5 +271,36 @@ class ContractIT extends AbstractIntegrationTest {
         validResponse(json(post("/v1/subscriptions"), signUp(account(), "BASIC")), Method.POST, 400);
         validResponse(json(post("/v1/subscriptions").header("Idempotency-Key", key()), "{\"planId\":\"BASIC\"}"),
                 Method.POST, 400);
+    }
+
+    @Autowired
+    ApplicationEventPublisher events;
+
+    @Autowired
+    TransactionTemplate transactions;
+
+    @Autowired
+    Collections collections;
+
+    /** "Pay now" (Slice 3 PR-5): 202 while a debt is open, the same answer for the same key, 404 with none. */
+    @Test
+    void payNow() throws Exception {
+        UUID account = account();
+        UUID invoice = UUID.randomUUID();
+        transactions.executeWithoutResult(tx -> events.publishEvent(new InvoicePaymentDeclined(UUID.randomUUID(),
+                clock.instant(), account, invoice, "ref-" + invoice, Money.of(1599, "USD"), 2L)));
+        await().atMost(Duration.ofSeconds(15)).until(() -> collections.caseFor(account).isPresent());
+        String path = "/v1/accounts/{accountId}/collections/payment-requests";
+        String key = key();
+
+        MvcResult asked = valid(post(path, account).header("Idempotency-Key", key), 202);
+        MvcResult replayed = valid(post(path, account).header("Idempotency-Key", key), 202);
+        assertThat(replayed.getResponse().getContentAsString()).isEqualTo(asked.getResponse().getContentAsString());
+        valid(post(path, account()).header("Idempotency-Key", key()), 404);
+        valid(post(path, UUID.randomUUID()).header("Idempotency-Key", key()), 404);
+        inFlight("collections.idempotency_key", key);
+        MvcResult inProgress = valid(post(path, account).header("Idempotency-Key", key), 409);
+        assertThat(inProgress.getResponse().getHeader("Retry-After")).isNotBlank();
+        validResponse(post(path, account), Method.POST, 400);
     }
 }

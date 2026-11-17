@@ -213,6 +213,7 @@ Clock (all with dates), `CardProvider` (payment), `TaxRates` (invoicing), `Invoi
 | `POST /v1/subscriptions/{id}/cancellation` | 202: endsAt | `requestedAt` set by Tally on arrival |
 | `GET /v1/subscriptions/{id}` | status, plan, current period | |
 | `GET /v1/accounts/{id}/invoices` | invoices with amounts | |
+| `POST /v1/accounts/{accountId}/collections/payment-requests` | 202: caseId, retry, invoiceIds; 404: no debt open | "pay now" (Slice 3, decision 2): every unpaid invoice of the case; every request of a case, scheduled or "pay now", takes the next retry number at the moment it is asked; `Idempotency-Key` required |
 | `GET /v1/access/{subscriberId}` | canWatch, reason, asOf, sequence | served by Access |
 
 **`GET /v1/access/{subscriberId}`**, served by Access (ADR-001), from its own copy. In Slice 2 the subscriber is the account (ADR-033). Example: `{ "subscriberId": "0b6f…", "canWatch": true, "reason": "ACTIVE_SOURCE", "asOf": "2026-11-13T06:00:00Z", "sequence": 7 }`.

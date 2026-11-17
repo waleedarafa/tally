@@ -156,7 +156,7 @@ Not in this slice: TRIAL, CANCELLING, a cancel by the customer, "renewal reverse
 - 202: Collections asked Invoicing to request the payment again for every unpaid invoice of the case. The outcome arrives later, as `InvoicePaid` or a decline.
 - 404: the account has no open debt.
 - It works in the states OPEN, OVERDUE, BLOCKED and WRITTEN_OFF.
-- It uses the next retry number of the case. The permanent guard is the case's retry row (rule 11).
+- Every request of a case, scheduled or "pay now", takes the next retry number at the moment it is asked. The permanent guard is the case's retry row (rule 11). *(Changed on #80, option B, confirmed 16 November 2026: before, an early declined "pay now" took a number above the timetable's and Payment then skipped the day-3 and day-7 retries.)*
 - No transaction is open during the call to the provider (rule 6).
 - A decline of a "pay now" request changes no state. The timers decide.
 

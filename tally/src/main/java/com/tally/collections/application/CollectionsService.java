@@ -3,8 +3,10 @@ package com.tally.collections.application;
 import com.tally.collections.CaseStatus;
 import com.tally.collections.CaseView;
 import com.tally.collections.Collections;
+import com.tally.collections.PaymentRequestView;
 import com.tally.collections.domain.CollectionCase;
 import com.tally.collections.domain.CollectionCases;
+import com.tally.collections.domain.RetryStep;
 import com.tally.invoicing.InvoicePaid;
 import com.tally.invoicing.InvoicePaymentDeclined;
 import com.tally.invoicing.InvoiceStatus;
@@ -41,6 +43,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 class CollectionsService implements Collections, QueueHandler {
 
     private static final Logger log = LoggerFactory.getLogger(CollectionsService.class);
+
+    /** The payload's mark of a "pay now" request, which brings its number. */
+    static final String REQUEST = "REQUEST";
 
     /** A decline finds its case closed while it waits only if the last invoice is paid at that moment. */
     static final int JOIN_ATTEMPTS = 3;
@@ -105,9 +110,10 @@ class CollectionsService implements Collections, QueueHandler {
     }
 
     private void schedule(UUID caseId, Instant firstDecline) {
-        // Retry 1 keeps the payload of Slice 1R: the case alone.
-        queue.enqueue(caseId + ":1", firstDecline.plus(timetable.firstRetry()), caseId.toString());
-        queue.enqueue(caseId + ":2", firstDecline.plus(timetable.secondRetry()), caseId + ",2");
+        queue.enqueue(caseId + ":" + RetryStep.DAY_3, firstDecline.plus(timetable.firstRetry()),
+                caseId + "," + RetryStep.DAY_3);
+        queue.enqueue(caseId + ":" + RetryStep.DAY_7, firstDecline.plus(timetable.secondRetry()),
+                caseId + "," + RetryStep.DAY_7);
         timers.schedule(caseId, firstDecline);
     }
 
@@ -127,25 +133,58 @@ class CollectionsService implements Collections, QueueHandler {
     }
 
     /**
-     * A retry: day 3 (retry 1) or day 7 (retry 2). Called with no transaction open (FR-005): records the case's retry,
-     * then asks Invoicing again for each unpaid invoice of the case, which asks Payment, which may ask the provider.
-     * Run again after a crash, it asks again; Payment makes each retry of each invoice once, and accepts a first
-     * retry of 2 for an invoice that joined after day 3. A retry changes no state: the timers decide.
+     * A retry of the case: a step of the timetable (day 3, day 7) or a "pay now" request. Called with no transaction
+     * open (FR-005). Under the case's row lock it takes the retry's number: a "pay now" request brings its own; a step
+     * takes the case's next number, or the one it stored on an earlier run (#80, option B: one sequence for each
+     * case). Then, after the commit, it asks Invoicing again for each unpaid invoice of the case, which asks Payment,
+     * which may ask the provider. Run again after a crash, it asks again with the same number; Payment makes each
+     * retry of each invoice once. A retry changes no state: the timers decide.
+     *
+     * <p>Payloads: {@code <case>,DAY_3}, {@code <case>,DAY_7}, {@code <case>,REQUEST,<number>}; and, queued by
+     * earlier releases, {@code <case>} (day 3, Slice 1R) and {@code <case>,2} (day 7, Slice 3 PR-4).
      */
     @Override
     public Outcome handle(QueueItem item) {
         String[] payload = item.payload().split(",");
         UUID caseId = UUID.fromString(payload[0]);
-        int retry = payload.length > 1 ? Integer.parseInt(payload[1]) : 1;
-        List<UUID> unpaid = transactions.execute(tx -> {
-            Optional<CollectionCase> found = cases.findById(caseId).filter(CollectionCase::hasDebt);
-            found.ifPresent(c -> cases.recordRetry(c.id(), retry, clock.instant()));
-            return found.map(c -> cases.unpaidOf(c.id())).orElse(List.of());
-        });
-        for (UUID invoiceId : unpaid == null ? List.<UUID>of() : unpaid) {
-            invoicing.requestPaymentAgain(invoiceId, retry);
+        record Asked(int retry, List<UUID> unpaid) {
+        }
+        Asked asked = transactions.execute(tx -> cases.lock(caseId).filter(CollectionCase::hasDebt).map(locked -> {
+            int retry = payload.length == 3 && REQUEST.equals(payload[1]) ? Integer.parseInt(payload[2])
+                    : cases.retryNumberOf(caseId, step(payload), clock.instant());
+            return new Asked(retry, cases.unpaidOf(caseId));
+        }).orElse(null));
+        if (asked != null) {
+            for (UUID invoiceId : asked.unpaid()) {
+                invoicing.requestPaymentAgain(invoiceId, asked.retry());
+            }
         }
         return Outcome.done();
+    }
+
+    private static RetryStep step(String[] payload) {
+        if (payload.length == 1 || "1".equals(payload[1])) {
+            return RetryStep.DAY_3;
+        }
+        return "2".equals(payload[1]) ? RetryStep.DAY_7 : RetryStep.valueOf(payload[1]);
+    }
+
+    /**
+     * Under the case's row lock, so two requests at the same time get two numbers. Every request of a case, scheduled
+     * or "pay now", takes the next retry number at the moment it is asked (#80, option B), so an early "pay now"
+     * changes nothing in the timetable. The retry's row is recorded here, as its permanent guard (rule 11), and the
+     * retry is queued, due now.
+     */
+    @Override
+    @Transactional
+    public Optional<PaymentRequestView> requestPayment(UUID accountId) {
+        return cases.lockCaseWithDebt(accountId).map(locked -> {
+            int retry = cases.lastRetryOf(locked.id()) + 1;
+            cases.recordRetry(locked.id(), retry, clock.instant());
+            queue.enqueue(locked.id() + ":" + REQUEST + ":" + retry, clock.instant(),
+                    locked.id() + "," + REQUEST + "," + retry);
+            return new PaymentRequestView(locked.id(), retry, cases.unpaidOf(locked.id()));
+        });
     }
 
     @Override
