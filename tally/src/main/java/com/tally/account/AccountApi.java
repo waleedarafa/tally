@@ -1,14 +1,13 @@
 package com.tally.account;
 
-import java.time.ZoneId;
-import java.util.Currency;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Customer accounts. Consumed as conformist by the other modules (FR-014). */
+/**
+ * Customer accounts. Consumed as conformist by the other modules (FR-014). An account is opened only for a user, by
+ * {@code POST /v1/accounts}, which links the two (ADR-032; WAR-84): no other module opens one.
+ */
 public interface AccountApi {
-
-    AccountView open(Currency currency, ZoneId timeZone);
 
     Optional<AccountView> get(UUID accountId);
 

@@ -9,6 +9,7 @@ import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionView;
 import com.tally.subscription.TimelineEntry;
+import com.tally.support.TestAccounts;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.List;
@@ -30,6 +31,9 @@ class ConcurrentRenewalIT extends AbstractIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     SubscriptionApi subscriptions;
 
     @Autowired
@@ -41,7 +45,7 @@ class ConcurrentRenewalIT extends AbstractIntegrationTest {
     @Test
     void twoRenewalsOfOnePeriodAtOnceRenewOnce() {
         for (int round = 0; round < 10; round++) {
-            UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+            UUID account = testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
             SubscriptionView subscription = subscriptions.subscribe(account, "BASIC");
             QueueItem item = new QueueItem(round, account + ":renewal", clock.instant(), subscription.id() + ",2", 1);
             CyclicBarrier together = new CyclicBarrier(2);

@@ -27,7 +27,7 @@ import org.springframework.test.context.TestPropertySource;
  * Shown for {@code getPaymentStatus}, the hardest case: it names a payment reference, not an account.
  *
  * <ol>
- *   <li>{@code PaymentStatus} carries no account today.</li>
+ *   <li>{@code PaymentStatus} carried no account when the spike ran; Slice 4 PR-4 added it.</li>
  *   <li>Payment already knows the account of each reference: one collection request per reference, with its
  *       account, and every attempt carries the same account. A second request for the reference with another
  *       account changes nothing. So {@code PaymentStatus} can gain the account (an added field) from data Payment
@@ -49,10 +49,11 @@ class SpikeAuthS3PaymentAccountIT extends AbstractProviderIntegrationTest {
     @Autowired
     JdbcTemplate jdbc;
 
+    /** It carried none when the spike ran; Slice 4 PR-4 added it, as an added field (finding 1). */
     @Test
-    void paymentStatusCarriesNoAccountToday() {
+    void paymentStatusCarriesTheAccountSinceSlice4Pr4() {
         assertThat(Arrays.stream(PaymentStatus.class.getRecordComponents()).map(RecordComponent::getName))
-                .containsExactly("reference", "state", "failureReason");
+                .containsExactly("reference", "state", "failureReason", "accountId");
     }
 
     @Test

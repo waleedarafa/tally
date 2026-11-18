@@ -13,6 +13,7 @@ import com.tally.subscription.SubscriptionApi;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -42,6 +43,9 @@ class RenewalIT extends AbstractProviderIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     SubscriptionApi subscriptions;
 
     @Autowired
@@ -51,7 +55,7 @@ class RenewalIT extends AbstractProviderIntegrationTest {
     JdbcTemplate jdbc;
 
     UUID subscribedAccount(String zone) {
-        UUID account = accounts.open(Currency.getInstance("AED"), ZoneId.of(zone)).id();
+        UUID account = testAccounts.open(Currency.getInstance("AED"), ZoneId.of(zone)).id();
         accounts.recordPaymentToken(account, FakeProvider.token());
         subscriptions.subscribe(account, "BASIC");
         return account;

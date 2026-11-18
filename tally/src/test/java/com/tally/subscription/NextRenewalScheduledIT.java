@@ -13,6 +13,7 @@ import com.tally.platform.InvariantCheck;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -43,6 +44,9 @@ class NextRenewalScheduledIT extends AbstractProviderIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     SubscriptionApi subscriptions;
 
     @Autowired
@@ -56,7 +60,7 @@ class NextRenewalScheduledIT extends AbstractProviderIntegrationTest {
     InvariantCheck nextRenewalScheduled;
 
     UUID subscribedAccount() {
-        UUID account = accounts.open(Currency.getInstance("AED"), ZoneId.of("UTC")).id();
+        UUID account = testAccounts.open(Currency.getInstance("AED"), ZoneId.of("UTC")).id();
         accounts.recordPaymentToken(account, FakeProvider.token());
         subscriptions.subscribe(account, "BASIC");
         return account;

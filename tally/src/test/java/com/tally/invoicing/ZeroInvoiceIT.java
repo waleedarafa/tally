@@ -9,6 +9,7 @@ import com.tally.subscription.SubscriptionApi;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -51,6 +52,9 @@ class ZeroInvoiceIT extends AbstractProviderIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     SubscriptionApi subscriptions;
 
     @Autowired
@@ -77,7 +81,7 @@ class ZeroInvoiceIT extends AbstractProviderIntegrationTest {
                 + " VALUES ('TRIAL', 1, 'free-trial', 1, now())");
         jdbc.update("INSERT INTO offers.offer_version_price (offer_id, version, currency, amount_minor)"
                 + " VALUES ('TRIAL', 1, 'AED', 3699)");
-        UUID account = accounts.open(Currency.getInstance("AED"), ZoneId.of("Asia/Dubai")).id();
+        UUID account = testAccounts.open(Currency.getInstance("AED"), ZoneId.of("Asia/Dubai")).id();
         accounts.recordPaymentToken(account, FakeProvider.token());
 
         subscriptions.subscribe(account, "TRIAL");

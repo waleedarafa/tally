@@ -67,7 +67,7 @@ The one dependency the spikes add is `org.springframework.security:spring-securi
 
 | # | Finding | Evidence |
 |---|---|---|
-| 1 | `PaymentStatus` is `(reference, state, failureReason)`: no account | `paymentStatusCarriesNoAccountToday` |
+| 1 | `PaymentStatus` is `(reference, state, failureReason)`: no account. *Since Slice 4 PR-4 it is `(…, accountId)`, and the test pins that* | `paymentStatusCarriesTheAccountSinceSlice4Pr4` (was `paymentStatusCarriesNoAccountToday`) |
 | 2 | **Payment holds exactly one account per reference.** `payment.collection_request` has one row per reference (constraint `collection_request_one_per_reference`), with `account_id NOT NULL`; every attempt carries `account_id NOT NULL`, and a retry copies it. A second `requestCollection` for the same reference with another account keeps the first request and logs a warning | `paymentKnowsTheOneAccountOfEachReference`; `V6__payment.sql`, `V14__collection_request.sql`; `PaymentService.requestCollection` (the `!created` branch); `PaymentAttempt.retry` copies `accountId` |
 | 3 | **No new dependency.** The pinned graph has `platform: shared`, `account: shared, platform`, `payment: shared, platform`. A type in `platform` that holds the caller (and, for a user, the account) can be filled by `account` and read by `payment`'s web layer; `platform` imports neither | `thePinnedGraphLetsPaymentAndAccountShareATypeInPlatform`; `module-dependencies.txt` |
 

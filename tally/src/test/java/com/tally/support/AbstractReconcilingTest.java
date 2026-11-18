@@ -35,6 +35,9 @@ public abstract class AbstractReconcilingTest extends AbstractProviderIntegratio
     protected AccountApi accounts;
 
     @Autowired
+    protected TestAccounts testAccounts;
+
+    @Autowired
     protected SubscriptionApi subscriptions;
 
     @Autowired
@@ -61,7 +64,7 @@ public abstract class AbstractReconcilingTest extends AbstractProviderIntegratio
     }
 
     protected UUID subscribedAccount() {
-        UUID account = accounts.open(Currency.getInstance("USD"), LONDON).id();
+        UUID account = testAccounts.open(Currency.getInstance("USD"), LONDON).id();
         accounts.recordPaymentToken(account, FakeProvider.token());
         subscriptions.subscribe(account, "STANDARD");
         return account;

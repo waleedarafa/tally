@@ -11,6 +11,7 @@ import com.tally.platform.QueueItem;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionChanged;
 import com.tally.support.EventLog;
+import com.tally.support.TestAccounts;
 import com.tally.support.TestTokens;
 import java.time.Duration;
 import java.time.ZoneId;
@@ -89,6 +90,9 @@ class AccessFactsRelayIT extends AbstractIntegrationTest {
 
     @Autowired
     AccountApi accounts;
+
+    @Autowired
+    TestAccounts testAccounts;
 
     @Autowired
     AccessFeedHealth health;
@@ -191,10 +195,11 @@ class AccessFactsRelayIT extends AbstractIntegrationTest {
      */
     @Test
     void withTheBrokerDownSignUpAnswers201AndTheBacklogShowsUntilItIsBack() {
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        TestTokens.Household household = TestTokens.household();
+        UUID account = testAccounts.openFor(household, Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         EventLog.pause();
 
-        ResponseEntity<String> signUp = TestTokens.household().client("http://localhost:" + port).post()
+        ResponseEntity<String> signUp = household.client("http://localhost:" + port).post()
                 .uri("/v1/subscriptions")
                 .header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(Map.of("accountId", account, "planId", "STANDARD", "paymentToken", "tok_relay"))

@@ -5,6 +5,7 @@ import com.tally.account.AccountView;
 import com.tally.account.UnknownAccountException;
 import com.tally.account.application.AccountUsers;
 import com.tally.account.application.UserHasAnAccountException;
+import com.tally.platform.Caller;
 import com.tally.platform.IdempotencyKeys;
 import com.tally.platform.IdempotencyStore;
 import com.tally.platform.IdempotentEndpoints;
@@ -97,9 +98,11 @@ class AccountController {
                 .body(json.writeValueAsString(AccountResponse.of(account)));
     }
 
+    /** The caller's own account; any other answers 404, as an account that does not exist (CLAUDE.md rule 16). */
     @GetMapping("/{id}")
-    AccountResponse get(@PathVariable UUID id) {
-        return accounts.get(id).map(AccountResponse::of).orElseThrow(() -> new UnknownAccountException(id));
+    AccountResponse get(@PathVariable UUID id, Caller caller) {
+        return accounts.get(id).filter(account -> caller.owns(account.id())).map(AccountResponse::of)
+                .orElseThrow(() -> new UnknownAccountException(id));
     }
 
     @ExceptionHandler(UnknownAccountException.class)

@@ -11,6 +11,7 @@ import com.tally.subscription.SubscriptionApi;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -43,6 +44,9 @@ class AT08ListenerFailsIT extends AbstractProviderIntegrationTest {
 
     @Autowired
     AccountApi accounts;
+
+    @Autowired
+    TestAccounts testAccounts;
 
     @Autowired
     SubscriptionApi subscriptions;
@@ -82,7 +86,7 @@ class AT08ListenerFailsIT extends AbstractProviderIntegrationTest {
 
     @Test
     void aFailedListenerIsResubmittedWithinTheLimitAndItsEffectHappensOnce() {
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID account = testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         subscriptions.subscribe(account, "BASIC");
         await().atMost(Duration.ofSeconds(10)).until(() -> !invoicing.invoicesFor(account).isEmpty());
         String reference = invoicing.invoicesFor(account).getFirst().paymentReference();

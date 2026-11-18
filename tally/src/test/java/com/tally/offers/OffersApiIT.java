@@ -7,6 +7,7 @@ import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.account.UnknownAccountException;
 import com.tally.shared.Money;
+import com.tally.support.TestAccounts;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -29,8 +30,11 @@ class OffersApiIT extends AbstractIntegrationTest {
     @Autowired
     AccountApi accounts;
 
+    @Autowired
+    TestAccounts testAccounts;
+
     UUID account(String currency) {
-        return accounts.open(Currency.getInstance(currency), ZoneId.of("UTC")).id();
+        return testAccounts.open(Currency.getInstance(currency), ZoneId.of("UTC")).id();
     }
 
     static final Period FIRST = new Period(1, LocalDate.parse("2026-01-15"), LocalDate.parse("2026-02-15"));

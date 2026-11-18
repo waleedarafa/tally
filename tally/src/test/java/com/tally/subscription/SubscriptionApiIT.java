@@ -8,6 +8,7 @@ import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.account.UnknownAccountException;
 import com.tally.offers.UnknownPlanException;
+import com.tally.support.TestAccounts;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.time.Duration;
@@ -35,10 +36,13 @@ class SubscriptionApiIT extends AbstractIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     ApplicationEvents events;
 
     UUID account() {
-        return accounts.open(Currency.getInstance("USD"), ZoneId.of("America/New_York")).id();
+        return testAccounts.open(Currency.getInstance("USD"), ZoneId.of("America/New_York")).id();
     }
 
     @Test

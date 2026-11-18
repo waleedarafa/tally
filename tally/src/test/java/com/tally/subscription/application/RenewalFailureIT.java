@@ -9,6 +9,7 @@ import com.tally.platform.Outcome;
 import com.tally.platform.QueueItem;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionView;
+import com.tally.support.TestAccounts;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.UUID;
@@ -28,6 +29,9 @@ class RenewalFailureIT extends AbstractIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     SubscriptionApi subscriptions;
 
     @Autowired
@@ -43,7 +47,7 @@ class RenewalFailureIT extends AbstractIntegrationTest {
 
     @Test
     void aRenewalFailingAnotherConstraintIsNotDoneAndSucceedsOnRetry() {
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID account = testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         SubscriptionView subscription = subscriptions.subscribe(account, "BASIC");
         QueueItem item = new QueueItem(1, account + ":renewal", clock.instant(), subscription.id() + ",2", 1);
         // A different constraint fails, for this subscription only: its renewal cannot be recorded.

@@ -6,8 +6,10 @@ import static org.awaitility.Awaitility.await;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountStanding;
 import com.tally.account.Standing;
+import com.tally.account.application.AccountUsers;
 import com.tally.support.EventLog;
 import com.tally.support.TallyInstances;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -61,7 +63,7 @@ class AccessFeedOrderIT {
 
         List<UUID> accounts = new ArrayList<>();
         for (int i = 0; i < ACCOUNTS; i++) {
-            accounts.add(accountApi.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id());
+            accounts.add(new TestAccounts(a.getBean(AccountUsers.class)).open(Currency.getInstance("USD"), ZoneId.of("UTC")).id());
         }
         for (int change = 0; change < CHANGES; change++) {
             if (change == CHANGES / 3) {

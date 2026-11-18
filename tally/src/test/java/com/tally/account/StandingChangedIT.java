@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.AbstractIntegrationTest;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -50,6 +51,9 @@ class StandingChangedIT extends AbstractIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     AccountStanding standing;
 
     @Autowired
@@ -59,7 +63,7 @@ class StandingChangedIT extends AbstractIntegrationTest {
     TransactionTemplate transactions;
 
     UUID newAccount() {
-        return accounts.open(Currency.getInstance("AED"), ZoneId.of("Asia/Dubai")).id();
+        return testAccounts.open(Currency.getInstance("AED"), ZoneId.of("Asia/Dubai")).id();
     }
 
     List<StandingChanged> publishedFor(UUID account) {

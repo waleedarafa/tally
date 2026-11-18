@@ -18,6 +18,7 @@ import com.tally.collections.Collections;
 import com.tally.invoicing.InvoicePaymentDeclined;
 import com.tally.payment.PaymentApi;
 import com.tally.shared.Money;
+import com.tally.support.TestAccounts;
 import com.tally.support.TestTokens;
 import io.swagger.v3.oas.models.PathItem.HttpMethod;
 import io.swagger.v3.oas.models.parameters.Parameter;
@@ -29,7 +30,9 @@ import java.time.Duration;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Currency;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -75,6 +78,9 @@ class ContractIT extends AbstractIntegrationTest {
 
     @Autowired
     AccountApi accounts;
+
+    @Autowired
+    TestAccounts testAccounts;
 
     @Autowired
     AccountStanding standing;
@@ -132,8 +138,20 @@ class ContractIT extends AbstractIntegrationTest {
         return UUID.randomUUID().toString();
     }
 
+    /** Each account's household: a request about an account carries its owner's token (Slice 4 PR-4). */
+    final Map<UUID, TestTokens.Household> owners = new HashMap<>();
+
+    /** A new household's account. */
     UUID account() {
-        return accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        TestTokens.Household owner = TestTokens.household();
+        UUID account = testAccounts.openFor(owner, Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        owners.put(account, owner);
+        return account;
+    }
+
+    /** {@code request}, sent by the household of {@code account}. */
+    MockHttpServletRequestBuilder by(UUID account, MockHttpServletRequestBuilder request) {
+        return request.header("Authorization", owners.get(account).bearer());
     }
 
     String signUp(UUID account, String planId) {
@@ -203,8 +221,9 @@ class ContractIT extends AbstractIntegrationTest {
         String key = "not-a-uuid-" + UUID.randomUUID();
         MvcResult account = exchange(json(post("/v1/accounts").header("Idempotency-Key", key),
                 "{\"currency\":\"USD\",\"timeZone\":\"UTC\"}"));
-        MvcResult signUp = exchange(json(post("/v1/subscriptions").header("Idempotency-Key", key),
-                signUp(account(), "BASIC")));
+        UUID owned = account();
+        MvcResult signUp = exchange(by(owned, json(post("/v1/subscriptions").header("Idempotency-Key", key),
+                signUp(owned, "BASIC"))));
 
         for (MvcResult result : List.of(account, signUp)) {
             assertThat(result.getResponse().getStatus()).isEqualTo(400);
@@ -272,15 +291,19 @@ class ContractIT extends AbstractIntegrationTest {
 
     @Test
     void getAccount() throws Exception {
-        valid(get("/v1/accounts/{id}", account()), 200);
+        UUID owned = account();
+        valid(by(owned, get("/v1/accounts/{id}", owned)), 200);
+        valid(get("/v1/accounts/{id}", owned), 404);
         valid(get("/v1/accounts/{id}", UUID.randomUUID()), 404);
     }
 
     @Test
     void getPaymentStatus() throws Exception {
         String reference = "CONTRACT-" + UUID.randomUUID();
-        payments.requestCollection(reference, UUID.randomUUID(), Money.of(999, "USD"), "tok");
-        valid(get("/v1/payments/{reference}/status", reference), 200);
+        UUID account = account();
+        payments.requestCollection(reference, account, Money.of(999, "USD"), "tok");
+        valid(by(account, get("/v1/payments/{reference}/status", reference)), 200);
+        valid(get("/v1/payments/{reference}/status", reference), 404);
         valid(get("/v1/payments/{reference}/status", "NO-SUCH-" + UUID.randomUUID()), 404);
     }
 
@@ -288,21 +311,29 @@ class ContractIT extends AbstractIntegrationTest {
     void signUp() throws Exception {
         UUID account = account();
         String key = key();
-        valid(json(post("/v1/subscriptions").header("Idempotency-Key", key), signUp(account, "BASIC")), 201);
-        valid(json(post("/v1/subscriptions").header("Idempotency-Key", key), signUp(account, "PREMIUM")), 422);
-        valid(json(post("/v1/subscriptions").header("Idempotency-Key", key()), signUp(account, "BASIC")), 409);
-        valid(json(post("/v1/subscriptions").header("Idempotency-Key", key()), signUp(account(), "NO-SUCH-PLAN")),
+        valid(by(account, json(post("/v1/subscriptions").header("Idempotency-Key", key), signUp(account, "BASIC"))),
+                201);
+        valid(by(account, json(post("/v1/subscriptions").header("Idempotency-Key", key), signUp(account, "PREMIUM"))),
+                422);
+        valid(by(account, json(post("/v1/subscriptions").header("Idempotency-Key", key()), signUp(account, "BASIC"))),
+                409);
+        UUID other = account();
+        valid(by(other, json(post("/v1/subscriptions").header("Idempotency-Key", key()), signUp(other, "NO-SUCH-PLAN"))),
                 422);
         valid(json(post("/v1/subscriptions").header("Idempotency-Key", key()), signUp(UUID.randomUUID(), "BASIC")),
                 404);
+        // Another household's account answers as one that does not exist (rule 16).
+        valid(json(post("/v1/subscriptions").header("Idempotency-Key", key()), signUp(other, "BASIC")), 404);
         UUID blocked = account();
         standing.set(blocked, Standing.BLOCKED, "ContractIT");
-        valid(json(post("/v1/subscriptions").header("Idempotency-Key", key()), signUp(blocked, "BASIC")), 409);
+        valid(by(blocked, json(post("/v1/subscriptions").header("Idempotency-Key", key()), signUp(blocked, "BASIC"))),
+                409);
         inFlight("subscription.idempotency_key", key);
-        MvcResult inProgress = valid(json(post("/v1/subscriptions").header("Idempotency-Key", key),
-                signUp(account, "BASIC")), 409);
+        MvcResult inProgress = valid(by(account, json(post("/v1/subscriptions").header("Idempotency-Key", key),
+                signUp(account, "BASIC"))), 409);
         assertThat(inProgress.getResponse().getHeader("Retry-After")).isNotBlank();
-        validResponse(json(post("/v1/subscriptions"), signUp(account(), "BASIC")), Method.POST, 400);
+        UUID unkeyed = account();
+        validResponse(by(unkeyed, json(post("/v1/subscriptions"), signUp(unkeyed, "BASIC"))), Method.POST, 400);
         validResponse(json(post("/v1/subscriptions").header("Idempotency-Key", key()), "{\"planId\":\"BASIC\"}"),
                 Method.POST, 400);
     }
@@ -327,14 +358,17 @@ class ContractIT extends AbstractIntegrationTest {
         String path = "/v1/accounts/{accountId}/collections/payment-requests";
         String key = key();
 
-        MvcResult asked = valid(post(path, account).header("Idempotency-Key", key), 202);
-        MvcResult replayed = valid(post(path, account).header("Idempotency-Key", key), 202);
+        MvcResult asked = valid(by(account, post(path, account).header("Idempotency-Key", key)), 202);
+        MvcResult replayed = valid(by(account, post(path, account).header("Idempotency-Key", key)), 202);
         assertThat(replayed.getResponse().getContentAsString()).isEqualTo(asked.getResponse().getContentAsString());
-        valid(post(path, account()).header("Idempotency-Key", key()), 404);
+        UUID debtFree = account();
+        valid(by(debtFree, post(path, debtFree).header("Idempotency-Key", key())), 404);
         valid(post(path, UUID.randomUUID()).header("Idempotency-Key", key()), 404);
+        // Another household's debt answers as no debt (rule 16).
+        valid(post(path, account).header("Idempotency-Key", key()), 404);
         inFlight("collections.idempotency_key", key);
-        MvcResult inProgress = valid(post(path, account).header("Idempotency-Key", key), 409);
+        MvcResult inProgress = valid(by(account, post(path, account).header("Idempotency-Key", key)), 409);
         assertThat(inProgress.getResponse().getHeader("Retry-After")).isNotBlank();
-        validResponse(post(path, account), Method.POST, 400);
+        validResponse(by(account, post(path, account)), Method.POST, 400);
     }
 }

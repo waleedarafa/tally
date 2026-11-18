@@ -64,7 +64,7 @@ class CaseCoversEveryInvoiceIT extends AbstractReconcilingTest {
 
     /** A real account: closing a case sets its standing (Slice 3 PR-4). It has no subscription. */
     UUID account() {
-        return accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        return testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
     }
 
     void publish(DomainEvent event) {

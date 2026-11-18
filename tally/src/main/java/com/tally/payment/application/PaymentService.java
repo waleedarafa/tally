@@ -126,7 +126,7 @@ class PaymentService implements PaymentApi {
     @Transactional(readOnly = true)
     public Optional<PaymentStatus> status(String reference) {
         return attempts.latestFor(reference)
-                .map(a -> new PaymentStatus(a.reference(), a.state(), a.failureReason()));
+                .map(a -> new PaymentStatus(a.reference(), a.state(), a.failureReason(), a.accountId()));
     }
 
     @Override
