@@ -44,6 +44,7 @@ public final class TestTokens {
     private static final Duration LIFETIME = Duration.ofDays(3650);
     private static final RSAKey KEY = newKey("tally-access-test-1");
     private static final AtomicBoolean PROVIDER_UP = new AtomicBoolean(true);
+    private static final AtomicBoolean PROVIDER_HANGS = new AtomicBoolean(false);
     private static final AtomicInteger KEY_FETCHES = new AtomicInteger();
     private static final HttpServer KEYS = serveKeys();
 
@@ -79,6 +80,13 @@ public final class TestTokens {
     /** The identity provider is up (the key set is served) or down (503). */
     public static void providerUp(boolean up) {
         PROVIDER_UP.set(up);
+        PROVIDER_HANGS.set(false);
+    }
+
+    /** The identity provider accepts the connection and never answers in time (spike S-2, finding 5). */
+    public static void providerHangs() {
+        PROVIDER_UP.set(false);
+        PROVIDER_HANGS.set(true);
     }
 
     /** How many times the key set was fetched successfully. */
@@ -100,6 +108,13 @@ public final class TestTokens {
             byte[] body = new JWKSet(KEY).toPublicJWKSet().toString().getBytes(StandardCharsets.UTF_8);
             server.createContext("/jwks", exchange -> {
                 try (exchange) {
+                    if (PROVIDER_HANGS.get()) {
+                        try {
+                            Thread.sleep(Duration.ofSeconds(10));
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
                     if (!PROVIDER_UP.get()) {
                         exchange.sendResponseHeaders(503, -1);
                         return;
@@ -110,7 +125,8 @@ public final class TestTokens {
                     exchange.getResponseBody().write(body);
                 }
             });
-            server.setExecutor(Executors.newSingleThreadExecutor(Thread.ofPlatform().daemon().factory()));
+            // Many threads: a request that hangs must not stop the server from taking the next one.
+            server.setExecutor(Executors.newCachedThreadPool(Thread.ofPlatform().daemon().factory()));
             server.start();
             return server;
         } catch (IOException e) {
@@ -147,6 +163,12 @@ public final class TestTokens {
         public Token valid(Instant issuedAt, Duration lifetime) {
             this.issuedAt = issuedAt;
             this.expiresAt = issuedAt.plus(lifetime);
+            return this;
+        }
+
+        /** Signed by a key whose ID the provider's key set does not hold: the decoder asks for the key set again. */
+        public Token unknownKey() {
+            this.key = newKey("unknown-" + UUID.randomUUID());
             return this;
         }
 

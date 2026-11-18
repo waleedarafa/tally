@@ -44,7 +44,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *   <li>The expiry is checked on the injected {@link Clock} (spike S-1).</li>
  *   <li>The provider's key set is kept in Access's database and fetched again only for an unknown key ID, so a
  *       running instance and one that starts during an outage both check tokens (ADR-039, option A for Access); the
- *       fetch has short timeouts, so a provider that hangs cannot hold requests for 30 seconds (spike S-2).</li>
+ *       fetch has short timeouts, so a provider that hangs cannot hold requests for 30 seconds (spike S-2); after any
+ *       fetch, the kept set is used for a fixed time before the next, so tokens with unknown key IDs cannot hold the
+ *       decoder's lock behind a provider that hangs (review of #92, finding 1).</li>
  * </ul>
  * The health and metrics endpoints are not under {@code /v1/} and stay open to the platform that runs Access.
  */
@@ -105,11 +107,12 @@ class AccessSecurity {
      */
     @Bean
     JwkSetUriJwtDecoderBuilderCustomizer keySetKeptInTheDatabase(JdbcTemplate jdbc, Clock clock,
-            @Value("${tally.access.security.key-fetch-timeout:2s}") Duration timeout) {
+            @Value("${tally.access.security.key-fetch-timeout:2s}") Duration timeout,
+            @Value("${tally.access.security.key-refetch-hold-off:30s}") Duration holdOff) {
         SimpleClientHttpRequestFactory requests = new SimpleClientHttpRequestFactory();
         requests.setConnectTimeout(timeout);
         requests.setReadTimeout(timeout);
-        JdbcKeySetCache keySet = new JdbcKeySetCache(jdbc, clock);
+        JdbcKeySetCache keySet = new JdbcKeySetCache(jdbc, clock, holdOff);
         return builder -> builder.cache(keySet).restOperations(new RestTemplate(requests));
     }
 }

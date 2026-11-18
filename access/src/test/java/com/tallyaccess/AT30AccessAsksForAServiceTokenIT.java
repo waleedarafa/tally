@@ -9,6 +9,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -111,6 +116,47 @@ class AT30AccessAsksForAServiceTokenIT {
     }
 
     /**
+     * Finding 1 of the review of #92: the decoder fetches the key set under one lock, for every token with a key ID it
+     * does not hold. While the provider hangs, a flow of such tokens must not hold up the service token: after any
+     * fetch, Access uses the key set it keeps for a fixed time (30 s by default) before it fetches again. Limit: a
+     * valid token waits at most for the one fetch already under way, its read timeout of 2 s, plus 1 s.
+     */
+    @Test
+    void tokensWithUnknownKeyIdsWhileTheProviderHangsDoNotHoldUpTheServiceToken() throws Exception {
+        ConfigurableApplicationContext access = ready(AccessTestSupport.isolated());
+        String token = serviceToken();
+        clock.advance(Duration.ofSeconds(31));
+        TestTokens.providerHangs();
+
+        AtomicBoolean flooding = new AtomicBoolean(true);
+        List<Integer> floodAnswers = new CopyOnWriteArrayList<>();
+        ExecutorService flood = Executors.newFixedThreadPool(4);
+        try {
+            for (int i = 0; i < 4; i++) {
+                flood.submit(() -> {
+                    while (flooding.get()) {
+                        floodAnswers.add(status(access, TestTokens.token().unknownKey().bearer()));
+                    }
+                });
+            }
+            Thread.sleep(500);
+            for (int i = 0; i < 5; i++) {
+                long started = System.nanoTime();
+                assertThat(status(access, token)).as("the service token, during the flood").isEqualTo(200);
+                Duration waited = Duration.ofNanos(System.nanoTime() - started);
+                System.out.println("AT-30 service token answered in " + waited.toMillis() + " ms during the flood");
+                assertThat(waited).as("the service token waits at most for one fetch under way")
+                        .isLessThan(Duration.ofSeconds(3));
+            }
+        } finally {
+            flooding.set(false);
+            flood.shutdown();
+            flood.awaitTermination(30, TimeUnit.SECONDS);
+        }
+        assertThat(floodAnswers).as("tokens with unknown key IDs").isNotEmpty().containsOnly(401);
+    }
+
+    /**
      * The limit of option A: an instance with no key set kept, started during an outage, cannot check a token. It
      * answers 503, not 401: the token is not at fault, so the platform keeps it and asks again.
      */
@@ -121,7 +167,9 @@ class AT30AccessAsksForAServiceTokenIT {
 
         assertThat(status(access, serviceToken())).isEqualTo(503);
 
+        // Back up: the next fetch comes once the hold-off after the failed one has passed (review of #92).
         TestTokens.providerUp(true);
+        clock.advance(Duration.ofSeconds(31));
         await().atMost(Duration.ofSeconds(30)).until(() -> status(access, serviceToken()) == 200);
     }
 }

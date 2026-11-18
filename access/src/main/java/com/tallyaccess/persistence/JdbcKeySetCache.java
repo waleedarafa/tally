@@ -2,6 +2,8 @@ package com.tallyaccess.persistence;
 
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.Callable;
 import org.slf4j.Logger;
@@ -24,6 +26,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * </ul>
  * A key the provider withdraws during an outage stays accepted until a fetch succeeds (ADR-039's cost). The copy is
  * held in memory once read: the database is read when the decoder is built and written on each successful fetch.
+ *
+ * <p>The decoder asks under one lock, for every token (review of #92, finding 1). So, after any fetch, successful or
+ * not, a stale mark is ignored for {@code holdOff}: in that time the kept copy is returned at once, and a token with a
+ * key ID it does not hold is refused at once, instead of holding every other token behind a fetch from a provider
+ * that hangs. A key the provider adds is therefore accepted at most {@code holdOff} after it is first seen.
  */
 public class JdbcKeySetCache implements Cache {
 
@@ -31,12 +38,15 @@ public class JdbcKeySetCache implements Cache {
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final Duration holdOff;
     private volatile String keySet;
     private volatile boolean stale;
+    private volatile Instant lastFetch;
 
-    public JdbcKeySetCache(JdbcTemplate jdbc, Clock clock) {
+    public JdbcKeySetCache(JdbcTemplate jdbc, Clock clock, Duration holdOff) {
         this.jdbc = jdbc;
         this.clock = clock;
+        this.holdOff = holdOff;
     }
 
     @Override
@@ -68,6 +78,15 @@ public class JdbcKeySetCache implements Cache {
         if (kept != null && !stale) {
             return (T) kept;
         }
+        Instant now = clock.instant();
+        if (lastFetch != null && now.isBefore(lastFetch.plus(holdOff))) {
+            if (kept != null) {
+                return (T) kept;
+            }
+            throw new ValueRetrievalException(key, loader, new IllegalStateException(
+                    "The identity provider's key set was asked for less than " + holdOff + " ago"));
+        }
+        lastFetch = now;
         try {
             T fetched = loader.call();
             put(key, fetched);
