@@ -19,7 +19,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.web.client.RestClient;
 import org.yaml.snakeyaml.Yaml;
 
@@ -61,7 +61,8 @@ class F14AlertRulesAgreeIT extends AbstractIntegrationTest {
      */
     static final Set<String> NAMED_BY_NO_RULE = Set.of("access-rebuild.md");
 
-    @LocalServerPort
+    // The management port: health and metrics are served apart from the API (Slice 4, brief rule 10).
+    @LocalManagementPort
     int port;
 
     List<Map<String, Object>> rules;

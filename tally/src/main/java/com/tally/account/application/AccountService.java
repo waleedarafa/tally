@@ -8,26 +8,74 @@ import com.tally.account.StandingChanged;
 import com.tally.account.UnknownAccountException;
 import com.tally.account.domain.Account;
 import com.tally.account.domain.AccountRepository;
+import com.tally.account.domain.AccountUser;
+import com.tally.account.domain.AccountUserRepository;
 import java.time.Clock;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.Optional;
 import java.util.UUID;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-class AccountService implements AccountApi, AccountStanding {
+class AccountService implements AccountApi, AccountStanding, AccountUsers {
 
     private final AccountRepository accounts;
+    private final AccountUserRepository users;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    AccountService(AccountRepository accounts, ApplicationEventPublisher events, Clock clock) {
+    AccountService(AccountRepository accounts, AccountUserRepository users, ApplicationEventPublisher events,
+            Clock clock) {
         this.accounts = accounts;
+        this.users = users;
         this.events = events;
         this.clock = clock;
+    }
+
+    /**
+     * Reads the user's link first; with none, opens the account and inserts the link, which the unique constraint
+     * guards against a second "open" at the same time (CLAUDE.md rule 11): the read is not the guard.
+     */
+    @Override
+    @Transactional
+    public Opened openFor(String user, Currency currency, ZoneId timeZone) {
+        Optional<AccountView> existing = accountOf(user);
+        if (existing.isPresent()) {
+            return new Opened(existing.get(), false);
+        }
+        Account account = accounts.save(new Account(UUID.randomUUID(), currency, timeZone, clock.instant()));
+        try {
+            users.saveAndFlush(new AccountUser(account.id(), user, clock.instant()));
+        } catch (DataIntegrityViolationException failure) {
+            if (violates(failure, AccountUser.ONE_PER_USER)) {
+                throw new UserHasAnAccountException(user, failure);
+            }
+            throw failure;
+        }
+        return new Opened(view(account), true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<AccountView> accountOf(String user) {
+        return users.findByUserId(user).flatMap(link -> accounts.findById(link.accountId()))
+                .map(AccountService::view);
+    }
+
+    /** Whether {@code failure} is the named constraint's refusal, and not any other failure (rule 11). */
+    private static boolean violates(Throwable failure, String constraint) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolationException violation
+                    && constraint.equals(violation.getConstraintName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

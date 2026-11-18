@@ -46,6 +46,9 @@ public final class TallyProcess implements AutoCloseable {
             all.put("spring.datasource.username", AbstractIntegrationTest.POSTGRES.getUsername());
             all.put("spring.datasource.password", AbstractIntegrationTest.POSTGRES.getPassword());
             all.put("server.port", "0");
+            all.put("management.server.port", "0");
+            // Each instance checks tokens with the test key set, served by this test JVM (Slice 4 PR-3).
+            all.putAll(TestTokens.billingSettings());
             all.putAll(EventLog.feedSettings(databaseUrl));
             all.putAll(settings);
             all.forEach((k, v) -> command.add("--" + k + "=" + v));

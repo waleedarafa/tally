@@ -2,10 +2,12 @@ package com.tally;
 
 import com.tally.platform.TestClock;
 import com.tally.platform.TestClockConfiguration;
-import com.tally.support.EveryRequestCarriesAToken;
+import com.tally.support.TestTokens;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
@@ -22,9 +24,11 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @SpringBootTest
 @TestPropertySource(properties = {
         "spring.flyway.locations=classpath:db/migration,classpath:db/testmigration",
-        "tally.platform.polling-enabled=false"
+        "tally.platform.polling-enabled=false",
+        // The health and metrics endpoints on a management port of their own (Slice 4, brief rule 10).
+        "management.server.port=0"
 })
-@Import({TestClockConfiguration.class, EveryRequestCarriesAToken.class})
+@Import(TestClockConfiguration.class)
 public abstract class AbstractIntegrationTest {
 
     // Every Spring context and hand-started instance keeps its own connection pool (10 by default); the
@@ -38,4 +42,10 @@ public abstract class AbstractIntegrationTest {
 
     @Autowired
     protected TestClock clock;
+
+    /** Tokens are checked with the test issuer's key set (Slice 4 PR-3, ADR-032). */
+    @DynamicPropertySource
+    static void identityProvider(DynamicPropertyRegistry registry) {
+        TestTokens.billingSettings().forEach((name, value) -> registry.add(name, () -> value));
+    }
 }

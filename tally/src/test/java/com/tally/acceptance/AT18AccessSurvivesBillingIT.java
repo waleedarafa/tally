@@ -72,6 +72,14 @@ class AT18AccessSurvivesBillingIT {
         }
     }
 
+    /** The status of {@code GET /v1/me/account} with a token signed by a key that is not the test key. */
+    static int statusWithAForgedToken(String baseUrl) {
+        return RestClient.builder().baseUrl(baseUrl).defaultStatusHandler(status -> true, (r, response) -> { })
+                .build().get().uri("/v1/me/account")
+                .header("Authorization", "Bearer " + TestTokens.token().forged().sign())
+                .retrieve().toBodilessEntity().getStatusCode().value();
+    }
+
     /** A new household opens an account and signs up, on the billing instance at {@code baseUrl}. */
     static UUID signUp(String baseUrl) {
         RestClient tally = TestTokens.household().client(baseUrl);
@@ -95,6 +103,8 @@ class AT18AccessSurvivesBillingIT {
         int portA = freePort();
         startBilling("at18-billing-a", portA);
         startBilling("at18-billing-b", freePort());
+        assertThat(statusWithAForgedToken("http://localhost:" + portA))
+                .as("a separate instance checks tokens with the test key set (Slice 4)").isEqualTo(401);
 
         List<UUID> known = new ArrayList<>();
         for (int i = 0; i < ACCOUNTS; i++) {

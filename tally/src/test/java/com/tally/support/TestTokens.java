@@ -9,11 +9,17 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -41,6 +47,9 @@ public final class TestTokens {
     static final Duration LIFETIME = Duration.ofDays(3650);
 
     private static final RSAKey KEY = newKey("tally-test-1");
+
+    /** The test key set, served over HTTP on this machine: the server and its separate instances fetch it. */
+    private static final HttpServer KEYS = serveKeys();
 
     private TestTokens() {
     }
@@ -82,6 +91,41 @@ public final class TestTokens {
     /** The public half of the test key, as a JWK set: what the identity provider would publish. */
     public static String jwkSet() {
         return new JWKSet(KEY).toPublicJWKSet().toString();
+    }
+
+    /** Where the test key set is served. */
+    public static String jwkSetUri() {
+        return "http://127.0.0.1:" + KEYS.getAddress().getPort() + "/jwks";
+    }
+
+    /**
+     * The settings that make billing check tokens with the test key set (ADR-032; brief rule 11): the issuer, the
+     * key set's location and billing's audience. The in-process server and every separate instance get them.
+     */
+    public static Map<String, String> billingSettings() {
+        return Map.of(
+                "spring.security.oauth2.resourceserver.jwt.issuer-uri", ISSUER,
+                "spring.security.oauth2.resourceserver.jwt.jwk-set-uri", jwkSetUri(),
+                "spring.security.oauth2.resourceserver.jwt.audiences", BILLING);
+    }
+
+    private static HttpServer serveKeys() {
+        try {
+            HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            byte[] body = jwkSet().getBytes(StandardCharsets.UTF_8);
+            server.createContext("/jwks", exchange -> {
+                try (exchange) {
+                    exchange.getResponseHeaders().add("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(200, body.length);
+                    exchange.getResponseBody().write(body);
+                }
+            });
+            server.setExecutor(Executors.newSingleThreadExecutor(Thread.ofPlatform().daemon().factory()));
+            server.start();
+            return server;
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not serve the test key set", e);
+        }
     }
 
     static RSAKey newKey(String keyId) {

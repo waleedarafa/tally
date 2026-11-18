@@ -9,7 +9,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -20,7 +20,8 @@ import org.springframework.web.client.RestClient;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class PrometheusEndpointIT extends AbstractIntegrationTest {
 
-    @LocalServerPort
+    // The management port: health and metrics are served apart from the API (Slice 4, brief rule 10).
+    @LocalManagementPort
     int port;
 
     @Autowired
