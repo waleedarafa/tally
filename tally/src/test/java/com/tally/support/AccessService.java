@@ -1,6 +1,7 @@
 package com.tally.support;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.web.client.RestClient;
+import org.testcontainers.Testcontainers;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -102,9 +104,17 @@ public final class AccessService implements AutoCloseable {
         settings.put("tally.access.log.topic", topic);
         settings.put("tally.access.log.group-id", group);
         settings.put("tally.access.log.retry-after", "200ms");
+        // Access checks the streaming platform's service token with the test key set, which this test JVM serves; the
+        // container reaches it through Testcontainers' forwarded host port (Slice 4 PR-6).
+        int keys = URI.create(TestTokens.jwkSetUri()).getPort();
+        Testcontainers.exposeHostPorts(keys);
+        settings.put("spring.security.oauth2.resourceserver.jwt.issuer-uri", TestTokens.ISSUER);
+        settings.put("spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
+                "http://host.testcontainers.internal:" + keys + "/jwks");
         Path log = log(name);
         GenericContainer<?> container = new GenericContainer<>(image())
                 .withNetwork(EventLog.network())
+                .withAccessToHost(true)
                 .withEnv("SPRING_APPLICATION_JSON", JsonMapper.builder().build().writeValueAsString(settings))
                 .withEnv("HOSTNAME", name)
                 .withExposedPorts(PORT)

@@ -14,6 +14,7 @@ import com.tallyaccess.TestTokens;
 import com.tallyaccess.application.AccessCopy;
 import com.tallyaccess.application.Readiness;
 import io.swagger.v3.parser.OpenAPIV3Parser;
+import jakarta.servlet.Filter;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Set;
@@ -70,9 +71,10 @@ class AccessContractIT {
 
     @BeforeEach
     void mvc() {
-        // The streaming platform's service token on every request (Slice 4 PR-2).
+        // The streaming platform's service token on every request; Access's security filters run here too (Slice 4).
         mvc = MockMvcBuilders.webAppContextSetup(context)
                 .defaultRequest(get("/").header("Authorization", TestTokens.streamingPlatformBearer()))
+                .addFilters(context.getBean("springSecurityFilterChain", Filter.class))
                 .build();
         await().atMost(Duration.ofSeconds(20)).until(readiness::ready);
     }
@@ -125,6 +127,18 @@ class AccessContractIT {
         assertThat(valid("/v1/access/" + UUID.randomUUID(), 200).getResponse().getContentAsString())
                 .contains("\"canWatch\":false").contains("\"reason\":\"NOT_KNOWN\"").contains("\"asOf\":null")
                 .contains("\"sequence\":null");
+    }
+
+    /** No token: 401; a household's token: 403 (Slice 4, decision 1). Both answers conform. */
+    @Test
+    void aRequestWithoutTheServiceTokenIsRefused() throws Exception {
+        String uri = "/v1/access/" + UUID.randomUUID();
+        for (var refused : java.util.Map.of("Bearer not-a-token", 401, TestTokens.household().bearer(), 403)
+                .entrySet()) {
+            MvcResult result = mvc.perform(get(uri).header("Authorization", refused.getKey())).andReturn();
+            assertThat(result.getResponse().getStatus()).isEqualTo(refused.getValue());
+            assertConforms(VALIDATOR.validateResponse(uri, Method.GET, MockMvcResponse.of(result.getResponse())));
+        }
     }
 
     @Test

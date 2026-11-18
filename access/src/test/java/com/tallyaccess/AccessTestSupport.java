@@ -66,6 +66,8 @@ public final class AccessTestSupport {
         settings.put("tally.access.log.bootstrap-servers", KAFKA.getBootstrapServers());
         settings.put("tally.access.log.topic", topic);
         settings.put("tally.access.log.group-id", "tally-access-" + name);
+        // Tokens are checked with the test key set (Slice 4 PR-6).
+        settings.putAll(TestTokens.accessSettings());
         return settings;
     }
 
