@@ -9,6 +9,7 @@ import com.tally.payment.PaymentApi;
 import com.tally.shared.Money;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -51,6 +52,9 @@ class DuplicateCollectionRequestIT extends AbstractProviderIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     PaymentApi payments;
 
     // Test threads only, standing in for a second instance; never production code.
@@ -62,7 +66,7 @@ class DuplicateCollectionRequestIT extends AbstractProviderIntegrationTest {
     }
 
     UUID accountWithCard() {
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID account = testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         accounts.recordPaymentToken(account, FakeProvider.token());
         return account;
     }

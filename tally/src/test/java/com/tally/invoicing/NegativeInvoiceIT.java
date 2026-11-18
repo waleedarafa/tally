@@ -12,6 +12,7 @@ import com.tally.offers.domain.PricingRule;
 import com.tally.shared.Money;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionView;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -58,6 +59,9 @@ class NegativeInvoiceIT extends AbstractIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     SubscriptionApi subscriptions;
 
     @Autowired
@@ -72,7 +76,7 @@ class NegativeInvoiceIT extends AbstractIntegrationTest {
                 + " VALUES ('OVER', 1, 'over-credit', now())");
         jdbc.update("INSERT INTO offers.offer_version_price (offer_id, version, currency, amount_minor)"
                 + " VALUES ('OVER', 1, 'USD', 1000)");
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID account = testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
 
         SubscriptionView subscription = subscriptions.subscribe(account, "OVER");
 

@@ -67,7 +67,7 @@ class PayNowIT extends AbstractReconcilingTest {
     }
 
     UUID account() {
-        return accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        return testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
     }
 
     void publish(DomainEvent event) {

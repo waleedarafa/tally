@@ -7,6 +7,7 @@ import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountStanding;
 import com.tally.account.Standing;
+import com.tally.support.TestAccounts;
 import com.tally.support.TestTokens;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -42,6 +43,9 @@ class SignUpApiIT extends AbstractIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     AccountStanding standing;
 
     @Autowired
@@ -52,14 +56,18 @@ class SignUpApiIT extends AbstractIntegrationTest {
 
     RestClient tally;
 
+    /** The household of each test: it opens the test's account and sends every request (Slice 4 PR-4). */
+    TestTokens.Household household;
+
     @BeforeEach
     void client() {
-        tally = TestTokens.household().client(RestClient.builder().baseUrl("http://localhost:" + port)
+        household = TestTokens.household();
+        tally = household.client(RestClient.builder().baseUrl("http://localhost:" + port)
                 .defaultStatusHandler(status -> true, (request, response) -> { }));
     }
 
     UUID account() {
-        return accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        return testAccounts.openFor(household, Currency.getInstance("USD"), ZoneId.of("UTC")).id();
     }
 
     ResponseEntity<String> signUp(String key, UUID account, String planId) {

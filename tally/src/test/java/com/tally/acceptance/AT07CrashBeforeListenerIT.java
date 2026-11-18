@@ -4,12 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.account.AccountApi;
+import com.tally.account.application.AccountUsers;
 import com.tally.invoicing.InvoiceStatus;
 import com.tally.invoicing.InvoicingApi;
 import com.tally.platform.TestClock;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.support.FakeProvider;
 import com.tally.support.TallyInstances;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -70,7 +72,7 @@ class AT07CrashBeforeListenerIT {
                 "tally.payment.provider.base-url=" + providerUrl);
         JdbcTemplate jdbc = a.getBean(JdbcTemplate.class);
         AccountApi accounts = a.getBean(AccountApi.class);
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID account = new TestAccounts(a.getBean(AccountUsers.class)).open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         accounts.recordPaymentToken(account, FakeProvider.token());
         TransactionTemplate tx = a.getBean(TransactionTemplate.class);
 

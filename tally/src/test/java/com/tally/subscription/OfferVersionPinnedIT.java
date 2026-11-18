@@ -11,6 +11,7 @@ import com.tally.shared.Money;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -37,6 +38,9 @@ class OfferVersionPinnedIT extends AbstractProviderIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     SubscriptionApi subscriptions;
 
     @Autowired
@@ -57,7 +61,7 @@ class OfferVersionPinnedIT extends AbstractProviderIntegrationTest {
     }
 
     UUID account() {
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID account = testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         accounts.recordPaymentToken(account, FakeProvider.token());
         return account;
     }

@@ -11,6 +11,7 @@ import com.tally.subscription.SubscriptionApi;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -43,6 +44,9 @@ class AT02MonthOfTimeTravelIT extends AbstractProviderIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     SubscriptionApi subscriptions;
 
     @Autowired
@@ -68,7 +72,7 @@ class AT02MonthOfTimeTravelIT extends AbstractProviderIntegrationTest {
         long started = System.nanoTime();
         List<UUID> all = new ArrayList<>();
         for (int i = 0; i < ACCOUNTS; i++) {
-            UUID account = accounts.open(Currency.getInstance(i % 2 == 0 ? "USD" : "AED"),
+            UUID account = testAccounts.open(Currency.getInstance(i % 2 == 0 ? "USD" : "AED"),
                     ZoneId.of(ZONES.get(i % ZONES.size()))).id();
             accounts.recordPaymentToken(account, FakeProvider.token());
             subscriptions.subscribe(account, List.of("BASIC", "STANDARD", "PREMIUM").get(i % 3));

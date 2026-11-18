@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
+import com.tally.support.TestAccounts;
 import com.tally.support.TestTokens;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -40,13 +41,20 @@ class AT13SameSignUpTwiceIT extends AbstractIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     JdbcTemplate jdbc;
 
     RestClient tally;
 
+    /** The household of each test: it opens the test's account and sends every request (Slice 4 PR-4). */
+    TestTokens.Household household;
+
     @BeforeEach
     void client() {
-        tally = TestTokens.household().client(RestClient.builder().baseUrl("http://localhost:" + port)
+        household = TestTokens.household();
+        tally = household.client(RestClient.builder().baseUrl("http://localhost:" + port)
                 .defaultStatusHandler(status -> true, (request, response) -> { }));
     }
 
@@ -63,7 +71,7 @@ class AT13SameSignUpTwiceIT extends AbstractIntegrationTest {
 
     @Test
     void theSameSignUpTwiceWithOneKeyMakesOneSubscriptionAndIdenticalResponses() {
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID account = testAccounts.openFor(household, Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         String key = UUID.randomUUID().toString();
 
         ResponseEntity<String> first = signUp(key, account, "BASIC");
@@ -83,7 +91,7 @@ class AT13SameSignUpTwiceIT extends AbstractIntegrationTest {
      */
     @Test
     void theSameSignUpTwiceAtOnceMakesOneSubscription() throws Exception {
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID account = testAccounts.openFor(household, Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         String key = UUID.randomUUID().toString();
         CyclicBarrier together = new CyclicBarrier(2);
         Callable<ResponseEntity<String>> send = () -> {
@@ -109,12 +117,17 @@ class AT13SameSignUpTwiceIT extends AbstractIntegrationTest {
     /** Keys are scoped by account until callers are authenticated: one key value, two accounts, two sign-ups. */
     @Test
     void twoAccountsUsingTheSameKeyValueBothSucceed() {
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
-        UUID other = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID account = testAccounts.openFor(household, Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        TestTokens.Household otherHousehold = TestTokens.household();
+        UUID other = testAccounts.openFor(otherHousehold, Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         String key = UUID.randomUUID().toString();
 
         ResponseEntity<String> first = signUp(key, account, "BASIC");
-        ResponseEntity<String> second = signUp(key, other, "BASIC");
+        RestClient asOther = otherHousehold.client(RestClient.builder().baseUrl("http://localhost:" + port)
+                .defaultStatusHandler(status -> true, (request, response) -> { }));
+        ResponseEntity<String> second = asOther.post().uri("/v1/subscriptions").header("Idempotency-Key", key)
+                .body(Map.of("accountId", other, "planId", "BASIC", "paymentToken", "tok_" + other))
+                .retrieve().toEntity(String.class);
 
         assertThat(first.getStatusCode().value()).isEqualTo(201);
         assertThat(second.getStatusCode().value()).isEqualTo(201);
@@ -125,7 +138,7 @@ class AT13SameSignUpTwiceIT extends AbstractIntegrationTest {
 
     @Test
     void aKeyReusedForADifferentRequestIsRefusedAndChangesNothing() {
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID account = testAccounts.openFor(household, Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         String key = UUID.randomUUID().toString();
         signUp(key, account, "BASIC");
 

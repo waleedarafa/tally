@@ -7,6 +7,7 @@ import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountStanding;
 import com.tally.account.Standing;
+import com.tally.support.TestAccounts;
 import com.tally.support.TestTokens;
 import java.sql.Connection;
 import java.time.Duration;
@@ -46,6 +47,9 @@ class SpikeCollectionsS4SetDuringSignUpIT extends AbstractIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     AccountStanding standing;
 
     @Autowired
@@ -72,7 +76,7 @@ class SpikeCollectionsS4SetDuringSignUpIT extends AbstractIntegrationTest {
 
     @Test
     void aSetThatCommitsInsideASignUpsWindowGivesTheSignUp409WithRetryAfter() throws Exception {
-        UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID account = testAccounts.openFor(household, Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         String key = UUID.randomUUID().toString();
         CompletableFuture<ResponseEntity<String>> signUp;
         try (Connection holder = dataSource.getConnection()) {

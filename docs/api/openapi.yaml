@@ -68,7 +68,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/Account"
         "404":
-          description: No such account. No body.
+          description: >
+            No such account, or not the caller's: another household's account answers as one that does not
+            exist (Slice 4). No body.
   /v1/me/account:
     get:
       operationId: getMyAccount
@@ -118,7 +120,9 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
-          description: The account has no debt open, or there is no such account.
+          description: >
+            The account has no debt open, there is no such account, or it is not the caller's; each answers the
+            same, and nothing is asked of the card (Slice 4).
           content:
             application/problem+json:
               schema:
@@ -147,7 +151,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/PaymentStatus"
         "404":
-          description: No payment was requested for this reference. No body.
+          description: >
+            No payment was requested for this reference, or its account is not the caller's (Slice 4). No body.
   /v1/subscriptions:
     post:
       operationId: signUp
@@ -180,7 +185,8 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
-          description: No such account.
+          description: >
+            No such account, or not the caller's; each answers the same, and nothing is recorded (Slice 4).
           content:
             application/problem+json:
               schema:

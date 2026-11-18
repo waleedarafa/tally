@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.tally.AbstractIntegrationTest;
+import com.tally.support.TestAccounts;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.UUID;
@@ -15,9 +16,12 @@ class AccountApiIT extends AbstractIntegrationTest {
     @Autowired
     AccountApi accounts;
 
+    @Autowired
+    TestAccounts testAccounts;
+
     @Test
     void opensAnAccountAndRecordsItsPaymentToken() {
-        AccountView opened = accounts.open(Currency.getInstance("AED"), ZoneId.of("Asia/Dubai"));
+        AccountView opened = testAccounts.open(Currency.getInstance("AED"), ZoneId.of("Asia/Dubai"));
 
         accounts.recordPaymentToken(opened.id(), "tok_123");
 

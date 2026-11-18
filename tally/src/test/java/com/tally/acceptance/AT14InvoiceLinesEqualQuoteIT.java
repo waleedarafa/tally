@@ -16,6 +16,7 @@ import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionView;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -40,6 +41,9 @@ class AT14InvoiceLinesEqualQuoteIT extends AbstractProviderIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     SubscriptionApi subscriptions;
 
     @Autowired
@@ -53,7 +57,7 @@ class AT14InvoiceLinesEqualQuoteIT extends AbstractProviderIntegrationTest {
 
     @Test
     void theInvoiceCarriesTheQuotesLinesTotalAndOfferVersion() {
-        UUID account = accounts.open(Currency.getInstance("AED"), ZoneId.of("Asia/Dubai")).id();
+        UUID account = testAccounts.open(Currency.getInstance("AED"), ZoneId.of("Asia/Dubai")).id();
         accounts.recordPaymentToken(account, FakeProvider.token());
         SubscriptionView subscription = subscriptions.subscribe(account, "STANDARD");
         await().atMost(Duration.ofSeconds(10)).until(() -> !invoicing.invoicesFor(account).isEmpty());

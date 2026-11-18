@@ -11,6 +11,7 @@ import com.tally.subscription.SubscriptionApi;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -52,6 +53,9 @@ class AT03CalendarEdgesIT extends AbstractProviderIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     SubscriptionApi subscriptions;
 
     @Autowired
@@ -61,7 +65,7 @@ class AT03CalendarEdgesIT extends AbstractProviderIntegrationTest {
     JdbcTemplate jdbc;
 
     UUID subscribe(ZoneId zone) {
-        UUID account = accounts.open(Currency.getInstance("USD"), zone).id();
+        UUID account = testAccounts.open(Currency.getInstance("USD"), zone).id();
         accounts.recordPaymentToken(account, FakeProvider.token());
         subscriptions.subscribe(account, "BASIC");
         await().atMost(Duration.ofSeconds(10)).until(() -> invoicing.invoicesFor(account).size() == 1);

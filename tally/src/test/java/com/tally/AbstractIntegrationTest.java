@@ -2,6 +2,7 @@ package com.tally;
 
 import com.tally.platform.TestClock;
 import com.tally.platform.TestClockConfiguration;
+import com.tally.support.TestAccounts;
 import com.tally.support.TestTokens;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,7 +29,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
         // The health and metrics endpoints on a management port of their own (Slice 4, brief rule 10).
         "management.server.port=0"
 })
-@Import(TestClockConfiguration.class)
+@Import({TestClockConfiguration.class, TestAccounts.class})
 public abstract class AbstractIntegrationTest {
 
     // Every Spring context and hand-started instance keeps its own connection pool (10 by default); the

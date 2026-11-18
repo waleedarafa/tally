@@ -10,6 +10,7 @@ import com.tally.account.domain.Account;
 import com.tally.account.domain.AccountRepository;
 import com.tally.account.domain.AccountUser;
 import com.tally.account.domain.AccountUserRepository;
+import com.tally.platform.CallerAccounts;
 import java.time.Clock;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -22,7 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-class AccountService implements AccountApi, AccountStanding, AccountUsers {
+class AccountService implements AccountApi, AccountStanding, AccountUsers, CallerAccounts {
 
     private final AccountRepository accounts;
     private final AccountUserRepository users;
@@ -67,6 +68,13 @@ class AccountService implements AccountApi, AccountStanding, AccountUsers {
                 .map(AccountService::view);
     }
 
+    /** The caller's account, for every module's web layer (brief rule 6). */
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UUID> accountIdOf(String user) {
+        return users.findByUserId(user).map(AccountUser::accountId);
+    }
+
     /** Whether {@code failure} is the named constraint's refusal, and not any other failure (rule 11). */
     private static boolean violates(Throwable failure, String constraint) {
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
@@ -76,12 +84,6 @@ class AccountService implements AccountApi, AccountStanding, AccountUsers {
             }
         }
         return false;
-    }
-
-    @Override
-    @Transactional
-    public AccountView open(Currency currency, ZoneId timeZone) {
-        return view(accounts.save(new Account(UUID.randomUUID(), currency, timeZone, clock.instant())));
     }
 
     @Override

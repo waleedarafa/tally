@@ -3,6 +3,7 @@ package com.tally.subscription.adapter.web;
 import com.tally.account.AccountApi;
 import com.tally.account.UnknownAccountException;
 import com.tally.offers.UnknownPlanException;
+import com.tally.platform.Caller;
 import com.tally.platform.IdempotencyKeys;
 import com.tally.platform.IdempotencyStore;
 import com.tally.platform.IdempotentEndpoints;
@@ -61,11 +62,16 @@ class SignUpController {
 
     @PostMapping("/v1/subscriptions")
     ResponseEntity<String> signUp(@RequestHeader(name = "Idempotency-Key", required = false) String key,
-            @RequestBody SignUpRequest request) {
+            @RequestBody SignUpRequest request, Caller caller) {
         if (request.accountId() == null || isBlank(request.planId()) || isBlank(request.paymentToken())) {
             // Not stored: without an account there is no scope to store the key in.
             return endpoints.problem(HttpStatus.BAD_REQUEST, "about:blank", "Not a sign-up",
                     "accountId, planId and paymentToken are required.");
+        }
+        if (!caller.owns(request.accountId())) {
+            // Another household's account answers as one that does not exist; nothing is touched, no key is
+            // claimed (CLAUDE.md rule 16).
+            return noSuchAccount(new UnknownAccountException(request.accountId()));
         }
         return endpoints.handle(keys, request.accountId().toString(), key, request, () -> signUp(request),
                 this::refusal);
@@ -81,8 +87,7 @@ class SignUpController {
 
     private Optional<ResponseEntity<String>> refusal(RuntimeException refused) {
         return Optional.ofNullable(switch (refused) {
-            case UnknownAccountException e -> endpoints.problem(HttpStatus.NOT_FOUND, "about:blank", "No such account",
-                    e.getMessage());
+            case UnknownAccountException e -> noSuchAccount(e);
             case UnknownPlanException e -> endpoints.problem(HttpStatus.UNPROCESSABLE_CONTENT,
                     "/problems/offer-not-available", "This plan is not offered to this account", e.getMessage());
             case AlreadySubscribedException e -> endpoints.problem(HttpStatus.CONFLICT, "/problems/already-subscribed",
@@ -91,6 +96,10 @@ class SignUpController {
                     "The account is blocked", e.getMessage());
             default -> null;
         });
+    }
+
+    private ResponseEntity<String> noSuchAccount(UnknownAccountException e) {
+        return endpoints.problem(HttpStatus.NOT_FOUND, "about:blank", "No such account", e.getMessage());
     }
 
     private static boolean isBlank(String value) {

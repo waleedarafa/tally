@@ -2,6 +2,7 @@ package com.tally.payment.adapter.web;
 
 import com.tally.payment.PaymentApi;
 import com.tally.payment.PaymentStatus;
+import com.tally.platform.Caller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,8 +25,10 @@ class PaymentStatusController {
         this.payments = payments;
     }
 
+    /** Only for the caller's own account: any other answers 404, as a reference that does not exist (rule 16). */
     @GetMapping("/v1/payments/{reference}/status")
-    ResponseEntity<StatusResponse> status(@PathVariable String reference) {
-        return ResponseEntity.of(payments.status(reference).map(StatusResponse::of));
+    ResponseEntity<StatusResponse> status(@PathVariable String reference, Caller caller) {
+        return ResponseEntity.of(payments.status(reference).filter(status -> caller.owns(status.accountId()))
+                .map(StatusResponse::of));
     }
 }

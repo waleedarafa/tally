@@ -7,6 +7,7 @@ import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionChanged;
+import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -36,6 +37,9 @@ class DuplicateSubscriptionDeliveryIT extends AbstractIntegrationTest {
 
     @Autowired
     AccountApi accounts;
+
+    @Autowired
+    TestAccounts testAccounts;
 
     /**
      * The same subscription start, as a separate publication. Each carries its own event ID: two rows
@@ -72,7 +76,7 @@ class DuplicateSubscriptionDeliveryIT extends AbstractIntegrationTest {
     @Test
     void duplicateDeliveriesAtTheSameMomentAndLaterAreAbsorbed() {
         for (int round = 0; round < 10; round++) {
-            UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+            UUID account = testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
             accounts.recordPaymentToken(account, "tok-duplicates");
             UUID subscription = UUID.randomUUID();
 

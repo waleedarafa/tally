@@ -11,6 +11,7 @@ import com.tally.subscription.SubscriptionApi;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.TestAccounts;
 import com.tally.support.TestTokens;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
@@ -55,6 +56,9 @@ class AT04ProviderOutageIT extends AbstractProviderIntegrationTest {
     AccountApi accounts;
 
     @Autowired
+    TestAccounts testAccounts;
+
+    @Autowired
     SubscriptionApi subscriptions;
 
     @Autowired
@@ -68,9 +72,13 @@ class AT04ProviderOutageIT extends AbstractProviderIntegrationTest {
 
     RestClient tally;
 
+    /** The household that signs up over HTTP during the outage (Slice 4 PR-4). */
+    TestTokens.Household household;
+
     @BeforeEach
     void client() {
-        tally = TestTokens.household().client("http://localhost:" + port);
+        household = TestTokens.household();
+        tally = household.client("http://localhost:" + port);
     }
 
     long attemptsIn(List<String> references, String state) {
@@ -96,7 +104,7 @@ class AT04ProviderOutageIT extends AbstractProviderIntegrationTest {
         // A normal first month.
         List<UUID> all = new ArrayList<>();
         for (int i = 0; i < ACCOUNTS; i++) {
-            UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+            UUID account = testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
             accounts.recordPaymentToken(account, FakeProvider.token());
             subscriptions.subscribe(account, "BASIC");
             all.add(account);
@@ -118,7 +126,7 @@ class AT04ProviderOutageIT extends AbstractProviderIntegrationTest {
         await().atMost(Duration.ofSeconds(30)).until(() -> breakerState() == 1);
 
         // A sign-up during the outage answers at once: nothing waits for the payment.
-        UUID newcomer = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
+        UUID newcomer = testAccounts.openFor(household, Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         ResponseEntity<Map<String, Object>> signUp = tally.post().uri("/v1/subscriptions")
                 .header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(Map.of("accountId", newcomer, "planId", "BASIC", "paymentToken", FakeProvider.token()))

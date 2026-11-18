@@ -2,6 +2,7 @@ package com.tally.collections.adapter.web;
 
 import com.tally.collections.Collections;
 import com.tally.collections.PaymentRequestView;
+import com.tally.platform.Caller;
 import com.tally.platform.IdempotencyKeys;
 import com.tally.platform.IdempotencyStore;
 import com.tally.platform.IdempotentEndpoints;
@@ -53,13 +54,22 @@ class PayNowController {
 
     @PostMapping("/v1/accounts/{accountId}/collections/payment-requests")
     ResponseEntity<String> payNow(@RequestHeader(name = "Idempotency-Key", required = false) String key,
-            @PathVariable UUID accountId) {
+            @PathVariable UUID accountId, Caller caller) {
+        if (!caller.owns(accountId)) {
+            // Another household's account answers as one with no debt; nothing is asked of the card, no key is
+            // claimed (CLAUDE.md rule 16).
+            return noDebtOpen();
+        }
         return endpoints.handle(keys, accountId.toString(), key, new PayNowRequest(accountId),
                 () -> collections.requestPayment(accountId)
                         .map(asked -> ResponseEntity.status(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON)
                                 .body(json.writeValueAsString(PaymentRequestResponse.of(asked))))
-                        .orElseGet(() -> endpoints.problem(HttpStatus.NOT_FOUND, "about:blank", "No debt open",
-                                "The account has no unpaid invoice to pay.")),
+                        .orElseGet(this::noDebtOpen),
                 failure -> Optional.empty());
+    }
+
+    private ResponseEntity<String> noDebtOpen() {
+        return endpoints.problem(HttpStatus.NOT_FOUND, "about:blank", "No debt open",
+                "The account has no unpaid invoice to pay.");
     }
 }
