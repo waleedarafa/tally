@@ -8,6 +8,17 @@ spring:
   flyway:
     default-schema: access
     schemas: access
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Slice 4 (ADR-032; decision 1 of the brief): Access checks each token itself, with the identity provider's
+          # public keys, kept in its database (ADR-039, option A). The issuer and its key set come from the
+          # environment; an instance without them does not start. Tokens for Access or for billing pass the audience
+          # check; only the streaming platform's service token for Access is answered (AccessSecurity).
+          issuer-uri: ${TALLY_IDENTITY_ISSUER}
+          jwk-set-uri: ${TALLY_IDENTITY_JWK_SET_URI}
+          audiences: tally-access, tally-billing
 server:
   port: 8090
 management:

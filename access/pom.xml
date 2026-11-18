@@ -34,6 +34,15 @@
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
+        <!--
+            Slice 4 PR-6 (decision 1 of the brief, option A; ADR-039, option A): Access answers only the streaming
+            platform's service token, checked by Access itself. The starter of Spring Boot 4.1.1 named by spike S-1;
+            it brings spring-security-oauth2-jose (Nimbus), which the test token issuer uses too.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -53,16 +62,6 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!--
-            Slice 4 PR-2: the test token issuer signs its tokens with Nimbus, which this module brings. Test scope
-            only: Access checks no token until PR-6. The version comes from Spring Boot's dependency management
-            (spring-security-bom 7.1.1).
-        -->
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-oauth2-jose</artifactId>
-            <scope>test</scope>
-        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

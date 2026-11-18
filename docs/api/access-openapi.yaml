@@ -6,7 +6,11 @@ info:
     Access, the second deployable (ADR-001): "Can I watch?", answered from Access's own copy of the access facts,
     which it reads from the event log (ADR-012, ADR-033, ADR-035; design.md §8). Written before the code and checked
     against it (com.tallyaccess's contract test). Versions live in the path; changes are additive; a break is /v2.
-    Read only: nothing here changes state, so no Idempotency-Key.
+    Read only: nothing here changes state, so no Idempotency-Key. Access answers only the streaming platform, which
+    calls with a service token from the identity provider: audience tally-access, scope access:read (ADR-032; Slice 4,
+    decision 1, option A). Access checks it itself, with the provider's keys kept in its own database (ADR-039).
+security:
+  - bearer: []
 paths:
   /v1/access/{subscriberId}:
     get:
@@ -33,9 +37,30 @@ paths:
                 $ref: "#/components/schemas/Access"
         "400":
           description: The ID is not a UUID. No body.
+        "401":
+          description: >
+            No token, or one that fails a check: the signature, the issuer, the audience (tally-access or tally-billing)
+            or the expiry. No body.
+          headers:
+            WWW-Authenticate:
+              description: The bearer challenge (RFC 6750).
+              schema:
+                type: string
+        "403":
+          description: >
+            A valid token that is not the streaming platform's service token for Access: a household's token, or one
+            without the scope access:read. No body.
         "503":
-          description: This instance has not caught up with the log yet. No body; another instance may answer.
+          description: >
+            This instance has not caught up with the log yet, or it cannot check the token now: the identity provider is
+            down and no key set is kept (then with Retry-After). No body; another instance may answer.
 components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: The streaming platform's service token (audience tally-access, scope access:read).
   schemas:
     Access:
       type: object
