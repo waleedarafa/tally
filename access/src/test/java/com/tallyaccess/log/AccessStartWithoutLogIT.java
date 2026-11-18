@@ -5,6 +5,7 @@ import static org.awaitility.Awaitility.await;
 
 import com.tallyaccess.AccessApplication;
 import com.tallyaccess.AccessTestSupport;
+import com.tallyaccess.TestTokens;
 import com.tallyaccess.application.AccessCopy;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -60,9 +61,14 @@ class AccessStartWithoutLogIT {
 
     static int get(ConfigurableApplicationContext instance, String path) {
         String port = instance.getEnvironment().getProperty("local.server.port");
-        return RestClient.builder().baseUrl("http://localhost:" + port)
-                .defaultStatusHandler(code -> true, (request, response) -> { }).build()
-                .get().uri(path).retrieve().toBodilessEntity().getStatusCode().value();
+        var request = RestClient.builder().baseUrl("http://localhost:" + port)
+                .defaultStatusHandler(code -> true, (r, response) -> { }).build()
+                .get().uri(path);
+        if (path.startsWith("/v1/")) {
+            // The streaming platform's service token (Slice 4 PR-2); the probes stay open.
+            request = request.header("Authorization", TestTokens.streamingPlatformBearer());
+        }
+        return request.retrieve().toBodilessEntity().getStatusCode().value();
     }
 
     @Test

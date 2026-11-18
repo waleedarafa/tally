@@ -7,6 +7,7 @@ import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountStanding;
 import com.tally.account.Standing;
+import com.tally.support.TestTokens;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.time.Duration;
@@ -53,9 +54,8 @@ class SignUpApiIT extends AbstractIntegrationTest {
 
     @BeforeEach
     void client() {
-        tally = RestClient.builder().baseUrl("http://localhost:" + port)
-                .defaultStatusHandler(status -> true, (request, response) -> { })
-                .build();
+        tally = TestTokens.household().client(RestClient.builder().baseUrl("http://localhost:" + port)
+                .defaultStatusHandler(status -> true, (request, response) -> { }));
     }
 
     UUID account() {

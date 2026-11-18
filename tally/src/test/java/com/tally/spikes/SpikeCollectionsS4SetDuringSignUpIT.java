@@ -7,6 +7,7 @@ import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountStanding;
 import com.tally.account.Standing;
+import com.tally.support.TestTokens;
 import java.sql.Connection;
 import java.time.Duration;
 import java.time.ZoneId;
@@ -53,9 +54,12 @@ class SpikeCollectionsS4SetDuringSignUpIT extends AbstractIntegrationTest {
     @Autowired
     JdbcTemplate jdbc;
 
+    /** One household for each test: both requests of a race come from it. */
+    final TestTokens.Household household = TestTokens.household();
+
     ResponseEntity<String> signUp(UUID account, String key) {
-        return RestClient.builder().baseUrl("http://localhost:" + port)
-                .defaultStatusHandler(status -> true, (request, response) -> { }).build()
+        return household.client(RestClient.builder().baseUrl("http://localhost:" + port)
+                .defaultStatusHandler(status -> true, (request, response) -> { }))
                 .post().uri("/v1/subscriptions").header("Idempotency-Key", key)
                 .body(Map.of("accountId", account, "planId", "BASIC", "paymentToken", "tok_s4_" + account))
                 .retrieve().toEntity(String.class);

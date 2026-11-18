@@ -192,15 +192,20 @@ public final class AccessService implements AutoCloseable {
                     .build();
         }
 
+        /** {@code GET /v1/access/{id}} as the streaming platform, with its service token (Slice 4 PR-2). */
+        private RestClient.RequestHeadersSpec<?> access(UUID subscriberId) {
+            return http.get().uri("/v1/access/{id}", subscriberId)
+                    .header("Authorization", "Bearer " + TestTokens.streamingPlatform());
+        }
+
         @Override
         public int status(UUID subscriberId) {
-            return http.get().uri("/v1/access/{id}", subscriberId).retrieve().toBodilessEntity().getStatusCode()
-                    .value();
+            return access(subscriberId).retrieve().toBodilessEntity().getStatusCode().value();
         }
 
         @Override
         public Map<String, Object> answer(UUID subscriberId) {
-            ResponseEntity<Map<String, Object>> response = http.get().uri("/v1/access/{id}", subscriberId).retrieve()
+            ResponseEntity<Map<String, Object>> response = access(subscriberId).retrieve()
                     .toEntity(new ParameterizedTypeReference<>() { });
             if (response.getStatusCode().value() != 200) {
                 throw new IllegalStateException("Access answered " + response.getStatusCode() + " for "

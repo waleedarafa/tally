@@ -3,6 +3,7 @@ package com.tally.account;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tally.AbstractIntegrationTest;
+import com.tally.support.TestTokens;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,9 +32,8 @@ class OpenAccountApiIT extends AbstractIntegrationTest {
 
     @BeforeEach
     void client() {
-        tally = RestClient.builder().baseUrl("http://localhost:" + port)
-                .defaultStatusHandler(status -> true, (request, response) -> { })
-                .build();
+        tally = TestTokens.household().client(RestClient.builder().baseUrl("http://localhost:" + port)
+                .defaultStatusHandler(status -> true, (request, response) -> { }));
     }
 
     ResponseEntity<String> open(String key, String currency) {

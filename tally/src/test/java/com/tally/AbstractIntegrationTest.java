@@ -2,6 +2,7 @@ package com.tally;
 
 import com.tally.platform.TestClock;
 import com.tally.platform.TestClockConfiguration;
+import com.tally.support.EveryRequestCarriesAToken;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -23,7 +24,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
         "spring.flyway.locations=classpath:db/migration,classpath:db/testmigration",
         "tally.platform.polling-enabled=false"
 })
-@Import(TestClockConfiguration.class)
+@Import({TestClockConfiguration.class, EveryRequestCarriesAToken.class})
 public abstract class AbstractIntegrationTest {
 
     // Every Spring context and hand-started instance keeps its own connection pool (10 by default); the

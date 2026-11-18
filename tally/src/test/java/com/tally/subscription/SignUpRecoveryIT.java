@@ -6,6 +6,7 @@ import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.platform.IdempotencyKeys;
 import com.tally.platform.IdempotencyStore;
+import com.tally.support.TestTokens;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -100,9 +101,8 @@ class SignUpRecoveryIT extends AbstractIntegrationTest {
 
     @BeforeEach
     void client() {
-        tally = RestClient.builder().baseUrl("http://localhost:" + port)
-                .defaultStatusHandler(status -> true, (request, response) -> { })
-                .build();
+        tally = TestTokens.household().client(RestClient.builder().baseUrl("http://localhost:" + port)
+                .defaultStatusHandler(status -> true, (request, response) -> { }));
     }
 
     ResponseEntity<String> signUp(String key, UUID account) {

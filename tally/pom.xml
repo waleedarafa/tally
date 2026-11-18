@@ -64,9 +64,10 @@
         </dependency>
 
         <!--
-            Slice 4 spikes S-1 and S-2 only: the token decoder and its validators, without Spring Boot's security
-            auto-configuration, so no endpoint changes. The version comes from Spring Boot's dependency management
-            (spring-security-bom 7.1.1). PR-3 replaces it with spring-boot-starter-security-oauth2-resource-server.
+            Slice 4 spikes S-1 and S-2, and the test token issuer (PR-2): the token decoder, its validators and
+            Nimbus, without Spring Boot's security auto-configuration, so no endpoint changes. The version comes from
+            Spring Boot's dependency management (spring-security-bom 7.1.1). PR-3 replaces it with
+            spring-boot-starter-security-oauth2-resource-server.
         -->
         <dependency>
             <groupId>org.springframework.security</groupId>

@@ -9,6 +9,7 @@ import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.AccessService;
 import com.tally.support.AccessService.Instance;
 import com.tally.support.FakeProvider;
+import com.tally.support.TestTokens;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
@@ -52,7 +53,7 @@ class AT01SignUpHappyPathIT extends AbstractProviderIntegrationTest {
 
     @BeforeEach
     void client() {
-        tally = RestClient.create("http://localhost:" + port);
+        tally = TestTokens.household().client("http://localhost:" + port);
         access = AccessService.on(topic);
         accessService = access.start("at01");
     }

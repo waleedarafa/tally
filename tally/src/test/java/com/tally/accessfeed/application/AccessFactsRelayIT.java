@@ -11,6 +11,7 @@ import com.tally.platform.QueueItem;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionChanged;
 import com.tally.support.EventLog;
+import com.tally.support.TestTokens;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -193,7 +194,8 @@ class AccessFactsRelayIT extends AbstractIntegrationTest {
         UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
         EventLog.pause();
 
-        ResponseEntity<String> signUp = RestClient.create("http://localhost:" + port).post().uri("/v1/subscriptions")
+        ResponseEntity<String> signUp = TestTokens.household().client("http://localhost:" + port).post()
+                .uri("/v1/subscriptions")
                 .header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(Map.of("accountId", account, "planId", "STANDARD", "paymentToken", "tok_relay"))
                 .retrieve().toEntity(String.class);

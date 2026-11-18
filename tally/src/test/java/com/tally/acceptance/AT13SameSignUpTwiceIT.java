@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
+import com.tally.support.TestTokens;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.ArrayList;
@@ -45,9 +46,8 @@ class AT13SameSignUpTwiceIT extends AbstractIntegrationTest {
 
     @BeforeEach
     void client() {
-        tally = RestClient.builder().baseUrl("http://localhost:" + port)
-                .defaultStatusHandler(status -> true, (request, response) -> { })
-                .build();
+        tally = TestTokens.household().client(RestClient.builder().baseUrl("http://localhost:" + port)
+                .defaultStatusHandler(status -> true, (request, response) -> { }));
     }
 
     ResponseEntity<String> signUp(String key, UUID account, String planId) {
