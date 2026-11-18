@@ -111,7 +111,7 @@ Billing's side of the access facts (ADR-033). It holds no access rule.
 | Technical failure | The provider erred or refused before charging; retried after back-off, publishes nothing (ADR-013) |
 | Unknown | The provider did not say whether it charged. Never retried blindly; resolved by reference, then by repeating with the attempt's key while the provider keeps it, then never (ADR-026) |
 | Unrecognised | A value of a shared enum that the reader does not know, where UNKNOWN is a real state (ADR-024) |
-| Token | The provider's stand-in for a card; Tally never holds a card number (C2, P3) |
+| Token | The provider's stand-in for a card; Tally never holds a card number (C2, P3). Not a caller's token (Platform) |
 
 ## Account (`account`)
 
@@ -121,6 +121,9 @@ Billing's side of the access facts (ADR-033). It holds no access rule.
 | Standing | Good, overdue or blocked. Only Collections changes it (R3), in the same transaction as the case (rule 5). A written-off case keeps the standing blocked |
 | Blocked | A standing: no new invoices (a renewal waits), and Tally-billed sources of access stop counting (I6; Access rule 2) |
 | Time zone | The account's zone; it decides what "due" means (H8) |
+| User | The person a token names: its subject (`sub`), an ID from the identity provider. Tally keeps no name and no email (ADR-032) |
+| Account link | The one row in `account.account_user` that ties a user to the user's account. One user, one account: the constraint `account_user_one_per_user` (WAR-84; ADR-032) |
+| Another household | An account, subscription or payment that is not the caller's. A request for it answers 404, the same as for one that does not exist, and changes nothing (rule 16) |
 
 ## Platform and events (`platform`, `shared`)
 
@@ -131,4 +134,10 @@ Billing's side of the access facts (ADR-033). It holds no access rule.
 | Durable queue | A table of work to do later, claimed with `FOR UPDATE SKIP LOCKED` (FR-017, ADR-003) |
 | Duplicate guard | A unique constraint in a business table that permanently stops the same work twice; a queue key is not one (FR-037, rule 11) |
 | Money queue | A queue whose work moves money or decides what a customer owes; its failed items alert (FR-037) |
-| Idempotency key | A UUID a client sends with every state-changing request, claimed before acting (ADR-019, ADR-027) |
+| Idempotency key | A UUID a client sends with every state-changing request, claimed before acting (ADR-019, ADR-027). It belongs to the caller: its scope is `user:<id>` (Slice 4 PR-5) |
+| Identity provider | The service that signs in a user and issues tokens. No product is chosen; Tally reads its issuer and the location of its key set from settings (ADR-032) |
+| Token (of a caller) | A signed JWT from the identity provider on every request under `/v1/`. Tally checks its signature, issuer, audience and expiry itself, the expiry on the injected clock (rule 16). Not the payment token, the provider's stand-in for a card |
+| Caller | Who sends a request: the token's user and, once found, the user's account (`platform.Caller`). Found once for each request; every `/v1/` handler takes it (F16) |
+| Service token | A token for a service, not a household: the streaming platform's token for Access has audience `tally-access` and scope `access:read` (Slice 4 brief, decision 1). A household's token gets 403 at Access |
+| Key set | The identity provider's public keys (JWKS), fetched from its key set location and used to check signatures. Billing keeps it in memory (ADR-039, option B); Access keeps the last one in its database, `access.identity_key_set` (option A) |
+| Hold-off | After any fetch of the key set, Access uses the set it keeps for this time (30 s) before it fetches again, so tokens with unknown key IDs cannot hold every token behind a provider that hangs. A key the provider adds is accepted at most one hold-off after it is first seen (review of #92) |
