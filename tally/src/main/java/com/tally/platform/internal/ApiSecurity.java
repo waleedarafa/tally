@@ -57,11 +57,13 @@ class ApiSecurity {
 
     @Bean
     JwkSetUriJwtDecoderBuilderCustomizer keysInMemoryWithShortTimeouts(
-            @Value("${tally.security.key-fetch-timeout:2s}") Duration timeout) {
+            @Value("${tally.security.key-fetch-timeout:2s}") Duration timeout, ApiMetrics.KeyFetchCounter fetches) {
         SimpleClientHttpRequestFactory requests = new SimpleClientHttpRequestFactory();
         requests.setConnectTimeout(timeout);
         requests.setReadTimeout(timeout);
-        return builder -> builder.cache(new ConcurrentMapCache("identity-provider-keys"))
-                .restOperations(new RestTemplate(requests));
+        RestTemplate client = new RestTemplate(requests);
+        // Each fetch counted, for IdentityKeysUnavailable (ADR-030).
+        client.getInterceptors().add(fetches.interceptor());
+        return builder -> builder.cache(new ConcurrentMapCache("identity-provider-keys")).restOperations(client);
     }
 }

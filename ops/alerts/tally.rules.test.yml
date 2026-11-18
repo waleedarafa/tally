@@ -821,3 +821,173 @@ tests:
   - eval_time: 70m
     alertname: CollectionsStepLate
     exp_alerts: []
+- name: ApiTokensRefused fires when most answers are 401, over 1 a second, for 5 minutes
+  interval: 30s
+  input_series:
+  # 2 answers a second, and 5 refusals a second: most tokens are refused. Pending from about 1m, firing after 5m more.
+  - series: tally_api_requests_total{instance="tally-1", outcome="answered"}
+    values: 0+60x40
+  - series: tally_api_requests_total{instance="tally-1", outcome="unauthenticated"}
+    values: 0+150x40
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: ApiTokensRefused
+    exp_alerts: []
+  - eval_time: 7m
+    alertname: ApiTokensRefused
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        driver: ADR-032
+      exp_annotations:
+        summary: Most requests to billing are refused with 401; households may be locked out, or someone is trying tokens.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/tokens-refused.md
+- name: ApiTokensRefused stays quiet when 401s are many but a small share of the answers
+  interval: 30s
+  input_series:
+  # 20 answers a second, 2 refusals a second.
+  - series: tally_api_requests_total{instance="tally-1", outcome="answered"}
+    values: 0+600x40
+  - series: tally_api_requests_total{instance="tally-1", outcome="unauthenticated"}
+    values: 0+60x40
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: ApiTokensRefused
+    exp_alerts: []
+- name: ApiTokensRefused stays quiet when 401s are most answers but fewer than 1 a second
+  interval: 30s
+  input_series:
+  # A quiet night: no answers, and a refusal every 2 seconds.
+  - series: tally_api_requests_total{instance="tally-1", outcome="answered"}
+    values: 0x40
+  - series: tally_api_requests_total{instance="tally-1", outcome="unauthenticated"}
+    values: 0+15x40
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: ApiTokensRefused
+    exp_alerts: []
+- name: IdentityKeysUnavailable fires when billing's fetches of the key set fail, none succeeding, for 2 minutes
+  interval: 30s
+  input_series:
+  # A billing instance started during an outage fetches the key set for each request, and each fetch fails.
+  - series: tally_identity_key_fetches_total{instance="tally-1", outcome="success"}
+    values: 0x40
+  - series: tally_identity_key_fetches_total{instance="tally-1", outcome="failure"}
+    values: 0+1x40
+  alert_rule_test:
+  - eval_time: 2m
+    alertname: IdentityKeysUnavailable
+    exp_alerts: []
+  - eval_time: 4m
+    alertname: IdentityKeysUnavailable
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        driver: ADR-039
+      exp_annotations:
+        summary: Billing cannot fetch the identity provider's key set; an instance that has no keys answers 500 to every request.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/identity-keys-unavailable.md
+- name: IdentityKeysUnavailable stays quiet when a failed fetch is followed by one that succeeds
+  interval: 30s
+  input_series:
+  # Three failures in one minute, then the provider answers.
+  - series: tally_identity_key_fetches_total{instance="tally-1", outcome="success"}
+    values: 0 0 0 0 1x36
+  - series: tally_identity_key_fetches_total{instance="tally-1", outcome="failure"}
+    values: 0 1 2 3x37
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: IdentityKeysUnavailable
+    exp_alerts: []
+  - eval_time: 15m
+    alertname: IdentityKeysUnavailable
+    exp_alerts: []
+- name: IdentityKeysUnavailable stays quiet for fewer than 3 failed fetches
+  interval: 30s
+  input_series:
+  - series: tally_identity_key_fetches_total{instance="tally-1", outcome="success"}
+    values: 0x40
+  - series: tally_identity_key_fetches_total{instance="tally-1", outcome="failure"}
+    values: 0 1 2x38
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: IdentityKeysUnavailable
+    exp_alerts: []
+- name: AccessTokensRefused fires when most of Access's answers are 401, over 1 a second, for 5 minutes
+  interval: 30s
+  input_series:
+  # The streaming platform's token is refused: almost every request gets 401.
+  - series: tally_access_requests_total{instance="access-1", outcome="answered"}
+    values: 0+3x40
+  - series: tally_access_requests_total{instance="access-1", outcome="unauthenticated"}
+    values: 0+300x40
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: AccessTokensRefused
+    exp_alerts: []
+  - eval_time: 7m
+    alertname: AccessTokensRefused
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        driver: D13
+      exp_annotations:
+        summary: Most requests to Access are refused with 401; the streaming platform may get no answer to "can I watch?".
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/tokens-refused.md
+- name: AccessTokensRefused stays quiet when 401s are a small share of Access's answers
+  interval: 30s
+  input_series:
+  - series: tally_access_requests_total{instance="access-1", outcome="answered"}
+    values: 0+3000x40
+  - series: tally_access_requests_total{instance="access-1", outcome="unauthenticated"}
+    values: 0+30x40
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: AccessTokensRefused
+    exp_alerts: []
+- name: AccessTokensRefused stays quiet when 401s are fewer than 1 a second
+  interval: 30s
+  input_series:
+  - series: tally_access_requests_total{instance="access-1", outcome="answered"}
+    values: 0x40
+  - series: tally_access_requests_total{instance="access-1", outcome="unauthenticated"}
+    values: 0+15x40
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: AccessTokensRefused
+    exp_alerts: []
+- name: AccessIdentityKeysUnavailable fires when Access's fetches of the key set fail, none succeeding, for 2 minutes
+  interval: 30s
+  input_series:
+  # Access fetches at most once each hold-off (30 s), and each fetch fails.
+  - series: tally_access_identity_key_fetches_total{instance="access-1", outcome="success"}
+    values: 0x40
+  - series: tally_access_identity_key_fetches_total{instance="access-1", outcome="failure"}
+    values: 0+1x40
+  alert_rule_test:
+  - eval_time: 2m
+    alertname: AccessIdentityKeysUnavailable
+    exp_alerts: []
+  - eval_time: 4m
+    alertname: AccessIdentityKeysUnavailable
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        driver: D13
+      exp_annotations:
+        summary: Access cannot fetch the identity provider's key set; it answers only while the platform's service token lives.
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/identity-keys-unavailable.md
+- name: AccessIdentityKeysUnavailable stays quiet when a failed fetch is followed by one that succeeds
+  interval: 30s
+  input_series:
+  - series: tally_access_identity_key_fetches_total{instance="access-1", outcome="success"}
+    values: 0 0 0 0 1x36
+  - series: tally_access_identity_key_fetches_total{instance="access-1", outcome="failure"}
+    values: 0 1 2 3x37
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: AccessIdentityKeysUnavailable
+    exp_alerts: []
+  - eval_time: 15m
+    alertname: AccessIdentityKeysUnavailable
+    exp_alerts: []

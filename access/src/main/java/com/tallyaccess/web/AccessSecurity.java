@@ -108,11 +108,15 @@ class AccessSecurity {
     @Bean
     JwkSetUriJwtDecoderBuilderCustomizer keySetKeptInTheDatabase(JdbcTemplate jdbc, Clock clock,
             @Value("${tally.access.security.key-fetch-timeout:2s}") Duration timeout,
-            @Value("${tally.access.security.key-refetch-hold-off:30s}") Duration holdOff) {
+            @Value("${tally.access.security.key-refetch-hold-off:30s}") Duration holdOff,
+            AccessMetrics.KeyFetchCounter fetches) {
         SimpleClientHttpRequestFactory requests = new SimpleClientHttpRequestFactory();
         requests.setConnectTimeout(timeout);
         requests.setReadTimeout(timeout);
+        RestTemplate client = new RestTemplate(requests);
+        // Each fetch counted, for AccessIdentityKeysUnavailable (ADR-030).
+        client.getInterceptors().add(fetches.interceptor());
         JdbcKeySetCache keySet = new JdbcKeySetCache(jdbc, clock, holdOff);
-        return builder -> builder.cache(keySet).restOperations(new RestTemplate(requests));
+        return builder -> builder.cache(keySet).restOperations(client);
     }
 }
