@@ -21,7 +21,21 @@ spring:
   flyway:
     # One schema per data-owning module (CLAUDE.md, rule 2). Flyway's history table lives in "public".
     default-schema: public
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # ADR-032 (Slice 4): Tally checks each token itself, with the identity provider's public keys. No
+          # product is chosen yet (brief rule 11), so the issuer and its key set come from the environment; an
+          # instance without them does not start. The audience is billing's.
+          issuer-uri: ${TALLY_IDENTITY_ISSUER}
+          jwk-set-uri: ${TALLY_IDENTITY_JWK_SET_URI}
+          audiences: tally-billing
 management:
+  server:
+    # The health and metrics endpoints on a port of their own, open to the platform that runs Tally; they hold
+    # no household data (Slice 4, brief rule 10). The API is on server.port.
+    port: 8082
   endpoints:
     web:
       exposure:

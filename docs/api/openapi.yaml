@@ -6,16 +6,23 @@ info:
     The REST contract, v1 (design.md §8; ADR-019). Written before the code (OpenAPI first) and checked against
     it: the contract tests validate every request and response below (com.tally.contract). Versions live in the
     path; changes are additive; a break is /v2. Every request that changes state requires an Idempotency-Key
-    (CLAUDE.md rule 13), handled by the platform's shared mechanism.
+    (CLAUDE.md rule 13), handled by the platform's shared mechanism. Every request carries a bearer token from the
+    identity provider (ADR-032, Slice 4); Tally checks its signature, issuer, audience and expiry, and answers 401
+    when any check fails. The token's subject is the user; a user has one account (WAR-84).
+security:
+  - bearer: []
 paths:
   /v1/accounts:
     post:
       operationId: openAccount
       summary: Opens an account.
       description: >
-        The Idempotency-Key is claimed before acting; the response is stored in the same transaction as the new
-        account, and both are kept for 24 hours. No account exists before this request, so until callers are
-        authenticated every key of this endpoint shares one scope: two clients choosing the same key value share it.
+        Opens the caller's account and links it to the user, the token's subject (ADR-032). A user has one account
+        (WAR-84): if the user has one, the answer is 200 with it, whatever the key; of two requests at the same
+        time, both answer with the one account. The body is checked first. The Idempotency-Key is claimed before
+        acting; the response is stored in the same transaction as the new account, and both are kept for 24 hours.
+        Until keys are scoped by caller (Slice 4 PR-5, ADR-027), every key of this endpoint shares one scope: two
+        callers choosing the same key value share it.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -25,6 +32,14 @@ paths:
             schema:
               $ref: "#/components/schemas/OpenAccountRequest"
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "200":
+          description: The user has an account already; this is it. Nothing was opened.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
         "201":
           description: The account was opened.
           content:
@@ -44,6 +59,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/AccountId"
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
         "200":
           description: The account.
           content:
@@ -52,6 +69,24 @@ paths:
                 $ref: "#/components/schemas/Account"
         "404":
           description: No such account. No body.
+  /v1/me/account:
+    get:
+      operationId: getMyAccount
+      summary: Reads the caller's account.
+      description: >
+        Slice 4. The account linked to the user, the token's subject: for an app on a new phone, and for the
+        streaming platform, which keeps each user's account ID. Read only: no Idempotency-Key.
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "200":
+          description: The caller's account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "404":
+          description: The user has no account yet. No body.
   /v1/accounts/{accountId}/collections/payment-requests:
     post:
       operationId: payNow
@@ -72,6 +107,8 @@ paths:
             type: string
             format: uuid
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
         "202":
           description: Collections asked again; the outcome arrives later.
           content:
@@ -101,6 +138,8 @@ paths:
           schema:
             type: string
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
         "200":
           description: The latest attempt.
           content:
@@ -130,6 +169,8 @@ paths:
             schema:
               $ref: "#/components/schemas/SignUpRequest"
       responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
         "201":
           description: The subscription started.
           content:
@@ -192,7 +233,23 @@ components:
       schema:
         type: string
         format: uuid
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        A JWT signed by the identity provider (ADR-032). Its subject is the user; its audience is tally-billing.
   responses:
+    Unauthenticated:
+      description: >
+        No token, or one that fails a check: the signature, the issuer, the audience or the expiry. Nothing was
+        changed. No body.
+      headers:
+        WWW-Authenticate:
+          description: The bearer challenge (RFC 6750), naming the error when a token was sent.
+          schema:
+            type: string
     BadRequest:
       description: The Idempotency-Key header is missing, or the body is not valid for this request.
       content:

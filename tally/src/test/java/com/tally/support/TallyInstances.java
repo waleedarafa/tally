@@ -39,6 +39,7 @@ public final class TallyInstances implements AutoCloseable {
         props.put("tally.platform.polling-enabled", "false");
         props.put("spring.application.name", name);
         props.putAll(EventLog.feedSettings(url()));
+        props.putAll(TestTokens.billingSettings());
         // The caller's settings replace these defaults: a repeated argument would bind as "a,b".
         for (String property : properties) {
             String[] keyValue = property.split("=", 2);

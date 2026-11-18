@@ -59,11 +59,12 @@ To run one stage of the pipeline only:
 ```sh
 docker compose -f infra/docker-compose.yml up -d     # PostgreSQL on 5432, the event log on 9092, Access's PostgreSQL on 5433
 ./mvnw -pl fake-provider spring-boot:run              # fake provider on localhost:8081
-./mvnw -pl tally spring-boot:run                      # Tally on localhost:8080
+TALLY_IDENTITY_ISSUER=<issuer> TALLY_IDENTITY_JWK_SET_URI=<key set URL> \
+  ./mvnw -pl tally spring-boot:run                    # Tally on localhost:8080; health and metrics on 8082
 ./mvnw -pl access spring-boot:run                     # Access on localhost:8090
 ```
 
-Flyway creates the schemas on start-up. A walk through the API:
+Flyway creates the schemas on start-up. Tally does not start without an identity provider (ADR-032, Slice 4): its issuer and the URL of its public key set. Every request to `/v1/` carries `Authorization: Bearer <token>`, a token from that provider with audience `tally-billing`, and every request that changes state an `Idempotency-Key` (a new UUID). A walk through the API, with those two headers left out:
 
 ```sh
 # Open an account
@@ -84,7 +85,7 @@ curl -s localhost:8090/v1/access/<account id>          # Access: can this accoun
 
 Plans are `BASIC`, `STANDARD` and `PREMIUM`, priced in USD and AED. The fake provider's behaviour can be switched for experiments, for example `curl -X POST localhost:8081/admin/mode -H 'Content-Type: application/json' -d '{"modes":["OUTAGE"]}'`; see [`CONTRACT.md`](fake-provider/CONTRACT.md) for every mode.
 
-Health of every queue, job and listener pool is published as Micrometer metrics under `tally.*`, at `/actuator/metrics`.
+Health of every queue, job and listener pool is published as Micrometer metrics under `tally.*`, at `/actuator/metrics` on the management port (8082), which needs no token.
 
 ## Pipeline
 

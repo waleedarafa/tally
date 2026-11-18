@@ -26,5 +26,6 @@ COPY --from=layers /build/extracted/dependencies/ ./
 COPY --from=layers /build/extracted/spring-boot-loader/ ./
 COPY --from=layers /build/extracted/application/ ./
 USER tally
-EXPOSE 8080
+# 8080: the API; 8082: health and metrics, the management port (Slice 4).
+EXPOSE 8080 8082
 ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]

@@ -3,9 +3,12 @@ package com.tally.account.adapter.web;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
 import com.tally.account.UnknownAccountException;
+import com.tally.account.application.AccountUsers;
+import com.tally.account.application.UserHasAnAccountException;
 import com.tally.platform.IdempotencyKeys;
 import com.tally.platform.IdempotencyStore;
 import com.tally.platform.IdempotentEndpoints;
+import java.security.Principal;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -27,15 +30,16 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * {@code /v1/accounts} (docs/api/openapi.yaml). Opening an account changes state, so it requires an
- * {@code Idempotency-Key} (CLAUDE.md rule 13; ADR-019), handled by the platform's shared mechanism.
+ * {@code Idempotency-Key} (CLAUDE.md rule 13; ADR-019), handled by the platform's shared mechanism. Every request
+ * carries a token; its subject is the user (ADR-032), and a user has one account (WAR-84).
  */
 @RestController
 @RequestMapping("/v1/accounts")
 class AccountController {
 
     /**
-     * No account exists before it is opened, so until callers are authenticated every key of this endpoint
-     * belongs to one scope: two clients that choose the same key value share it.
+     * No account exists before it is opened, so every key of this endpoint belongs to one scope: two callers that
+     * choose the same key value share it, until Slice 4 PR-5 scopes keys by caller (ADR-027).
      */
     static final String UNAUTHENTICATED = "unauthenticated";
 
@@ -49,30 +53,48 @@ class AccountController {
     }
 
     private final AccountApi accounts;
+    private final AccountUsers users;
     private final IdempotentEndpoints endpoints;
     private final IdempotencyStore keys;
     private final JsonMapper json;
 
-    AccountController(AccountApi accounts, IdempotentEndpoints endpoints, IdempotencyKeys idempotencyKeys,
-            JsonMapper json) {
+    AccountController(AccountApi accounts, AccountUsers users, IdempotentEndpoints endpoints,
+            IdempotencyKeys idempotencyKeys, JsonMapper json) {
         this.accounts = accounts;
+        this.users = users;
         this.endpoints = endpoints;
         this.keys = idempotencyKeys.register("account.idempotency_key");
         this.json = json;
     }
 
+    /**
+     * Opens the caller's account: 201 with a new one, or 200 with the one the user has, whatever the key (WAR-84).
+     * The body is checked first, so a bad body is 400 either way. Of two "open" requests at the same time, the second
+     * rolls back on the link's unique constraint and answers 200 with the first one's account.
+     */
     @PostMapping
     ResponseEntity<String> open(@RequestHeader(name = "Idempotency-Key", required = false) String key,
-            @RequestBody OpenAccount request) {
+            @RequestBody OpenAccount request, Principal caller) {
+        String user = caller.getName();
         return endpoints.handle(keys, UNAUTHENTICATED, key, request, () -> {
-            AccountView opened = accounts.open(Currency.getInstance(request.currency()), ZoneId.of(request.timeZone()));
-            return ResponseEntity.status(HttpStatus.CREATED).contentType(MediaType.APPLICATION_JSON)
-                    .body(json.writeValueAsString(AccountResponse.of(opened)));
-        }, failure -> failure instanceof IllegalArgumentException || failure instanceof NullPointerException
-                || failure instanceof DateTimeException
-                ? Optional.of(endpoints.problem(HttpStatus.BAD_REQUEST, "about:blank", "Not an account",
-                        "currency must be an ISO 4217 code and timeZone an IANA time zone."))
-                : Optional.empty());
+            AccountUsers.Opened opened = users.openFor(user, Currency.getInstance(request.currency()),
+                    ZoneId.of(request.timeZone()));
+            return account(opened.opened() ? HttpStatus.CREATED : HttpStatus.OK, opened.account());
+        }, failure -> {
+            if (failure instanceof UserHasAnAccountException) {
+                return users.accountOf(user).map(account -> account(HttpStatus.OK, account));
+            }
+            return failure instanceof IllegalArgumentException || failure instanceof NullPointerException
+                    || failure instanceof DateTimeException
+                    ? Optional.of(endpoints.problem(HttpStatus.BAD_REQUEST, "about:blank", "Not an account",
+                            "currency must be an ISO 4217 code and timeZone an IANA time zone."))
+                    : Optional.empty();
+        });
+    }
+
+    private ResponseEntity<String> account(HttpStatus status, AccountView account) {
+        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON)
+                .body(json.writeValueAsString(AccountResponse.of(account)));
     }
 
     @GetMapping("/{id}")

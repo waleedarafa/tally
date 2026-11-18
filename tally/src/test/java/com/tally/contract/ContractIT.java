@@ -18,12 +18,12 @@ import com.tally.collections.Collections;
 import com.tally.invoicing.InvoicePaymentDeclined;
 import com.tally.payment.PaymentApi;
 import com.tally.shared.Money;
-import com.tally.support.EveryRequestCarriesAToken;
 import com.tally.support.TestTokens;
 import io.swagger.v3.oas.models.PathItem.HttpMethod;
 import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.parser.OpenAPIV3Parser;
 import io.swagger.v3.parser.core.models.ParseOptions;
+import jakarta.servlet.Filter;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.ZoneId;
@@ -63,7 +63,7 @@ class ContractIT extends AbstractIntegrationTest {
 
     /** Every operation this class tests; it must be exactly the operations in the specification. */
     static final Set<String> TESTED = Set.of(
-            "POST /v1/accounts", "GET /v1/accounts/{id}",
+            "POST /v1/accounts", "GET /v1/accounts/{id}", "GET /v1/me/account",
             "GET /v1/payments/{reference}/status", "POST /v1/subscriptions",
             "POST /v1/accounts/{accountId}/collections/payment-requests");
 
@@ -87,13 +87,15 @@ class ContractIT extends AbstractIntegrationTest {
 
     MockMvc mvc;
 
+    /** The caller of every request of one test. */
+    final TestTokens.Household household = TestTokens.household();
+
     @BeforeEach
     void mvc() {
-        // One household's token on every request (Slice 4 PR-2); the guard runs here too, as MockMvc adds no
-        // filters of its own.
+        // One household's token on every request; the server's security filters run in MockMvc too (Slice 4).
         mvc = MockMvcBuilders.webAppContextSetup(context)
-                .defaultRequest(get("/").header("Authorization", TestTokens.household().bearer()))
-                .addFilters(new EveryRequestCarriesAToken.Filter())
+                .defaultRequest(get("/").header("Authorization", household.bearer()))
+                .addFilters(context.getBean("springSecurityFilterChain", Filter.class))
                 .build();
     }
 
@@ -235,12 +237,37 @@ class ContractIT extends AbstractIntegrationTest {
         valid(json(post("/v1/accounts").header("Idempotency-Key", key), body), 201);
         valid(json(post("/v1/accounts").header("Idempotency-Key", key), "{\"currency\":\"AED\",\"timeZone\":\"UTC\"}"),
                 422);
+        // The user has an account: a new key answers 200 with it (WAR-84).
+        valid(json(post("/v1/accounts").header("Idempotency-Key", key()), body), 200);
         valid(json(post("/v1/accounts").header("Idempotency-Key", key()), "{\"currency\":\"XX\",\"timeZone\":\"UTC\"}"),
                 400);
         inFlight("account.idempotency_key", key);
         MvcResult inProgress = valid(json(post("/v1/accounts").header("Idempotency-Key", key), body), 409);
         assertThat(inProgress.getResponse().getHeader("Retry-After")).isNotBlank();
         validResponse(json(post("/v1/accounts"), body), Method.POST, 400);
+    }
+
+    @Test
+    void getMyAccount() throws Exception {
+        valid(get("/v1/me/account"), 404);
+        valid(json(post("/v1/accounts").header("Idempotency-Key", key()), "{\"currency\":\"USD\",\"timeZone\":\"UTC\"}"),
+                201);
+        valid(get("/v1/me/account"), 200);
+    }
+
+    /** Every operation's 401, to a request with no valid token, conforms (Slice 4, ADR-032). */
+    @Test
+    void everyOperationsUnauthenticatedAnswerConforms() throws Exception {
+        for (String operation : TESTED) {
+            String method = operation.substring(0, operation.indexOf(' '));
+            String path = operation.substring(operation.indexOf(' ') + 1).replaceAll("\\{[^}]+}",
+                    UUID.randomUUID().toString());
+            MockHttpServletRequestBuilder request = "POST".equals(method) ? json(post(path), "{}") : get(path);
+            MvcResult result = exchange(request.header("Authorization", "Bearer not-a-token"));
+            assertThat(result.getResponse().getStatus()).as(operation).isEqualTo(401);
+            assertConforms(VALIDATOR.validateResponse(path, Method.valueOf(method),
+                    MockMvcResponse.of(result.getResponse())));
+        }
     }
 
     @Test
