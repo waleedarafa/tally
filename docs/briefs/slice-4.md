@@ -1,6 +1,6 @@
 # Slice 4 brief: Authentication
 
-Status of this brief: **draft**. One decision below waits for the user. Do not start PR-2 before it is confirmed on the pull request of this brief.
+Status of this brief: **confirmed**. The user confirmed the decision below on 18 November 2026, on pull request 85: option A.
 
 ## Goal
 
@@ -16,7 +16,7 @@ When this slice is done:
 - A user can act only for the user's own account. A request for another household's account, subscription or payment gets 404, and nothing changes.
 - One user has one account (WAR-84, decided 13 November). A second "open an account" from the same user gives the account that the user has.
 - Idempotency keys belong to the caller, not to the account (ADR-027).
-- Access answers only a caller that has the right token (decision 1 below).
+- Access answers only the streaming platform's service token (decision 1, option A).
 - All acceptance tests of Slices 1 to 3 still pass, now with tokens.
 
 ## Why this slice comes next
@@ -44,7 +44,9 @@ When this slice is done:
 - Idempotency keys are scoped by account. For `openAccount`, all callers share one scope (design.md §8).
 - The actuator endpoints (health, readiness, metrics) are on the same server as the API.
 
-## The decision that waits for the user
+## The decision, confirmed by the user on 18 November 2026
+
+The user chose option A. The other options stay here with their costs, as the record of what was compared.
 
 ### 1. Who calls Access, and with which token?
 
@@ -54,7 +56,7 @@ The Design Record says Access "ties into our own streaming platform and each tel
 
 | Option | What happens | Cost |
 |---|---|---|
-| **A. The streaming platform calls Access with a service token (recommended)** | The household's app talks to the streaming platform. The platform knows the household's account and asks Access with its own service token. Access checks the token's audience and scope. Access refuses a household's token. | The streaming platform must keep the account ID of each user. It learns it once, from billing's new `GET /v1/me/account`. |
+| **A. The streaming platform calls Access with a service token (chosen)** | The household's app talks to the streaming platform. The platform knows the household's account and asks Access with its own service token. Access checks the token's audience and scope. Access refuses a household's token. | The streaming platform must keep the account ID of each user. It learns it once, from billing's new `GET /v1/me/account`. |
 | B. The app calls Access with the household's token | Billing adds the user ID to the access facts. Access checks that the token's user holds the account. | A change of contract v1 (an added field). The user ID goes into the event log, so F15's rule "no personal data" needs a new reading: the user ID is an opaque number, like the account ID. One more fact that can be late: a new user's first answer is `NOT_KNOWN` until the link arrives. |
 | C. Leave Access open in this slice | Nothing changes in Access. | Anybody can ask "may this account watch?" for any account ID. The IDs are random UUIDs, so guessing is hard, but a leaked ID answers. Not acceptable before production. |
 
