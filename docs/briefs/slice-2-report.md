@@ -11,7 +11,7 @@ Slice 2 made Access a second deployable (ADR-001). It ran from PR #61 to PR #72,
 | Access reads the log and answers from its own copy | Yes | `GET /v1/access/{subscriberId}` (#69) |
 | A test stops every billing copy and the billing database; Access still answers | Yes | AT-18 (#70) |
 | A test empties Access's database; Access builds its copy again from the log | Yes | AT-19 (#70) |
-| Step 0b: the nightly run passes again, twice by hand, then the schedule is enabled | **Not finished** | The cause is found and fixed (#61): AT-10 ran with 10,000 renewals for the first time, three times. The workflow `Nightly load` is still `disabled_manually`, so it cannot be dispatched, and no tool here enables it (§3.1) |
+| Step 0b: the nightly run passes again, twice by hand, then the schedule is enabled | **Finished on 15 November, after this report merged.** At the report's merge: **Not finished** | At the report's merge: the cause is found and fixed (#61): AT-10 ran with 10,000 renewals for the first time, three times. The workflow `Nightly load` is still `disabled_manually`, so it cannot be dispatched, and no tool here enables it (§3.1). **Update (Slice 3 PR-9, #84 review):** the user enabled the workflow on 15 November. Two runs by hand on `main` (1b18edc) passed: 43696821632 and 43698158614. Scheduled runs passed since: 43843115838 (16 November), 44067979012 (17 November) |
 
 **Builds at the end of the slice** (`main` at 2f60140): `./mvnw verify`, JDK 25, BUILD SUCCESS. Fake provider 20 tests; Access 15 unit and 19 integration tests; billing 150 unit and 217 integration tests. CI green on every merged head: billing's commit stage (with promtool), Access's pipeline, billing's acceptance stage (53 acceptance and spike tests on #70).
 
@@ -70,7 +70,9 @@ None of these stopped the slice: each was decided on its pull request, and ADR-0
 
 ### 3.1 Deviations
 
-1. **Step 0b is not finished** (#61). The fix is merged, and the nightly command passed three times on the branch, at nightly size, on Docker 28 and 29. The brief's two `workflow_dispatch` runs on `main` and the schedule wait for the workflow to be enabled (Actions → Nightly load → Enable workflow); it is `disabled_manually`, and this session has no tool that enables a workflow.
+1. **Update (Slice 3 PR-9, #84 review): step 0b was finished on 15 November, after this report merged.** The user enabled the workflow; runs 43696821632 and 43698158614 by hand on `main` (1b18edc) passed, and the schedule has passed since (43843115838, 44067979012). The text below is the report as merged.
+
+   **Step 0b is not finished** (#61). The fix is merged, and the nightly command passed three times on the branch, at nightly size, on Docker 28 and 29. The brief's two `workflow_dispatch` runs on `main` and the schedule wait for the workflow to be enabled (Actions → Nightly load → Enable workflow); it is `disabled_manually`, and this session has no tool that enables a workflow.
 2. **ADR-033 gained transactions** (#68, the user's decision after S-4). The brief's property ("one send at a time per account") is kept and is not enough on its own. Four conditions came with it from the review: the ADR-033 text, the contract's README with an Access test, the AT-1 time, and a test that drives the gap.
 3. **"The broker stopped and started" is `docker pause` and `unpause`** in `AccessFeedOrderIT` and the relay's tests (#68). The broker keeps its data and its port and stops answering, as when it hangs.
 4. **No test drives the gap through two relays with a proxy** (#68, review question 3: the user decided no proxy test). The gap is driven deterministically in `SpikeS4UnacknowledgedSendIT`, and through one relay in `AccessFactsRelayIT.aSendThatTimedOutNeverEndsTheCommittedLogBeforeANewerOne`.

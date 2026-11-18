@@ -27,15 +27,15 @@ Drivers are the D-numbers of [`drivers.md`](drivers.md). The course review used 
 | 0 Decision drivers | 9 |  |  | 2 | 7 |  |  |
 | A Domain | 15 | 1 |  | 2 | 8 | 4 |  |
 | B Architecture styles | 8 |  |  |  | 4 | 3 | 1 |
-| C Inside a module | 6 | 1 |  | 2 |  | 3 |  |
-| D Data and reliability | 27 | 4 | 3 | 3 | 4 | 12 | 1 |
+| C Inside a module | 6 | 1 |  | 1 |  | 4 |  |
+| D Data and reliability | 27 | 3 | 3 | 3 | 4 | 13 | 1 |
 | D2 Distributed coordination | 11 | 3 | 2 | 1 | 4 | 1 |  |
 | E Evolution and governance | 15 | 3 |  | 2 | 4 | 5 | 1 |
 | F Delivery | 17 | 4 | 5 | 5 | 3 |  |  |
 | G Teams | 8 | 3 | 3 |  | 1 |  | 1 |
 | H Runtime infrastructure | 11 | 4 | 3 | 2 | 1 | 1 |  |
 | I Security | 13 | 6 | 2 | 1 | 1 | 1 | 2 |
-| **All** | **140** | **29** | **18** | **20** | **37** | **30** | **6** |
+| **All** | **140** | **28** | **18** | **19** | **37** | **32** | **6** |
 
 Before this check the course table had 24 topics built or checked. After it, 54. 78 of 138 statuses changed.
 
@@ -145,7 +145,7 @@ The Design Record lists four items as required before production: settlement rec
 | C-03 | The dependency rule | Checked ◆ | Built | High | — | F8InwardDependenciesTest | — |
 | C-04 | Functional core for pricing and proration | Partly built ◆ | Designed | Medium | D5 | ADR-015: one PricingRule per kind, registry, start-up check (PricingRulesCheck); PricingRuleRegistryTest | Rules are separate per kind; not designed as a pure functional core. |
 | C-05 | CQRS-lite for list endpoints | Not started | Not started | Low | — | — | — |
-| C-06 | Collections state machine in the domain | Partly built ◆ | Not started | Medium | — | collections/domain/CollectionCase with status and version | The case is a domain object but has only OPEN and CLOSED. The day 3/7/10/30 machine of Design Record §16 is not built. |
+| C-06 | Collections state machine in the domain | Checked ◆ | Not started | Medium | — | collections/domain/CollectionCase (OPEN, OVERDUE, BLOCKED, WRITTEN_OFF, CLOSED; `take(step)` by rank) and CaseStep; CaseTimetableIT; AT-22 | Built in Slice 3 PR-4. A step moves a case with a debt forward to its state, never back, from whatever state it finds; the standing follows in the same transaction. Gap: no unit test of `take` by itself (Slice 3 report §6). |
 
 ## D Data and reliability
 
@@ -157,10 +157,10 @@ The Design Record lists four items as required before production: settlement rec
 | D-04 | Idempotency key | Checked ◆ | Built | High | D2 | ADR-027; platform IdempotentEndpoints; AT-13; SignUpRecoveryIT | — |
 | D-05 | Competing consumers, leaderless | Checked ◆ | Built | High | D1, D6 | ADR-003; JdbcDurableQueue and PeriodicJob use FOR UPDATE SKIP LOCKED; AT-9; DurableQueueIT | — |
 | D-06 | Retry, back-off and circuit breaker | Checked ◆ | Built | High | D2 | ADR-013; payment/application/ProviderIsolation (Resilience4j breaker and rate limiter); AT-4; ProviderIsolationIT | No jitter found in retries. |
-| D-07 | Saga (Collections) | Partly built | Partly built | High | — | collections module; V24__collections.sql (case retries); V23 collection request retries | Case opens and closes, with retries. Overdue, blocked and write-off steps are not built. |
+| D-07 | Saga (Collections) | Checked ◆ | Partly built | High | — | collections module; V39 (case_invoice), V40 (timer queue, case_step), V41 (pay now keys), V42 (retry steps); AT-22, AT-23, AT-25; CaseTimetableIT; PayNowIT | The whole timetable (Slice 3): retries on day 3 and day 7, OVERDUE, BLOCKED, WRITTEN_OFF, "pay now", one case for every unpaid invoice. Each timer is a claimed row with a business guard; the write-off ends the subscription. |
 | D-08 | CQRS, read model and materialised view | Checked ◆ | Designed | Medium | D13 | Access's copy (access.facts) is built from the compacted topic access-facts (ADR-012, ADR-033, ADR-035); AccessLogIT; AT19RebuildIT (with and without compaction, old consumer group) | A rebuild has downtime: every instance refuses answers until its copy has caught up (slice-2-report §4). |
-| D-09 | Upgrade saga with pivot ordering | Not started ◆ | Designed | High | — | No plan change in code (no changePlan or PlanChanged) | Conflict: Design Record §3 upgrades access at once, before payment, and Slice 1R gives access at sign-up. The course review recommended unlocking after the charge. Needs a decision, not a status. |
-| D-10 | Saga countermeasures | Not started | Not started | High | — | — | renew(n) plus the version check already stops a repeated renewal; no semantic locks. |
+| D-09 | Upgrade saga with pivot ordering | Not started ◆ | Designed | High | — | No plan change in code (no changePlan or PlanChanged) | Conflict: Design Record §3 upgrades access at once, before payment, and Slice 1R gives access at sign-up. The course review recommended unlocking after the charge. ADR-025 is decided (15 November 2026) and built (Slice 3 PR-7) for a declined first invoice only; the upgrade's order still needs a decision. |
+| D-10 | Saga countermeasures | Partly built ◆ | Not started | High | — | The case's row lock (CollectionCases.lockCaseWithDebt, lock); CaseSettlement.settleWithInvoicing; case_step and case_retry guards; renew(n) and Subscription's version | Built (Slice 3): a pessimistic lock orders a decline, InvoicePaid and a timer on one case; every timer re-reads Invoicing before it changes the state (reread value); each step and retry is guarded once. Not built: a semantic lock state on Subscription. |
 | D-11 | Event-carried state transfer vs notification | Designed | Designed | High | D13 | ADR-016 (events carry what the listener needs); ADR-012 (compacted access facts) | — |
 | D-12 | Optimistic locking on aggregates | Built ◆ | Not started | High | D1 | @Version on Subscription, Invoice, CollectionRequest, CollectionCase | — |
 | D-13 | Database constraints for invariants | Built ◆ | Not started | High | D1, D2, D3 | Named unique constraints, e.g. subscription_period_one_per_number, collection_request_one_per_reference, payment_attempt_one_per_key; CLAUDE.md rule 11 | — |
