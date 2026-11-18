@@ -21,8 +21,8 @@ paths:
         (WAR-84): if the user has one, the answer is 200 with it, whatever the key; of two requests at the same
         time, both answer with the one account. The body is checked first. The Idempotency-Key is claimed before
         acting; the response is stored in the same transaction as the new account, and both are kept for 24 hours.
-        Until keys are scoped by caller (Slice 4 PR-5, ADR-027), every key of this endpoint shares one scope: two
-        callers choosing the same key value share it.
+        Keys belong to the caller (ADR-027): two users who send the same key value each get their own request's
+        result.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -225,8 +225,9 @@ components:
       in: header
       required: true
       description: >
-        A UUID the client makes for this request; any other value is refused with 400 and not stored. Kept for
-        24 hours. A key still held by a request
+        A UUID the client makes for this request; any other value is refused with 400 and not stored. It belongs
+        to the caller, the token's user (ADR-027; Slice 4): another user's request with the same value is a request
+        of its own. Kept for 24 hours. A key still held by a request
         that has not answered within 60 seconds is taken over by the next request with it: that request died, and
         its change rolled back with its response.
       schema:

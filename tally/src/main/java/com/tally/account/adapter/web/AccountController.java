@@ -9,7 +9,6 @@ import com.tally.platform.Caller;
 import com.tally.platform.IdempotencyKeys;
 import com.tally.platform.IdempotencyStore;
 import com.tally.platform.IdempotentEndpoints;
-import java.security.Principal;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.util.Currency;
@@ -37,12 +36,6 @@ import tools.jackson.databind.json.JsonMapper;
 @RestController
 @RequestMapping("/v1/accounts")
 class AccountController {
-
-    /**
-     * No account exists before it is opened, so every key of this endpoint belongs to one scope: two callers that
-     * choose the same key value share it, until Slice 4 PR-5 scopes keys by caller (ADR-027).
-     */
-    static final String UNAUTHENTICATED = "unauthenticated";
 
     record OpenAccount(String currency, String timeZone) {
     }
@@ -75,9 +68,11 @@ class AccountController {
      */
     @PostMapping
     ResponseEntity<String> open(@RequestHeader(name = "Idempotency-Key", required = false) String key,
-            @RequestBody OpenAccount request, Principal caller) {
-        String user = caller.getName();
-        return endpoints.handle(keys, UNAUTHENTICATED, key, request, () -> {
+            @RequestBody OpenAccount request, Caller caller) {
+        String user = caller.id();
+        // The key belongs to the caller (ADR-027): another user who sends the same key value gets the result of
+        // that user's own request, never this one's account.
+        return endpoints.handle(keys, caller.keyScope(), key, request, () -> {
             AccountUsers.Opened opened = users.openFor(user, Currency.getInstance(request.currency()),
                     ZoneId.of(request.timeZone()));
             return account(opened.opened() ? HttpStatus.CREATED : HttpStatus.OK, opened.account());

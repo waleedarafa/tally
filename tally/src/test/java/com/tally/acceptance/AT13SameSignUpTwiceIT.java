@@ -114,7 +114,7 @@ class AT13SameSignUpTwiceIT extends AbstractIntegrationTest {
         assertThat(signUp(key, account, "BASIC").getStatusCode().value()).isEqualTo(201);
     }
 
-    /** Keys are scoped by account until callers are authenticated: one key value, two accounts, two sign-ups. */
+    /** Keys belong to the caller (Slice 4 PR-5): one key value, two households, two sign-ups. */
     @Test
     void twoAccountsUsingTheSameKeyValueBothSucceed() {
         UUID account = testAccounts.openFor(household, Currency.getInstance("USD"), ZoneId.of("UTC")).id();

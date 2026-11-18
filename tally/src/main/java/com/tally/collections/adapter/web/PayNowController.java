@@ -24,7 +24,7 @@ import tools.jackson.databind.json.JsonMapper;
  * state with a debt open. 202: Collections asked Invoicing again for every unpaid invoice of the case; the outcome
  * arrives later, as {@code InvoicePaid} or a decline. 404: the account has no debt open.
  *
- * <p>The {@code Idempotency-Key} is required (CLAUDE.md rule 13), scoped by account until callers are authenticated,
+ * <p>The {@code Idempotency-Key} is required (CLAUDE.md rule 13), belongs to the caller (ADR-027; Slice 4),
  * and handled by the platform's shared mechanism ({@link IdempotentEndpoints}), with Collections' own key table.
  */
 @RestController
@@ -60,7 +60,7 @@ class PayNowController {
             // claimed (CLAUDE.md rule 16).
             return noDebtOpen();
         }
-        return endpoints.handle(keys, accountId.toString(), key, new PayNowRequest(accountId),
+        return endpoints.handle(keys, caller.keyScope(), key, new PayNowRequest(accountId),
                 () -> collections.requestPayment(accountId)
                         .map(asked -> ResponseEntity.status(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON)
                                 .body(json.writeValueAsString(PaymentRequestResponse.of(asked))))
