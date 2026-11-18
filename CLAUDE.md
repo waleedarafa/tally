@@ -10,7 +10,7 @@ Decision records are cited as `ADR-NNN` for the second design (`docs/architectur
 - `docs/architecture/v2/drivers.md`: the drivers. Numbering differs from the first run.
 - `docs/architecture/v2/design.md`: contexts, invariants, the dependency graph, public APIs and events, state machines, Money, the REST contract.
 - `docs/architecture/v2/design-record.md`: the full Design Record: every step's reasoning, the options compared and why the others were rejected. Read the section a task's decision comes from. Do not edit it: it is a snapshot, refreshed from the record's document.
-- `docs/briefs/slice-N.md`: the scope of the current slice. Now `docs/briefs/slice-3.md`.
+- `docs/briefs/slice-N.md`: the scope of the current slice. Now `docs/briefs/slice-4.md`.
 - `contracts/access-facts/v1/`: the message billing sends to Access, and the fields Access reads (ADR-034).
 - killbill-wiki (separate repository): how Kill Bill solves the same problems, with path:line citations. Use it to compare, not to copy. Claims marked 'inference' must be verified before relying on them.
 
@@ -34,6 +34,7 @@ Before adding any other dependency, or if unsure which version is compatible wit
 13. **Idempotency over REST.** Every request that changes state over REST requires an `Idempotency-Key` (ADR-019), handled by the platform's `IdempotentEndpoints`, with one key table per module.
 14. **Inside layout.** Inside `offers`, `subscription`, `invoicing` and `payment`, the domain package imports no Spring and no adapter; `jakarta.persistence` annotations are allowed (Design Record §10 C). Port methods use business names (`dueForReconciliation(now, limit)`, `issuedBetween(from, to)`, `add(subscription)`). Spring Data names stay in `adapter.persistence`, behind a default method, as `JpaCollectionRequests.addIfAbsent` does over `insertIfAbsent`.
 15. **The access feed.** For one account, one send at a time; each send carries the current facts. Each send is a Kafka transaction of its own, committed only once the broker acknowledges it; Access reads committed messages only. Access applies a message only if its sequence is higher. No personal data in a message (F15). The relay's send is the one allowed exception to rule 6: it holds the account's row lock, and one database connection, while it calls the log, because that lock is what keeps one account's sends in order. It is bounded: one connection for each relay worker, the workers stay few, and the lock is held at most about three times the send timeout (16 s with the defaults) (ADR-033).
+16. **Every request is authenticated, and acts only for the caller's account.** Billing accepts a request only with a valid token from the identity provider: signature, issuer, audience and expiry are checked by Tally itself, the expiry on the injected `Clock` (rule 4). The token's subject is the user; `account` keeps the one link from a user to an account. A request for another household's account, subscription or payment answers 404, never 403, and changes nothing. Access answers only a service token with its audience and scope; a household's token gets 403. Idempotency keys belong to the caller. The health and metrics endpoints stay open, on the separate management port (ADR-032; Slice 4 brief).
 
 ## How to work
 - `main` is the trunk. Work on a short-lived branch and merge through a pull request (FR-038, ADR-008).

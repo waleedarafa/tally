@@ -200,6 +200,6 @@ The rules for 401 surges and for keys that cannot be fetched, with firing tests,
 - `docs/architecture/v2/README.md`: rows 027 and 032.
 - `docs/architecture/v2/design-record.md`: the Wardley map ("Access granting", "Identity and login").
 - Linear: WAR-49, WAR-84.
-- Spring Boot reference 4.1.2, "OAuth2", resource server: the settings `issuer-uri`, `jwk-set-uri`, `public-key-location` and `audiences` exist. The page names the module `spring-security-oauth2-resource-server`. The starter name is not on that page; S-1 checks it.
+- Spring Boot reference 4.1.2, "OAuth2", resource server: the settings `issuer-uri`, `jwk-set-uri`, `public-key-location` and `audiences` exist. The page names the module `spring-security-oauth2-resource-server`. The starter name is not on that page; S-1 checks it. S-1 found it on Maven Central: `spring-boot-starter-security-oauth2-resource-server` 4.1.1 (`docs/briefs/slice-4-spikes.md`).
 - Not verified here: how Spring keeps the keys when the identity provider is down (S-2), and any statement about Kill Bill (S-4).
 - The build was not run for this brief. It changes one document.
