@@ -15,6 +15,14 @@ import java.util.UUID;
  */
 public record Caller(String id, Optional<UUID> account) {
 
+    /**
+     * The scope of the caller's idempotency keys (ADR-027; Slice 4 brief, rule 8): two callers who send the same key
+     * value each get their own request's result. A household's keys belong to its user.
+     */
+    public String keyScope() {
+        return "user:" + id;
+    }
+
     /** Whether {@code accountId} is the caller's account. A request for any other answers 404 (brief rule 5). */
     public boolean owns(UUID accountId) {
         return accountId != null && account.filter(accountId::equals).isPresent();

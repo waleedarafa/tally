@@ -1,7 +1,7 @@
 package com.tally.account.adapter.web;
 
 import com.tally.account.application.AccountUsers;
-import java.security.Principal;
+import com.tally.platform.Caller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,7 +20,7 @@ class MyAccountController {
     }
 
     @GetMapping("/v1/me/account")
-    ResponseEntity<AccountController.AccountResponse> mine(Principal caller) {
-        return ResponseEntity.of(users.accountOf(caller.getName()).map(AccountController.AccountResponse::of));
+    ResponseEntity<AccountController.AccountResponse> mine(Caller caller) {
+        return ResponseEntity.of(users.accountOf(caller.id()).map(AccountController.AccountResponse::of));
     }
 }

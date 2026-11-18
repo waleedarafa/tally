@@ -27,7 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
  * payment token, starts the subscription, and answers at once with {@code accessWithinSeconds: 5}: the first
  * invoice and its payment follow asynchronously.
  *
- * <p>The {@code Idempotency-Key} is required, scoped by account until callers are authenticated, and handled by
+ * <p>The {@code Idempotency-Key} is required, belongs to the caller (ADR-027; Slice 4), and is handled by
  * the platform's shared mechanism ({@link IdempotentEndpoints}): the sign-up and its stored response commit
  * together; a request that died is taken over after the request timeout, and the one-subscription-per-account
  * constraint still stops a duplicate. Every error is an RFC 9457 problem with the type codes of design.md §8,
@@ -64,7 +64,7 @@ class SignUpController {
     ResponseEntity<String> signUp(@RequestHeader(name = "Idempotency-Key", required = false) String key,
             @RequestBody SignUpRequest request, Caller caller) {
         if (request.accountId() == null || isBlank(request.planId()) || isBlank(request.paymentToken())) {
-            // Not stored: without an account there is no scope to store the key in.
+            // Not stored: it is not a sign-up, and no key is claimed for it.
             return endpoints.problem(HttpStatus.BAD_REQUEST, "about:blank", "Not a sign-up",
                     "accountId, planId and paymentToken are required.");
         }
@@ -73,7 +73,7 @@ class SignUpController {
             // claimed (CLAUDE.md rule 16).
             return noSuchAccount(new UnknownAccountException(request.accountId()));
         }
-        return endpoints.handle(keys, request.accountId().toString(), key, request, () -> signUp(request),
+        return endpoints.handle(keys, caller.keyScope(), key, request, () -> signUp(request),
                 this::refusal);
     }
 

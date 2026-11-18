@@ -28,7 +28,7 @@ public interface IdempotentEndpoints {
      *       rethrown.</li>
      * </ul>
      *
-     * @param scope   who the key belongs to: the account, until callers are authenticated
+     * @param scope   who the key belongs to: the caller ({@code Caller.keyScope()}, ADR-027)
      * @param request the request body; its JSON is the request's fingerprint
      */
     ResponseEntity<String> handle(IdempotencyStore store, String scope, String key, Object request,
