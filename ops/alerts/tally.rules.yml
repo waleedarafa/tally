@@ -217,6 +217,37 @@ groups:
           summary: "Invariant check {{ $labels.check }} found violations."
           runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/invariant-violated.md
 
+      # ADR-032: most of billing's answers are 401, and there are many. Either valid tokens are refused (issuer,
+      # audience or key settings, or keys billing cannot fetch), or someone is trying tokens. Counted in front of the
+      # security filters, summed over the instances. Both floors, so a quiet night with a few 401s stays quiet.
+      - alert: ApiTokensRefused
+        expr: >-
+          sum(rate(tally_api_requests_total{outcome="unauthenticated"}[5m])) > 1
+          and sum(rate(tally_api_requests_total{outcome="unauthenticated"}[5m]))
+            > 0.5 * sum(rate(tally_api_requests_total[5m]))
+        for: 5m
+        labels:
+          severity: page
+          driver: ADR-032
+        annotations:
+          summary: Most requests to billing are refused with 401; households may be locked out, or someone is trying tokens.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/tokens-refused.md
+
+      # ADR-039, option B for billing: billing keeps the keys in memory and fetches them at its first request and for
+      # an unknown key ID. Fetches that fail, with none succeeding, mean the provider is out of reach; an instance with
+      # no keys answers 500 to every request until it is back. At least 3 failures, so one blip stays quiet.
+      - alert: IdentityKeysUnavailable
+        expr: >-
+          sum(increase(tally_identity_key_fetches_total{outcome="failure"}[10m])) >= 3
+          and sum(increase(tally_identity_key_fetches_total{outcome="success"}[10m])) == 0
+        for: 2m
+        labels:
+          severity: page
+          driver: ADR-039
+        annotations:
+          summary: Billing cannot fetch the identity provider's key set; an instance that has no keys answers 500 to every request.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/identity-keys-unavailable.md
+
   # Access, the second deployable (ADR-001), and the feed that keeps it current (ADR-033; Slice 2 PR-8). A
   # tally_access_ metric is Access's own; F14's Access side (com.tallyaccess.F14AccessMetricsIT) checks it exists.
   - name: access
@@ -279,3 +310,33 @@ groups:
         annotations:
           summary: "A value of {{ $labels.field }} was not known to its reader in the last day; the contract versions differ."
           runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/access-value-not-known.md
+
+      # ADR-032, decision 1: the streaming platform is Access's only caller, so most answers being 401 means its
+      # service token is refused, and households get no answer to "can I watch?".
+      - alert: AccessTokensRefused
+        expr: >-
+          sum(rate(tally_access_requests_total{outcome="unauthenticated"}[5m])) > 1
+          and sum(rate(tally_access_requests_total{outcome="unauthenticated"}[5m]))
+            > 0.5 * sum(rate(tally_access_requests_total[5m]))
+        for: 5m
+        labels:
+          severity: page
+          driver: D13
+        annotations:
+          summary: Most requests to Access are refused with 401; the streaming platform may get no answer to "can I watch?".
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/tokens-refused.md
+
+      # ADR-039, option A for Access: Access answers from the key set it keeps, but only while the platform's service
+      # token lives (1 h in AT-30), since the platform gets its next one from the same provider. Access fetches only
+      # for an unknown key ID, at most once each hold-off (30 s): an outage that no request meets is not seen here.
+      - alert: AccessIdentityKeysUnavailable
+        expr: >-
+          sum(increase(tally_access_identity_key_fetches_total{outcome="failure"}[10m])) >= 3
+          and sum(increase(tally_access_identity_key_fetches_total{outcome="success"}[10m])) == 0
+        for: 2m
+        labels:
+          severity: page
+          driver: D13
+        annotations:
+          summary: Access cannot fetch the identity provider's key set; it answers only while the platform's service token lives.
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/identity-keys-unavailable.md

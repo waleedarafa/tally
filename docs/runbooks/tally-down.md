@@ -11,8 +11,8 @@ The billing team's on-call engineer (Design Record §11).
 ## See what is wrong
 
 ```sh
-curl -sS -o /dev/null -w '%{http_code}\n' http://<instance>:8080/actuator/health
-curl -sS http://<instance>:8080/actuator/prometheus | head
+curl -sS -o /dev/null -w '%{http_code}\n' http://<instance>:8082/actuator/health
+curl -sS http://<instance>:8082/actuator/prometheus | head
 ```
 
 - **Health answers `200`, but Prometheus still fails:** the problem is the network or the scrape configuration, not Tally. Check the target's state in Prometheus (`/targets`).
