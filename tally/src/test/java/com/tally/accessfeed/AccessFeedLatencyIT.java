@@ -6,6 +6,7 @@ import static org.awaitility.Awaitility.await;
 import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.support.EventLog;
+import com.tally.support.TestTokens;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -48,7 +49,7 @@ class AccessFeedLatencyIT extends AbstractIntegrationTest {
         for (int i = 0; i < 5; i++) {
             UUID account = accounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();
             long start = System.nanoTime();
-            int status = RestClient.create("http://localhost:" + port).post().uri("/v1/subscriptions")
+            int status = TestTokens.household().client("http://localhost:" + port).post().uri("/v1/subscriptions")
                     .header("Idempotency-Key", UUID.randomUUID().toString())
                     .body(Map.of("accountId", account, "planId", "STANDARD", "paymentToken", "tok_latency_" + i))
                     .retrieve().toBodilessEntity().getStatusCode().value();

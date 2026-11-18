@@ -53,6 +53,16 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!--
+            Slice 4 PR-2: the test token issuer signs its tokens with Nimbus, which this module brings. Test scope
+            only: Access checks no token until PR-6. The version comes from Spring Boot's dependency management
+            (spring-security-bom 7.1.1).
+        -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

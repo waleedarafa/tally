@@ -18,6 +18,8 @@ import com.tally.collections.Collections;
 import com.tally.invoicing.InvoicePaymentDeclined;
 import com.tally.payment.PaymentApi;
 import com.tally.shared.Money;
+import com.tally.support.EveryRequestCarriesAToken;
+import com.tally.support.TestTokens;
 import io.swagger.v3.oas.models.PathItem.HttpMethod;
 import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.parser.OpenAPIV3Parser;
@@ -87,7 +89,12 @@ class ContractIT extends AbstractIntegrationTest {
 
     @BeforeEach
     void mvc() {
-        mvc = MockMvcBuilders.webAppContextSetup(context).build();
+        // One household's token on every request (Slice 4 PR-2); the guard runs here too, as MockMvc adds no
+        // filters of its own.
+        mvc = MockMvcBuilders.webAppContextSetup(context)
+                .defaultRequest(get("/").header("Authorization", TestTokens.household().bearer()))
+                .addFilters(new EveryRequestCarriesAToken.Filter())
+                .build();
     }
 
     MvcResult exchange(RequestBuilder request) throws Exception {

@@ -14,6 +14,7 @@ import com.tally.support.AccessService;
 import com.tally.support.AccessService.Instance;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.TestTokens;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,6 +22,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -81,9 +83,17 @@ abstract class AbstractCollectionsAcceptanceTest extends AbstractProviderIntegra
         }
     }
 
-    RestClient tally() {
-        return RestClient.builder().baseUrl("http://localhost:" + port)
-                .defaultStatusHandler(status -> true, (request, response) -> { }).build();
+    /** Each account's household: the user who opened it, and that user's token. */
+    final Map<UUID, TestTokens.Household> households = new ConcurrentHashMap<>();
+
+    RestClient tally(TestTokens.Household household) {
+        return household.client(RestClient.builder().baseUrl("http://localhost:" + port)
+                .defaultStatusHandler(status -> true, (request, response) -> { }));
+    }
+
+    /** The client of the household that opened {@code account}. */
+    RestClient tally(UUID account) {
+        return tally(households.get(account));
     }
 
     /** Signs up over HTTP, on the 1st of the next month at 09:00 UTC; returns once the first invoice is paid. */
@@ -97,16 +107,19 @@ abstract class AbstractCollectionsAcceptanceTest extends AbstractProviderIntegra
         return account;
     }
 
-    /** Opens an account over HTTP, in USD and UTC. */
+    /** A new household opens an account over HTTP, in USD and UTC. */
     UUID openAccount() {
-        return UUID.fromString((String) tally().post().uri("/v1/accounts")
+        TestTokens.Household household = TestTokens.household();
+        UUID account = UUID.fromString((String) tally(household).post().uri("/v1/accounts")
                 .header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(Map.of("currency", "USD", "timeZone", "UTC"))
                 .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { }).get("id"));
+        households.put(account, household);
+        return account;
     }
 
     int signUp(UUID account) {
-        return tally().post().uri("/v1/subscriptions").header("Idempotency-Key", UUID.randomUUID().toString())
+        return tally(account).post().uri("/v1/subscriptions").header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(Map.of("accountId", account, "planId", "STANDARD", "paymentToken", FakeProvider.token()))
                 .retrieve().toBodilessEntity().getStatusCode().value();
     }
@@ -136,7 +149,7 @@ abstract class AbstractCollectionsAcceptanceTest extends AbstractProviderIntegra
     }
 
     ResponseEntity<Map<String, Object>> payNow(UUID account) {
-        return tally().post().uri("/v1/accounts/{id}/collections/payment-requests", account)
+        return tally(account).post().uri("/v1/accounts/{id}/collections/payment-requests", account)
                 .header("Idempotency-Key", UUID.randomUUID().toString())
                 .retrieve().toEntity(new ParameterizedTypeReference<Map<String, Object>>() { });
     }

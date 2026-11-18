@@ -16,6 +16,7 @@ import com.tally.support.AccessService;
 import com.tally.support.AccessService.Instance;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.TestTokens;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -86,7 +87,7 @@ class AT22HouseholdNeverPaysIT extends AbstractProviderIntegrationTest {
     }
 
     UUID signUp() {
-        RestClient tally = RestClient.create("http://localhost:" + port);
+        RestClient tally = TestTokens.household().client("http://localhost:" + port);
         UUID account = UUID.fromString((String) tally.post().uri("/v1/accounts")
                 .header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(Map.of("currency", "USD", "timeZone", "UTC"))

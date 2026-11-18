@@ -11,6 +11,7 @@ import com.tally.subscription.SubscriptionApi;
 import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.Quiesce;
+import com.tally.support.TestTokens;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.ZoneId;
@@ -69,7 +70,7 @@ class AT04ProviderOutageIT extends AbstractProviderIntegrationTest {
 
     @BeforeEach
     void client() {
-        tally = RestClient.create("http://localhost:" + port);
+        tally = TestTokens.household().client("http://localhost:" + port);
     }
 
     long attemptsIn(List<String> references, String state) {

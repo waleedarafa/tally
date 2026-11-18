@@ -9,6 +9,7 @@ import com.tally.support.AccessService.Instance;
 import com.tally.support.BillingDatabase;
 import com.tally.support.FakeProvider;
 import com.tally.support.TallyProcess;
+import com.tally.support.TestTokens;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.time.Duration;
@@ -71,7 +72,9 @@ class AT18AccessSurvivesBillingIT {
         }
     }
 
-    static UUID signUp(RestClient tally) {
+    /** A new household opens an account and signs up, on the billing instance at {@code baseUrl}. */
+    static UUID signUp(String baseUrl) {
+        RestClient tally = TestTokens.household().client(baseUrl);
         UUID account = UUID.fromString((String) tally.post().uri("/v1/accounts")
                 .header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(Map.of("currency", "AED", "timeZone", "Asia/Dubai"))
@@ -93,10 +96,9 @@ class AT18AccessSurvivesBillingIT {
         startBilling("at18-billing-a", portA);
         startBilling("at18-billing-b", freePort());
 
-        RestClient tally = RestClient.create("http://localhost:" + portA);
         List<UUID> known = new ArrayList<>();
         for (int i = 0; i < ACCOUNTS; i++) {
-            known.add(signUp(tally));
+            known.add(signUp("http://localhost:" + portA));
         }
         await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(200)).until(() -> known.stream()
                 .allMatch(account -> instance.status(account) == 200
@@ -122,7 +124,7 @@ class AT18AccessSurvivesBillingIT {
         database.start();
         int portC = freePort();
         startBilling("at18-billing-c", portC);
-        UUID newcomer = signUp(RestClient.create("http://localhost:" + portC));
+        UUID newcomer = signUp("http://localhost:" + portC);
         await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(100))
                 .until(() -> Boolean.TRUE.equals(instance.answer(newcomer).get("canWatch")));
         System.out.printf("AT-18: %d known and %d unknown accounts answered with billing down; a new sign-up reached"

@@ -10,6 +10,7 @@ import com.atlassian.oai.validator.mockmvc.MockMvcResponse;
 import com.atlassian.oai.validator.model.Request.Method;
 import com.atlassian.oai.validator.report.ValidationReport;
 import com.tallyaccess.AccessTestSupport;
+import com.tallyaccess.TestTokens;
 import com.tallyaccess.application.AccessCopy;
 import com.tallyaccess.application.Readiness;
 import io.swagger.v3.parser.OpenAPIV3Parser;
@@ -69,7 +70,10 @@ class AccessContractIT {
 
     @BeforeEach
     void mvc() {
-        mvc = MockMvcBuilders.webAppContextSetup(context).build();
+        // The streaming platform's service token on every request (Slice 4 PR-2).
+        mvc = MockMvcBuilders.webAppContextSetup(context)
+                .defaultRequest(get("/").header("Authorization", TestTokens.streamingPlatformBearer()))
+                .build();
         await().atMost(Duration.ofSeconds(20)).until(readiness::ready);
     }
 
