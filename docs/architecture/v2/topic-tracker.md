@@ -81,8 +81,8 @@ Before this check the course table had 24 topics built or checked. After it, 54.
 - H-06 Probes and graceful shutdown: partly built. No separate liveness and readiness groups.
 - H-09 Slice 2 messaging choice: designed. The course review's open choice is already decided.
 - I-01 Threat model: not started. Design Record §15 risk register is not a threat model
-- I-02 API authentication (subscriber app, back office): designed (proposed 032), not built. Was "merchant API keys". The callers are the subscriber app and the back office.
-- I-04 Object-level authorisation + cross-account test: designed (proposed 032), not built. Was "cross-tenant". Subscriber A must not read subscriber B's invoice.
+- I-02 API authentication (subscriber app, back office): checked (Slice 4) for the subscriber app and the streaming platform; staff roles come with the first back-office endpoint. Was "merchant API keys".
+- I-04 Object-level authorisation + cross-account test: checked (Slice 4): AT-27 and F16. Was "cross-tenant". Subscriber A must not read subscriber B's invoice.
 - I-05 One database user per module: not started. Was "row-level security + DB user per module". Row-level security for tenants does not apply.
 
 The Design Record lists four items as required before production: settlement reconciliation (D-23, proposed 021, now checked), authentication (I-02), a command to record a person's decision on an unknown payment past the key window (D-27), and the destructive-migration check (E-06, now checked). D-23 was raised to high priority for that reason. The first version of this tracker named only three; D-27 was missing.
@@ -271,9 +271,9 @@ The Design Record lists four items as required before production: settlement rec
 | ID | Topic | Status | Was | Priority | Drivers | Evidence | Note |
 |---|---|---|---|---|---|---|---|
 | I-01 | Threat model | Not started | Not started | High | C2, D8 | Design Record §15 risk register is not a threat model | — |
-| I-02 | API authentication (subscriber app, back office) | Designed ◆ | Not started | High | D2 | Proposed 032: a signed token (JWT) from an identity provider on every request; idempotency keys scoped per caller | Decided 2026-10-14. Not built. The callers are the subscriber app and the back office. |
+| I-02 | API authentication (subscriber app, back office) | Checked ◆ | Designed | High | D2, D13 | ApiSecurity (billing) and AccessSecurity (Access): a signed token on every `/v1/` request, signature, issuer, audience and expiry checked by Tally, the expiry on the injected clock; keys per caller (`user:<id>`); AT-26, AT-29, AT-30; ApiTokensRefused, IdentityKeysUnavailable and their Access pair, with promtool tests | Built in Slice 4 (#89, #91, #92, #93). The streaming platform calls Access with a service token (decision 1, option A). Staff roles, and the back office, come with the first back-office endpoint. No identity provider product is chosen. |
 | I-03 | Human login via OIDC | Not started | Not started | Medium | — | — | — |
-| I-04 | Object-level authorisation + cross-account test | Designed ◆ | Not started | High | — | Proposed 032: POST /v1/accounts links the calling user to the account, in Tally; every later request is checked against that link | Decided 2026-10-14. Not built. Subscriber A must not read subscriber B's invoice. |
+| I-04 | Object-level authorisation + cross-account test | Checked ◆ | Designed | High | — | `account.account_user` (V43, `account_user_one_per_user`); `platform.Caller`, found once for each request; each controller answers 404 for another household; AT-27, AT-28; F16 `everyApiHandlerTakesACaller` | Built in Slice 4 (#89, #90, #91). 404, never 403, and nothing changes. Accounts opened before V43 have no link (no production data). |
 | I-05 | One database user per module | Not started | Not started | High | — | — | Was "row-level security + DB user per module". Row-level security for tenants does not apply. |
 | I-06 | RBAC and four-eyes refunds | Not started | Not started | Medium | — | — | — |
 | I-07 | PCI scope: hosted fields | Built ◆ | Designed | High | C2 | FR-015; fake-provider ProviderController simulates the hosted card form | No log-scanning test for card numbers. |

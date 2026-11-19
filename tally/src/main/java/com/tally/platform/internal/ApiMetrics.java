@@ -74,9 +74,13 @@ class ApiMetrics {
                 throws ServletException, IOException {
             try {
                 chain.doFilter(request, response);
-            } finally {
-                outcomes.get(outcome(response.getStatus())).increment();
+            } catch (IOException | ServletException | RuntimeException failure) {
+                // The status is still 200 here: the container makes the exception a 500 after this filter returns
+                // (review of #93).
+                outcomes.get("failed").increment();
+                throw failure;
             }
+            outcomes.get(outcome(response.getStatus())).increment();
         }
 
         /** A 5xx is {@code failed}: billing answers 500 when it cannot check a token (Slice 4 report). */
