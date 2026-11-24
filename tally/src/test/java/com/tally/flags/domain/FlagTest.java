@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -246,5 +248,58 @@ class FlagTest {
         assertThatThrownBy(() -> flags.isOn(NAME, null, "US")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> flags.assignAccount(NAME, null, true, NOW)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> flags.clearAccountAssignment(NAME, null, NOW)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void namesAreSortedAndEmptyWhenNoneAreDefined() {
+        Flags flags = new Flags();
+
+        assertThat(flags.names()).isEmpty();
+
+        flags.define("zoo-flag", NOW);
+        flags.define(NAME, NOW);
+
+        assertThat(flags.names()).containsExactly("family-bundle", "zoo-flag");
+    }
+
+    @Test
+    void loadDefinedStoresTheSnapshotWithoutAppendingAChange() {
+        Flags flags = new Flags();
+        Instant releasedAt = NOW.plus(31, ChronoUnit.DAYS);
+
+        flags.loadDefined(NAME, true, releasedAt, Map.of(ACCOUNT_A, false), Map.of("ae", true),
+                List.of(new FlagChange(NOW, "defined, default off"),
+                        new FlagChange(NOW.plusSeconds(1), "default set to on")));
+
+        assertThat(flags.defaultOn(NAME)).isTrue();
+        assertThat(flags.releasedAt(NAME)).isEqualTo(releasedAt);
+        assertThat(flags.isOn(NAME, ACCOUNT_A, "AE")).isFalse();
+        assertThat(flags.isOn(NAME, ACCOUNT_B, "AE")).isTrue();
+        assertThat(flags.isOn(NAME, ACCOUNT_B, "US")).isTrue();
+        assertThat(flags.countryAssignments(NAME).keySet()).containsExactly("AE");
+        assertThat(flags.changes(NAME)).containsExactly(
+                new FlagChange(NOW, "defined, default off"),
+                new FlagChange(NOW.plusSeconds(1), "default set to on"));
+        assertThat(flags.isOverdue(NAME, releasedAt.plus(30, ChronoUnit.DAYS).plusNanos(1))).isTrue();
+        assertThat(flags.names()).containsExactly(NAME);
+
+        assertThatThrownBy(() -> flags.loadDefined(NAME, false, null, Map.of(), Map.of(), List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Flag already defined: family-bundle");
+    }
+
+    @Test
+    void aLoadedFlagCanBeAssigned() {
+        Flags flags = new Flags();
+
+        flags.loadDefined(NAME, false, null, Map.of(), Map.of(), List.of(new FlagChange(NOW, "defined, default off")));
+
+        flags.assignAccount(NAME, ACCOUNT_A, true, NOW.plusSeconds(1));
+
+        assertThat(flags.isOn(NAME, ACCOUNT_A, "US")).isTrue();
+        assertThat(flags.isOn(NAME, ACCOUNT_B, "US")).isFalse();
+        assertThat(flags.changes(NAME)).containsExactly(
+                new FlagChange(NOW, "defined, default off"),
+                new FlagChange(NOW.plusSeconds(1), "account 00000000-0000-0000-0000-00000000000a set to on"));
     }
 }

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -164,6 +165,70 @@ public final class Flags {
     public List<FlagChange> changes(String name) {
         Flag flag = flag(name);
         return Collections.unmodifiableList(flag.changes);
+    }
+
+    /** The defined flag names, sorted. An empty catalogue returns an empty list. */
+    public List<String> names() {
+        return List.copyOf(new TreeSet<>(flags.keySet()));
+    }
+
+    /** The flag's default state; the flag is looked up as in {@link #isOn}. */
+    public boolean defaultOn(String name) {
+        return flag(name).defaultOn;
+    }
+
+    /** When the flag was fully released, or {@code null} if it has not been released. */
+    public Instant releasedAt(String name) {
+        return flag(name).releasedAt;
+    }
+
+    /** An unmodifiable copy of the flag's account assignments; the flag is looked up as in {@link #isOn}. */
+    public Map<UUID, Boolean> accountAssignments(String name) {
+        return Collections.unmodifiableMap(new HashMap<>(flag(name).accountAssignments));
+    }
+
+    /** An unmodifiable copy of the flag's country assignments; the flag is looked up as in {@link #isOn}. */
+    public Map<String, Boolean> countryAssignments(String name) {
+        return Collections.unmodifiableMap(new HashMap<>(flag(name).countryAssignments));
+    }
+
+    /**
+     * Rebuilds a defined flag from a persisted snapshot, as stored: the name is normalised as in
+     * {@link #define}, country keys as in {@link #assignCountry}, and account ids are required as in
+     * {@link #assignAccount}. The maps and the changes list are required and stored as copies in the
+     * flag's mutable collections (the release instant may be null; the accessors return unmodifiable
+     * copies). The change log is not replayed and nothing is appended.
+     */
+    public void loadDefined(String name, boolean defaultOn, Instant releasedAt,
+            Map<UUID, Boolean> accountAssignments, Map<String, Boolean> countryAssignments,
+            List<FlagChange> changes) {
+        String flagName = normaliseName(name);
+        if (flags.containsKey(flagName)) {
+            throw new IllegalArgumentException("Flag already defined: " + flagName);
+        }
+        Objects.requireNonNull(accountAssignments, "accountAssignments");
+        Objects.requireNonNull(countryAssignments, "countryAssignments");
+        Objects.requireNonNull(changes, "changes");
+        Map<UUID, Boolean> accounts = new HashMap<>();
+        for (Map.Entry<UUID, Boolean> entry : accountAssignments.entrySet()) {
+            requireAccountId(entry.getKey());
+            accounts.put(entry.getKey(), Objects.requireNonNull(entry.getValue(), "account assignment value"));
+        }
+        Map<String, Boolean> countries = new HashMap<>();
+        for (Map.Entry<String, Boolean> entry : countryAssignments.entrySet()) {
+            countries.put(normaliseCountry(entry.getKey()),
+                    Objects.requireNonNull(entry.getValue(), "country assignment value"));
+        }
+        for (FlagChange change : changes) {
+            Objects.requireNonNull(change, "change");
+        }
+        Flag flag = new Flag(flagName);
+        flag.defaultOn = defaultOn;
+        flag.releasedAt = releasedAt;
+        flag.accountAssignments.putAll(accounts);
+        flag.countryAssignments.putAll(countries);
+        flag.changes.addAll(changes);
+        flags.put(flagName, flag);
     }
 
     private Flag flag(String name) {
