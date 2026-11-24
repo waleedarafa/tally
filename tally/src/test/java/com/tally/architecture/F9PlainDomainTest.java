@@ -7,7 +7,7 @@ import org.junit.jupiter.params.provider.FieldSource;
 
 /**
  * F9 (Design Record §10 C, CLAUDE.md rule 14): inside {@code offers}, {@code subscription},
- * {@code invoicing} and {@code payment}, a domain class imports no Spring, no servlet API and no adapter.
+ * {@code invoicing}, {@code payment} and {@code flags}, a domain class imports no Spring, no servlet API and no adapter.
  * {@code jakarta.persistence} annotations are allowed. Repositories are plain ports in the domain,
  * implemented in {@code adapter.persistence}.
  */

@@ -7,6 +7,7 @@
 shared:
 platform: shared
 account: shared, platform
+flags: shared, platform
 payment: shared, platform
 offers: shared, platform, account
 subscription: shared, platform, account, offers
