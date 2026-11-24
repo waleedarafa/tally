@@ -42,7 +42,7 @@ class AT29KeysBelongToTheCallerIT extends AbstractIntegrationTest {
 
     ResponseEntity<Map<String, Object>> open(TestTokens.Household household, String key) {
         return as(household).post().uri("/v1/accounts").header("Idempotency-Key", key)
-                .body(Map.of("currency", "USD", "timeZone", "UTC"))
+                .body(Map.of("currency", "USD", "timeZone", "UTC", "country", "US"))
                 .retrieve().toEntity(new ParameterizedTypeReference<>() { });
     }
 

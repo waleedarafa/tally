@@ -46,7 +46,7 @@ class AT28OneAccountForEachUserIT extends AbstractIntegrationTest {
 
     ResponseEntity<Map<String, Object>> open(TestTokens.Household household, String currency) {
         return as(household).post().uri("/v1/accounts").header("Idempotency-Key", UUID.randomUUID().toString())
-                .body(Map.of("currency", currency, "timeZone", "UTC"))
+                .body(Map.of("currency", currency, "timeZone", "UTC", "country", "US"))
                 .retrieve().toEntity(new ParameterizedTypeReference<>() { });
     }
 

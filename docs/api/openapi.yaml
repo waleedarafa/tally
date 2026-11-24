@@ -289,7 +289,7 @@ components:
   schemas:
     OpenAccountRequest:
       type: object
-      required: [currency, timeZone]
+      required: [currency, timeZone, country]
       properties:
         currency:
           type: string
@@ -297,6 +297,9 @@ components:
         timeZone:
           type: string
           description: IANA time zone, for example Asia/Dubai.
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2, for example AE.
     PaymentRequest:
       type: object
       additionalProperties: false
@@ -319,7 +322,7 @@ components:
             format: uuid
     Account:
       type: object
-      required: [id, currency, timeZone]
+      required: [id, currency, timeZone, country]
       additionalProperties: false
       properties:
         id:
@@ -329,6 +332,9 @@ components:
           type: string
         timeZone:
           type: string
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2, set at open, for example AE.
     PaymentStatus:
       type: object
       required: [reference, state, failureReason]

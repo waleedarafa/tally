@@ -77,7 +77,7 @@ class AT26NoValidTokenNoAnswerIT extends AbstractIntegrationTest {
         }
         if (operation.method() == HttpMethod.POST) {
             request.contentType(MediaType.APPLICATION_JSON)
-                    .body("{\"currency\":\"USD\",\"timeZone\":\"UTC\",\"planId\":\"STANDARD\","
+                    .body("{\"currency\":\"USD\",\"timeZone\":\"UTC\",\"country\":\"US\",\"planId\":\"STANDARD\","
                             + "\"paymentToken\":\"tok_at26\",\"accountId\":\"" + UUID.randomUUID() + "\"}");
         }
         ResponseEntity<Void> response = request.retrieve().toBodilessEntity();
