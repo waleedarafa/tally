@@ -1,6 +1,8 @@
 package com.tally.offers.domain;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -9,8 +11,10 @@ import java.util.Optional;
 
 /**
  * An offer and its published versions (design.md §2). O1: a version is published only for an approved
- * kind. O2: a published version never changes; a change publishes the next version. The current version
- * is the latest one.
+ * kind. O2: a published version never changes; a change publishes the next version. The version in
+ * force on a date ({@link #currentOn(LocalDate)}) is the highest-numbered version whose effectiveFrom
+ * is on or before that date; {@link #current()} is the latest published version, even if it is not yet
+ * in force, and is not what sign-up should use.
  */
 public final class Offer {
 
@@ -39,16 +43,50 @@ public final class Offer {
         return new Offer(id, name, versions);
     }
 
-    /** Publishes the next version (O2), only for an approved kind (O1). */
-    public OfferVersion publish(OfferKind kind, OfferTerms terms, Instant now) {
+    /**
+     * Publishes the next version (O2), only for an approved kind (O1), effective from {@code effectiveFrom}.
+     * A new version's effectiveFrom must be on or after the previous version's, in publish order; an
+     * earlier date is refused and nothing is added.
+     */
+    public OfferVersion publish(OfferKind kind, OfferTerms terms, Instant now, LocalDate effectiveFrom) {
         if (!kind.approved()) {
             throw new IllegalStateException("Kind " + kind.id() + " is not approved; offer " + id + " cannot use it (O1)");
         }
-        OfferVersion version = new OfferVersion(versions.size() + 1, kind.id(), terms, now);
+        Objects.requireNonNull(effectiveFrom, "effectiveFrom");
+        if (!versions.isEmpty() && effectiveFrom.isBefore(versions.getLast().effectiveFrom())) {
+            throw new IllegalArgumentException("Effective from " + effectiveFrom
+                    + " is before the previous version's " + versions.getLast().effectiveFrom()
+                    + "; offer " + id + " cannot take effect before it (ADR-047)");
+        }
+        OfferVersion version = new OfferVersion(versions.size() + 1, kind.id(), terms, now, effectiveFrom);
         versions.add(version);
         return version;
     }
 
+    /** Publishes the next version effective from the UTC date of {@code now}. */
+    public OfferVersion publish(OfferKind kind, OfferTerms terms, Instant now) {
+        return publish(kind, terms, now, LocalDate.ofInstant(now, ZoneOffset.UTC));
+    }
+
+    /**
+     * The version in force on {@code asOf}: the highest-numbered version whose effectiveFrom is on or
+     * before asOf. Empty if no version has taken effect yet. Sign-up must use this, not {@link #current()}.
+     */
+    public Optional<OfferVersion> currentOn(LocalDate asOf) {
+        Objects.requireNonNull(asOf, "asOf");
+        OfferVersion inForce = null;
+        for (OfferVersion version : versions) {
+            if (!version.effectiveFrom().isAfter(asOf)) {
+                inForce = version;
+            }
+        }
+        return Optional.ofNullable(inForce);
+    }
+
+    /**
+     * The latest published version, even if it is not yet in force (ADR-047). This is NOT the version in
+     * force; sign-up must use {@link #currentOn(LocalDate)}.
+     */
     public Optional<OfferVersion> current() {
         return versions.isEmpty() ? Optional.empty() : Optional.of(versions.getLast());
     }

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.tally.shared.Money;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Currency;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -64,5 +65,62 @@ class OfferTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new OfferTerms(Map.of(USD, Money.of(999, "USD")), -1))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /** Golden A-06: publish on 20 October with a 1 November effective date leaves v1 in force through 31 October. */
+    @Test
+    void goldenA06() {
+        Offer offer = Offer.create("BASIC", "Basic");
+        OfferVersion v1 = offer.publish(approved("fixed-price-phase"), TERMS,
+                Instant.parse("2026-01-01T00:00:00Z"), LocalDate.parse("2026-01-01"));
+
+        OfferVersion v2 = offer.publish(approved("fixed-price-phase"),
+                new OfferTerms(Map.of(USD, Money.of(1099, "USD")), 0),
+                Instant.parse("2026-10-20T10:00:00Z"), LocalDate.parse("2026-11-01"));
+
+        assertThat(v1.number()).isEqualTo(1);
+        assertThat(v2.number()).isEqualTo(2);
+        assertThat(offer.currentOn(LocalDate.parse("2026-10-20"))).contains(v1);
+        assertThat(offer.currentOn(LocalDate.parse("2026-10-31"))).contains(v1);
+        assertThat(offer.currentOn(LocalDate.parse("2026-11-01"))).contains(v2);
+        assertThat(offer.version(1).orElseThrow().terms().priceIn(USD)).contains(Money.of(999, "USD"));
+    }
+
+    @Test
+    void currentOnIsEmptyBeforeTheFirstVersionTakesEffect() {
+        Offer offer = Offer.create("BASIC", "Basic");
+        offer.publish(approved("fixed-price-phase"), TERMS,
+                Instant.parse("2026-01-01T00:00:00Z"), LocalDate.parse("2026-01-01"));
+
+        assertThat(offer.currentOn(LocalDate.parse("2025-12-31"))).isEmpty();
+    }
+
+    @Test
+    void anEarlierEffectiveFromIsRefusedAndNothingIsAdded() {
+        Offer offer = Offer.create("BASIC", "Basic");
+        offer.publish(approved("fixed-price-phase"), TERMS,
+                Instant.parse("2026-01-01T00:00:00Z"), LocalDate.parse("2026-01-01"));
+
+        assertThatThrownBy(() -> offer.publish(approved("fixed-price-phase"), TERMS,
+                Instant.parse("2026-01-02T10:00:00Z"), LocalDate.parse("2025-12-01")))
+                        .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(offer.versions()).hasSize(1);
+    }
+
+    @Test
+    void theLaterNumberWinsWhenTwoVersionsShareAnEffectiveFrom() {
+        Offer offer = Offer.create("BASIC", "Basic");
+        offer.publish(approved("fixed-price-phase"), TERMS,
+                Instant.parse("2026-01-01T00:00:00Z"), LocalDate.parse("2026-11-01"));
+
+        OfferVersion v2 = offer.publish(approved("fixed-price-phase"), TERMS,
+                Instant.parse("2026-10-20T10:00:00Z"), LocalDate.parse("2026-11-01"));
+        OfferVersion v3 = offer.publish(approved("fixed-price-phase"), TERMS,
+                Instant.parse("2026-10-21T10:00:00Z"), LocalDate.parse("2026-11-01"));
+
+        assertThat(v2.number()).isEqualTo(2);
+        assertThat(v3.number()).isEqualTo(3);
+        assertThat(offer.currentOn(LocalDate.parse("2026-11-01"))).contains(v3);
     }
 }
