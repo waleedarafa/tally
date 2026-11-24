@@ -3,7 +3,9 @@ package com.tally.offers.application;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
 import com.tally.account.UnknownAccountException;
+import com.tally.offers.ChangeRequest;
 import com.tally.offers.Offers;
+import com.tally.offers.PriceLine;
 import com.tally.offers.PriceQuote;
 import com.tally.offers.Pricing;
 import com.tally.offers.QuoteReason;
@@ -12,8 +14,10 @@ import com.tally.offers.UnknownPlanException;
 import com.tally.offers.domain.Offer;
 import com.tally.offers.domain.OfferCatalogue;
 import com.tally.offers.domain.OfferVersion;
+import com.tally.offers.domain.ProrationPolicy;
 import com.tally.offers.domain.PricingRuleRegistry;
 import com.tally.shared.Money;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -23,7 +27,9 @@ import org.springframework.stereotype.Service;
 /**
  * Quotes the offer version a subscription is on through the rule of its kind (ADR-015; decision A). The
  * account gives the currency; the version's terms give the price in it; the rule gives the lines. New
- * sign-ups get the offer's current version ({@link #currentVersion}).
+ * sign-ups get the offer's current version ({@link #currentVersion}). A mid-period change is priced by
+ * {@link ProrationPolicy} instead of a kind's rule: unused days are credited at the old price and
+ * remaining days are charged at the new, by days (O4; ADR-040).
  */
 @Service
 class PricingService implements Pricing, Offers {
@@ -49,6 +55,28 @@ class PricingService implements Pricing, Offers {
         return PriceQuote.of(request, version.number(),
                 rules.ruleFor(version.kind()).lines(version.terms(), price, request.period()),
                 new QuoteReason(request.offerId(), version.number(), version.kind(), Map.of()));
+    }
+
+    @Override
+    public PriceQuote quoteChange(ChangeRequest request) {
+        AccountView account = account(request.accountId());
+        String currency = account.currency().getCurrencyCode();
+        OfferVersion oldVersion = version(request.oldOfferId(), request.oldOfferVersion(), currency);
+        OfferVersion newVersion = version(request.newOfferId(), request.newOfferVersion(), currency);
+        Money oldPrice = oldVersion.terms().priceIn(account.currency())
+                .orElseThrow(() -> new UnknownPlanException(request.oldOfferId(), currency));
+        Money newPrice = newVersion.terms().priceIn(account.currency())
+                .orElseThrow(() -> new UnknownPlanException(request.newOfferId(), currency));
+        List<PriceLine> lines = ProrationPolicy.lines(oldPrice, newPrice, request.period(), request.effectiveDate());
+        Money total = lines.stream().map(PriceLine::amount).reduce(Money::plus)
+                .orElseThrow(() -> new IllegalArgumentException("A change quote has at least one line"));
+        return new PriceQuote(request.subscriptionId(), request.newOfferId(), newVersion.number(), request.period(),
+                lines, total, new QuoteReason(request.newOfferId(), newVersion.number(), newVersion.kind(), Map.of()));
+    }
+
+    private OfferVersion version(String offerId, int number, String currency) {
+        return catalogue.offer(offerId).flatMap(o -> o.version(number))
+                .orElseThrow(() -> new UnknownPlanException(offerId, currency));
     }
 
     @Override

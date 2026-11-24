@@ -46,7 +46,9 @@ class AccessFeedListeners {
     }
 
     /**
-     * A started or renewed subscription is an active source; a renewal changes no fact, so it sends nothing. An ended
+     * A started or renewed subscription is an active source; a renewal changes no fact, so it sends nothing. A plan
+     * change keeps the source ACTIVE (facts do not carry the plan id, so an already-ACTIVE source does not bump the
+     * sequence; the new plan is on the subscription and on the event). An ended
      * one leaves the facts (Slice 3), and the sequence goes up.
      */
     @ApplicationModuleListener
@@ -56,7 +58,7 @@ class AccessFeedListeners {
             return;
         }
         SourceState state = switch (changed.type()) {
-            case STARTED, PERIOD_RENEWED -> SourceState.ACTIVE;
+            case STARTED, PERIOD_RENEWED, PLAN_CHANGED -> SourceState.ACTIVE;
             case ENDED -> SourceState.ENDED;
             default -> null;
         };

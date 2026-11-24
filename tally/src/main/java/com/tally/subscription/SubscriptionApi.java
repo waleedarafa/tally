@@ -1,6 +1,7 @@
 package com.tally.subscription;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Subscriptions, their periods and renewals (Design Record §12: Subscription owns the billing calendar). */
@@ -63,4 +64,19 @@ public interface SubscriptionApi {
 
     /** Every change to the subscription, oldest first. Empty for an unknown subscription. */
     List<TimelineEntry> timeline(UUID subscriptionId);
+
+    /**
+     * The subscription as other modules see it: the plan it is on, the offer version it keeps, whether it is
+     * ACTIVE, its current period (number and dates), and its account. Empty for an unknown subscription.
+     * Read-only.
+     */
+    Optional<SubscriptionSnapshot> get(UUID subscriptionId);
+
+    /**
+     * Changes the plan of an ACTIVE subscription (WAR-62, ADR-041) and publishes
+     * {@link SubscriptionChanged} of type PLAN_CHANGED. Returns whether this call changed it:
+     * false if it is not ACTIVE, does not exist, or is already on that plan and version.
+     */
+    boolean changePlan(UUID subscriptionId, String planId, int offerVersion);
 }
+

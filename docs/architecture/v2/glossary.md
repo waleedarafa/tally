@@ -80,7 +80,7 @@ Billing's side of the access facts (ADR-033). It holds no access rule.
 
 | Word | Meaning |
 |---|---|
-| Invoice | A legal record of what an account owes for a period. Its ID is subscription + period number, so there is at most one per subscription per period (I2) |
+| Invoice | A legal record of what an account owes for a period. At most one period invoice per subscription per period; an adjustment invoice is a separate document with its own ID, tied to the period (I2, ADR-040) |
 | Line | One amount from a PriceQuote (I3) |
 | Credit note | The only way to correct an issued invoice; an issued invoice never changes (I1) |
 | Reference | The opaque label Payment collects against |

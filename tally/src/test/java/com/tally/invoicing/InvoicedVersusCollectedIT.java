@@ -49,6 +49,10 @@ class InvoicedVersusCollectedIT extends AbstractIntegrationTest {
         invoice("PAYMENT_FAILED", 999, issued, collected(999));  // collected, not marked paid
         // Issued half an hour ago: its payment event may still be on its way, so it is not checked yet.
         invoice("PAID", 999, clock.instant().minus(Duration.ofMinutes(30)), null);
+        // A paid adjustment settled by a net charge plus an applied credit holds; the same invoice
+        // without the credit would not.
+        UUID settled = invoice("PAID", 1000, issued, collected(400));
+        applyCredit(settled, 600);
 
         assertThat(check().violations()).isEqualTo(before + 3);
     }
@@ -67,7 +71,7 @@ class InvoicedVersusCollectedIT extends AbstractIntegrationTest {
         return reference;
     }
 
-    private void invoice(String status, long minorUnits, Instant issuedAt, String reference) {
+    private UUID invoice(String status, long minorUnits, Instant issuedAt, String reference) {
         UUID id = UUID.randomUUID();
         LocalDate start = LocalDate.of(2020, 1, 1).plusDays(Math.floorMod(id.getLeastSignificantBits(), 3000));
         jdbc.update("INSERT INTO invoicing.invoice (id, account_id, subscription_id, plan_id, status, amount_minor,"
@@ -75,5 +79,15 @@ class InvoicedVersusCollectedIT extends AbstractIntegrationTest {
                         + " VALUES (?, ?, ?, 'BASIC', ?, ?, 'USD', ?, ?, ?, ?)",
                 id, UUID.randomUUID(), UUID.randomUUID(), status, minorUnits, start, start.plusMonths(1),
                 reference != null ? reference : "IVC-" + id, issuedAt.atOffset(ZoneOffset.UTC));
+        return id;
+    }
+
+    private void applyCredit(UUID invoiceId, long amountMinor) {
+        jdbc.update("""
+                INSERT INTO invoicing.credit_note (id, invoice_id, applied_to_invoice_id, account_id, amount_minor,
+                    currency, issued_at, version)
+                VALUES (?, ?, ?, ?, ?, 'USD', ?, 1)
+                """, UUID.randomUUID(), invoiceId, invoiceId, UUID.randomUUID(), amountMinor,
+                clock.instant().atOffset(ZoneOffset.UTC));
     }
 }

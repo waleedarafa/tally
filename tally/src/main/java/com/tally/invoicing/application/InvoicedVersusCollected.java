@@ -1,6 +1,8 @@
 package com.tally.invoicing.application;
 
 import com.tally.invoicing.InvoiceStatus;
+import com.tally.invoicing.domain.CreditNote;
+import com.tally.invoicing.domain.CreditNotes;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.Invoices;
 import com.tally.payment.PaymentApi;
@@ -22,9 +24,13 @@ import org.springframework.transaction.annotation.Transactional;
  * payment references to invoices (FR-014), so it asks Payment, through its API, what was
  * collected for its invoices' references, and compares. An invoice is a violation when:
  * <ul>
- *   <li>it is PAID, but nothing was collected for its reference, or a different amount was;</li>
+ *   <li>it is PAID, but what was collected for its reference plus any credit notes applied to it
+ *       does not equal its amount;</li>
  *   <li>it is not PAID, but money was collected for its reference.</li>
  * </ul>
+ * A mid-period upgrade issues an adjustment for the new-plan charge and a credit note against the
+ * paid period invoice, applied to the adjustment. The household is charged the net; the check
+ * treats the applied credit as settling the rest of the adjustment.
  * Checked over invoices issued in the last {@link #WINDOW}, except the last {@link #SETTLE}: a payment
  * that has just succeeded reaches its invoice through an event, moments later. The daily runs'
  * windows overlap, so no invoice escapes being checked.
@@ -42,11 +48,13 @@ class InvoicedVersusCollected implements InvariantCheck {
     private static final Logger log = LoggerFactory.getLogger(InvoicedVersusCollected.class);
 
     private final Invoices invoices;
+    private final CreditNotes credits;
     private final PaymentApi payments;
     private final Clock clock;
 
-    InvoicedVersusCollected(Invoices invoices, PaymentApi payments, Clock clock) {
+    InvoicedVersusCollected(Invoices invoices, CreditNotes credits, PaymentApi payments, Clock clock) {
         this.invoices = invoices;
+        this.credits = credits;
         this.payments = payments;
         this.clock = clock;
     }
@@ -75,12 +83,19 @@ class InvoicedVersusCollected implements InvariantCheck {
         long violations = 0;
         for (Invoice invoice : checked) {
             Money paid = collected.get(invoice.paymentReference());
-            boolean holds = invoice.status() == InvoiceStatus.PAID ? invoice.amount().equals(paid) : paid == null;
+            Money applied = credits.appliedTo(invoice.id()).stream()
+                    .map(CreditNote::amount)
+                    .reduce(Money.of(0, invoice.amount().currency().getCurrencyCode()), Money::plus);
+            Money settled = paid == null ? applied : paid.plus(applied);
+            boolean holds = invoice.status() == InvoiceStatus.PAID
+                    ? invoice.amount().equals(settled)
+                    : paid == null;
             if (!holds) {
                 violations++;
-                log.warn("Invoiced versus collected: invoice {} is {} for {}, but Payment collected {} for {}",
+                log.warn("Invoiced versus collected: invoice {} is {} for {}, but Payment collected {} and "
+                                + "applied credits were {} for {}",
                         invoice.id(), invoice.status(), invoice.amount(), paid == null ? "nothing" : paid,
-                        invoice.paymentReference());
+                        applied, invoice.paymentReference());
             }
         }
         return violations;

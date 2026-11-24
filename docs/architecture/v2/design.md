@@ -40,7 +40,7 @@ A summary of the Design Record, Steps 6, 7, 10, 12 and 16. Section numbers here 
 | P2 No new attempt while one is requested, sent or unknown | `Payment` |
 | P3 Only a provider token, never a card number | `Payment` |
 
-An upgrade still takes effect in the period, not at period end (S3). The new plan's access is granted only after the charge succeeds (ADR-041).
+An upgrade still takes effect in the period, not at period end (S3). The new plan's access is granted only after the charge succeeds (ADR-041). An upgrade is refused while the current period invoice is unpaid (ADR-042).
 
 Invoice numbers: gap-free per country, taken from a counter row in the same transaction as the invoice. This is the one stated exception to "one transaction changes one aggregate" *(gap-free requirement assumed; finance confirms)*.
 
@@ -89,8 +89,8 @@ What the picture shows: one hub (Account, conformed to by every context), no cyc
 
 | Module | Public API | Events |
 |---|---|---|
-| `offers` | `Pricing.quote(QuoteRequest) → PriceQuote`; `Offers.currentVersion(offerId, accountId)` | `OfferVersionPublished` |
-| `subscription` | `SubscriptionApi.subscribe(accountId, offerId)` (the design's `Subscriptions.start`), `changePlan`, `cancel(id, requestedAt)`; since Slice 3: `endLiveSubscriptions(accountId, reason)` and `end(subscriptionId, reason)`, reason `WRITE_OFF` or `FIRST_PAYMENT_DECLINED` (the design's `cancelForWriteOff`; Collections is the one caller) | `SubscriptionChanged` with types: started, plan changed, period renewed, renewal reversed, cancelled; built so far: `STARTED`, `PERIOD_RENEWED`, `ENDED` (Slice 3). Since Slice 1R PR-5 it carries the offer version and the current period (number, start, end) |
+| `offers` | `Pricing.quote(QuoteRequest) → PriceQuote`; `Pricing.quoteChange(ChangeRequest) → PriceQuote`; `Offers.currentVersion(offerId, accountId)` | `OfferVersionPublished` |
+| `subscription` | `SubscriptionApi.subscribe(accountId, offerId)` (the design's `Subscriptions.start`), `changePlan`, `cancel(id, requestedAt)`; since Slice 3: `endLiveSubscriptions(accountId, reason)` and `end(subscriptionId, reason)`, reason `WRITE_OFF` or `FIRST_PAYMENT_DECLINED` (the design's `cancelForWriteOff`; Collections is the one caller) | `SubscriptionChanged` with types: started, plan changed, period renewed, renewal reversed, cancelled; built so far: `STARTED`, `PERIOD_RENEWED`, `CANCELLED`, `ENDED` (Slice 3), `PLAN_CHANGED` (WAR-62). Since Slice 1R PR-5 it carries the offer version and the current period (number, start, end) |
 | `invoicing` | `InvoicingApi.requestPaymentAgain(invoiceId, retry)` (the retry number makes a repeated call harmless), `invoicesFor(accountId)`, `invoicesForSubscription(subscriptionId)` (Collections tells the first invoice: the earliest period, 025) | `InvoiceIssued`, `InvoicePaymentDeclined`, `InvoicePaid`, `CreditNoteIssued` |
 | `payment` | `PaymentApi.requestCollection(reference, accountId, amount, paymentToken)` (the design's `Payments.collect`), `collectAgain(reference, retry)` (Collections' retry of a declined reference, via Invoicing; looks the reference up first, ADR-026), `status(reference)` | `PaymentSucceeded`, `PaymentFailed` with reason declined; technical failures publish nothing |
 | `account` | `Accounts.get(id)`; `AccountStanding.set(id, standing, cause)` | `StandingChanged`: event ID, time, account ID, sequence (the account's version), standing. Published in `AccountStanding.set`'s transaction, only when the standing changes; no cause text |

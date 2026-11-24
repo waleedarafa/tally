@@ -10,13 +10,16 @@ import com.tally.subscription.AccountBlockedException;
 import com.tally.subscription.AlreadySubscribedException;
 import com.tally.subscription.EndReason;
 import com.tally.subscription.SubscriptionApi;
+import com.tally.subscription.SubscriptionSnapshot;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionView;
 import com.tally.subscription.TimelineEntry;
 import com.tally.subscription.domain.Subscription;
+import com.tally.subscription.domain.SubscriptionStatus;
 import com.tally.subscription.domain.SubscriptionChanges;
 import com.tally.subscription.domain.Subscriptions;
 import java.time.Clock;
+import java.util.Optional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -155,6 +158,29 @@ class SubscriptionService implements SubscriptionApi {
             changeLog.record(ended, SubscriptionChangeType.ENDED);
             return true;
         }).orElse(false);
+    }
+
+    /**
+     * Under the subscription's row lock: of two plan changes at the same time, the second sees the first's plan.
+     */
+    @Override
+    @Transactional
+    public boolean changePlan(UUID subscriptionId, String planId, int offerVersion) {
+        return subscriptions.lock(subscriptionId).filter(s -> s.changePlan(planId, offerVersion)).map(changed -> {
+            subscriptions.update(changed);
+            changeLog.record(changed, SubscriptionChangeType.PLAN_CHANGED);
+            return true;
+        }).orElse(false);
+    }
+
+    /** Read-only: the subscription as other modules see it, or empty if it is unknown. */
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<SubscriptionSnapshot> get(UUID subscriptionId) {
+        return subscriptions.find(subscriptionId).map(subscription -> new SubscriptionSnapshot(
+                subscription.id(), subscription.accountId(), subscription.planId(), subscription.offerVersion(),
+                subscription.status() == SubscriptionStatus.ACTIVE, subscription.currentPeriod().number(),
+                subscription.currentPeriod().start(), subscription.currentPeriod().end()));
     }
 
     @Override

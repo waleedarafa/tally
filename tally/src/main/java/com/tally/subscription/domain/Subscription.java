@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -238,6 +239,26 @@ public class Subscription {
     private void change(Event event) {
         status = next(status, event).orElseThrow(() -> new IllegalStateException(
                 "Subscription " + id + " is " + status + ": " + event + " is not allowed (ADR-018)"));
+    }
+
+    /**
+     * Changes the plan this ACTIVE subscription is on (WAR-62, ADR-041). Returns false and changes
+     * nothing if it is not ACTIVE, or if it is already on that plan and version.
+     */
+    public boolean changePlan(String planId, int offerVersion) {
+        Objects.requireNonNull(planId, "planId");
+        if (offerVersion < 1) {
+            throw new IllegalArgumentException("Offer versions are numbered from 1: " + offerVersion);
+        }
+        if (status != SubscriptionStatus.ACTIVE) {
+            return false;
+        }
+        if (this.planId.equals(planId) && this.offerVersion == offerVersion) {
+            return false;
+        }
+        this.planId = planId;
+        this.offerVersion = offerVersion;
+        return true;
     }
 
     public SubscriptionStatus status() {

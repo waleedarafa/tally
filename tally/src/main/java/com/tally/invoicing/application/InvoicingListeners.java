@@ -4,6 +4,7 @@ import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
 import com.tally.invoicing.InvoiceIssued;
 import com.tally.invoicing.InvoicePaid;
+import com.tally.invoicing.InvoiceStatus;
 import com.tally.invoicing.InvoicePaymentDeclined;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.Invoices;
@@ -35,15 +36,17 @@ class InvoicingListeners {
     private final InvoiceIssuer issuer;
     private final AccountApi accounts;
     private final PaymentApi payments;
+    private final UpgradeService upgrades;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
     InvoicingListeners(Invoices invoices, InvoiceIssuer issuer, AccountApi accounts, PaymentApi payments,
-            ApplicationEventPublisher events, Clock clock) {
+            UpgradeService upgrades, ApplicationEventPublisher events, Clock clock) {
         this.invoices = invoices;
         this.issuer = issuer;
         this.accounts = accounts;
         this.payments = payments;
+        this.upgrades = upgrades;
         this.events = events;
         this.clock = clock;
     }
@@ -82,6 +85,11 @@ class InvoicingListeners {
         if (issued.amount().minorUnits() == 0) {
             return;
         }
+        // An upgrade adjustment is issued already PAID against a charge that has already succeeded
+        // (ADR-041). Collecting it again would charge the household twice.
+        if (invoices.find(issued.invoiceId()).map(invoice -> invoice.status() == InvoiceStatus.PAID).orElse(false)) {
+            return;
+        }
         String token = accounts.get(issued.accountId()).flatMap(AccountView::paymentToken)
                 .orElseThrow(() -> new IllegalStateException("Account " + issued.accountId() + " has no payment token"));
         payments.requestCollection(issued.paymentReference(), issued.accountId(), issued.amount(), token);
@@ -95,7 +103,7 @@ class InvoicingListeners {
                 events.publishEvent(new InvoicePaid(UUID.randomUUID(), clock.instant(), invoice.accountId(),
                         invoice.id(), invoice.paymentReference(), invoice.version()));
             }
-        }, () -> unknownReference(succeeded.reference()));
+        }, () -> upgrades.completeAfterCharge(succeeded.reference()));
     }
 
     @ApplicationModuleListener

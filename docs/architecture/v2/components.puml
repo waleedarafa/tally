@@ -47,6 +47,7 @@ Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplicati
 Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Platform, "depends on", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Sharedkernel, "depends on", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Subscription, "listens to", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Subscription, "uses", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.OffersandPricing, TallyApplication.TallyApplication.Account, "uses", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.OffersandPricing, TallyApplication.TallyApplication.Sharedkernel, "depends on", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Payment, TallyApplication.TallyApplication.Platform, "uses", $techn="", $tags="", $link="")
