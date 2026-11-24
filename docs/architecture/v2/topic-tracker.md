@@ -60,7 +60,6 @@ Before this check the course table had 24 topics built or checked. After it, 54.
 
 **6. The largest open gaps.** These are high priority and not yet built or checked:
 
-- A-06 Effective-dated catalogue: partly built. Versions are published and pinned per subscriber. No future effective date: a version applies from publication.
 - B-01 Architecture quantum: partly built. Access is a separate quantum on paper (ADR-001) and in-process today. Extraction is Slice 2.
 - B-08 Access with its own database: designed. ADR-001; ADR-007 (Access has its own small PostgreSQL)
 - D-07 Saga (Collections): partly built. Case opens and closes, with retries. Overdue, blocked and write-off steps are not built.
@@ -112,7 +111,7 @@ The Design Record lists four items as required before production: settlement rec
 | A-03 | Subdomain types (core, supporting, generic) | Built ◆ | Designed | High | — | Design Record §5 Core Domain Chart | Core: Offers and Pricing. Supporting: Subscription, Access, Collections. Generic: Invoicing, Payment. The course review's open Collections debate is settled as supporting. |
 | A-04 | Core Domain Chart and Wardley map | Built ◆ | Not started | Medium | — | Design Record §2 Wardley map; §5 Core Domain Chart | — |
 | A-05 | Ubiquitous language glossary | Built ◆ | Not started | Medium | — | docs/architecture/v2/glossary.md: one section per module, each term sourced to the Design Record or a decision record | No check that names in code match the glossary. A new term enters the glossary in the pull request that introduces it. |
-| A-06 | Effective-dated catalogue | Partly built ◆ | Not started | High | D4, D5, D7 | offers/domain/OfferVersion (number, kind, terms, publishedAt); Slice 1R rule: a subscriber keeps the version they signed up to | Versions are published and pinned per subscriber. No future effective date: a version applies from publication. |
+| A-06 | Effective-dated catalogue | Built ◆ | Partly built | High | D4, D5, D7 | ADR-047; OfferVersion.effectiveFrom; Offer.currentOn; V53; Offers.currentVersion uses the account's local date; CurrentVersionTest; OfferVersionEffectiveDateIT | A version may take effect on a future date (WAR-65). New sign-ups get the version in force on the account's local date; existing subscribers keep the version they signed up to. Moving existing subscribers is a later, explicit, dated change. |
 | A-07 | Full context map | Built ◆ | Not started | Low | — | Design Record §6 relationships table; design.md §3 context map picture | Drawn as one picture in design.md §3, upstream on top, with the pattern on each relationship. |
 | A-08 | Shared kernel | Checked | Checked | Medium | — | SharedKernelTest (F4); drivers.md R5 | R5 deliberately puts the event marker in the kernel. The review's DomainEvent concern is a decision, not drift. |
 | A-09 | Open host service and published language | Built | Built | Medium | D5 | offers.Pricing, offers.PriceQuote; R4 | — |

@@ -24,7 +24,7 @@ From the Step 7 canvas and `design.md` §2 and §4.
 | Word | Meaning |
 |---|---|
 | Offer | A sellable plan with its phases and terms |
-| Offer version | A published offer, which never changes; a change makes a new version (O2). A subscription keeps the version it signed up to (Slice 1R) |
+| Offer version | A published offer, which never changes; a change makes a new version (O2). Each version has an effective-from date (ADR-047). A new subscription signs up to the version in force on the account's local date; a subscription keeps the version it signed up to (Slice 1R, WAR-65) |
 | Kind of offer | Discount, free trial, fixed-price phase, bundle price; anything else is a new kind, and needs finance's sign-off before publication (O1, H1) |
 | Phase | A stretch of time with one price, such as "first month free" |
 | PriceQuote | The answer to "what does this subscription owe for this period, and why": amount lines, currency, period and reason. The same subscription, period and version always give the same PriceQuote (O3) |
