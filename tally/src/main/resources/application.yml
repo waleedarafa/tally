@@ -42,3 +42,19 @@ management:
         # Queue and job health (FR-023) is read from /actuator/metrics, and scraped for the alert rules
         # (ops/alerts, ADR-030) from /actuator/prometheus.
         include: health,metrics,prometheus
+
+tally:
+  tax:
+    rates:
+      AE:
+        rate-percent: 5
+        tax-code: VAT-AE
+        status: ACTIVE
+      SA:
+        rate-percent: 15
+        tax-code: VAT-SA
+        status: ACTIVE
+      US:
+        rate-percent: 0
+        tax-code: EXEMPT-US
+        status: EXEMPT
