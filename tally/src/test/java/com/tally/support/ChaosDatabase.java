@@ -50,8 +50,8 @@ public final class ChaosDatabase {
                     SELECT gen_random_uuid() AS account_id, gen_random_uuid() AS subscription_id
                     FROM generate_series(1, ?)
                 ), a AS (
-                    INSERT INTO account.account (id, currency, time_zone, payment_token, created_at)
-                    SELECT account_id, 'USD', 'UTC', ?, now() FROM seed RETURNING 1
+                    INSERT INTO account.account (id, currency, time_zone, country, payment_token, created_at)
+                    SELECT account_id, 'USD', 'UTC', 'US', ?, now() FROM seed RETURNING 1
                 ), s AS (
                     INSERT INTO subscription.subscription
                         (id, account_id, plan_id, started_at, version, anchor_day, offer_version)

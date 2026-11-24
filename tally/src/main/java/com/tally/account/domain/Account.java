@@ -30,7 +30,7 @@ public class Account {
     @Column(name = "time_zone", nullable = false)
     private String timeZone;
 
-    @Column
+    @Column(nullable = false)
     private String country;
 
     @Column(name = "payment_token")
