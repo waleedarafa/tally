@@ -121,7 +121,7 @@ class UpgradeCommandTest {
 
         @Override
         public Optional<AccountView> get(UUID accountId) {
-            return Optional.of(new AccountView(accountId, Currency.getInstance("AED"), ZoneId.of("UTC"), token, Standing.GOOD));
+            return Optional.of(new AccountView(accountId, Currency.getInstance("AED"), ZoneId.of("UTC"), token, Standing.GOOD, OptionalInt.empty()));
         }
 
         @Override public void recordPaymentToken(UUID accountId, String paymentToken) {}

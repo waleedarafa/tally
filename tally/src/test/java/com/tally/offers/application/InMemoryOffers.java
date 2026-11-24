@@ -35,7 +35,7 @@ class InMemoryOffers implements OfferCatalogue, OfferKinds, AccountApi {
     /** A test account (AccountApi opens none: an account is opened only for a user, by its web layer). */
     public AccountView open(Currency currency, ZoneId timeZone) {
         AccountView account = new AccountView(UUID.randomUUID(), currency, timeZone, Optional.empty(),
-                com.tally.account.Standing.GOOD);
+                com.tally.account.Standing.GOOD, java.util.OptionalInt.empty());
         accounts.put(account.id(), account);
         return account;
     }

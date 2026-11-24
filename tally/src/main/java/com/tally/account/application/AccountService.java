@@ -117,6 +117,6 @@ class AccountService implements AccountApi, AccountStanding, AccountUsers, Calle
 
     private static AccountView view(Account account) {
         return new AccountView(account.id(), account.currency(), account.timeZone(), account.paymentToken(),
-                account.standing());
+                account.standing(), account.billingDay());
     }
 }
