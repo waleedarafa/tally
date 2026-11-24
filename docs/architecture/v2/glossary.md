@@ -38,7 +38,7 @@ From the Step 7 canvas and `design.md` §2 and §4.
 | Subscription | One plan bought by one account |
 | Period | The stretch of time one invoice covers, `[start, end)`, numbered from 1. Periods never overlap or leave gaps (S2) |
 | Renewal | Creating the next period; `renew(n)` creates period n once and changes nothing if it exists |
-| Billing day | The day each period starts; set by the account's first subscription (S5) |
+| Billing day | The day each period starts; set by the account's first subscription and then unchanged (S5, ADR-043) |
 | Billing time | 00:00 on the billing day in the account's time zone, when a renewal falls due (H8, `BillingCalendar`) |
 | Plan change | An upgrade or downgrade, with its effective date. Upgrade at once; downgrade at period end (S3) |
 | Cancellation | An end date, always a period end; no refund for the current period (S4, H11) |

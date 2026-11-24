@@ -31,7 +31,7 @@ A summary of the Design Record, Steps 6, 7, 10, 12 and 16. Section numbers here 
 | S2 Periods never overlap or leave gaps (by construction: the next starts where the last ended) | `Subscription` |
 | S3 Upgrade at once; downgrade at period end | `Subscription` |
 | S4 Cancel at period end; no refund for the current period | `Subscription` |
-| S5 Periods follow the account's billing day | `Subscription` |
+| S5 Periods follow the account's billing day (ADR-043) | `Subscription` |
 | I1 An issued invoice never changes; corrections are credit notes | `Invoice`, `CreditNote` |
 | I2 At most one period invoice per subscription per period; an adjustment invoice is a separate document with its own ID, tied to the period (ADR-040) | Period invoice: `Invoice` ID = subscription + period number |
 | I3 Invoice lines are amounts from a PriceQuote | `Invoice` |
@@ -41,6 +41,7 @@ A summary of the Design Record, Steps 6, 7, 10, 12 and 16. Section numbers here 
 | P3 Only a provider token, never a card number | `Payment` |
 
 An upgrade still takes effect in the period, not at period end (S3). The new plan's access is granted only after the charge succeeds (ADR-041). An upgrade is refused while the current period invoice is unpaid (ADR-042).
+The billing day belongs to the account, set by the first subscription and then unchanged (ADR-043). A later subscription that starts on another day has a short first period, priced by days (O4).
 
 Invoice numbers: gap-free per country, taken from a counter row in the same transaction as the invoice. This is the one stated exception to "one transaction changes one aggregate" *(gap-free requirement assumed; finance confirms)*.
 
