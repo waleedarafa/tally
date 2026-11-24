@@ -49,8 +49,11 @@ public class Subscription {
         LATE_CANCEL_REQUESTED,
         /** The current period ends (design.md §5: CANCELLING → ENDED). */
         PERIOD_ENDS,
-        /** A write-off: any live state → ENDED (design.md §5). */
-        WRITE_OFF
+        /**
+         * Collections ends the subscription from any live state; EndReason says whether that was a write-off or a
+         * declined first invoice (design.md §5).
+         */
+        FORCE_END
     }
 
     /** The transition table (design.md §5). Anything absent is refused. */
@@ -59,13 +62,13 @@ public class Subscription {
     static {
         on(SubscriptionStatus.TRIAL, Event.TRIAL_ENDS, SubscriptionStatus.ACTIVE);
         on(SubscriptionStatus.TRIAL, Event.CANCEL_REQUESTED, SubscriptionStatus.CANCELLING);
-        on(SubscriptionStatus.TRIAL, Event.WRITE_OFF, SubscriptionStatus.ENDED);
+        on(SubscriptionStatus.TRIAL, Event.FORCE_END, SubscriptionStatus.ENDED);
         on(SubscriptionStatus.ACTIVE, Event.CANCEL_REQUESTED, SubscriptionStatus.CANCELLING);
         on(SubscriptionStatus.ACTIVE, Event.RENEW, SubscriptionStatus.ACTIVE);
         on(SubscriptionStatus.ACTIVE, Event.LATE_CANCEL_REQUESTED, SubscriptionStatus.ENDED);
-        on(SubscriptionStatus.ACTIVE, Event.WRITE_OFF, SubscriptionStatus.ENDED);
+        on(SubscriptionStatus.ACTIVE, Event.FORCE_END, SubscriptionStatus.ENDED);
         on(SubscriptionStatus.CANCELLING, Event.PERIOD_ENDS, SubscriptionStatus.ENDED);
-        on(SubscriptionStatus.CANCELLING, Event.WRITE_OFF, SubscriptionStatus.ENDED);
+        on(SubscriptionStatus.CANCELLING, Event.FORCE_END, SubscriptionStatus.ENDED);
     }
 
     private static void on(SubscriptionStatus from, Event event, SubscriptionStatus to) {
@@ -178,15 +181,16 @@ public class Subscription {
     }
 
     /**
-     * The current period ends while cancelling: CANCELLING → ENDED (design.md §5). The end date is set so the
-     * household's access ends at the boundary of the paid period. Returns false and changes nothing otherwise:
-     * ENDED refuses everything, an end included.
+     * The current period ends while cancelling: CANCELLING → ENDED (design.md §5). The end date and the reason
+     * (CANCELLED) are set so the household's access ends at the boundary of the paid period. Returns false and
+     * changes nothing otherwise: ENDED refuses everything, an end included.
      */
     public boolean periodEnded(Instant now) {
         if (status != SubscriptionStatus.CANCELLING) {
             return false;
         }
         change(Event.PERIOD_ENDS);
+        endReason = EndReason.CANCELLED;
         endedAt = now;
         return true;
     }
@@ -229,7 +233,7 @@ public class Subscription {
         if (status == SubscriptionStatus.ENDED) {
             return false;
         }
-        change(Event.WRITE_OFF);
+        change(Event.FORCE_END);
         endReason = reason;
         endedAt = now;
         return true;

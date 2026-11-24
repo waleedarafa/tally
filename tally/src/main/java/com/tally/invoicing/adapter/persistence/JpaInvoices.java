@@ -43,6 +43,13 @@ interface JpaInvoices extends JpaRepository<Invoice, UUID>, Invoices {
 
     List<Invoice> findByIssuedAtGreaterThanEqualAndIssuedAtLessThan(Instant from, Instant to);
 
+    List<Invoice> findByPeriodInvoiceIdOrderByIssuedAtAsc(UUID periodInvoiceId);
+
+    @Override
+    default List<Invoice> adjustmentsOf(UUID periodInvoiceId) {
+        return findByPeriodInvoiceIdOrderByIssuedAtAsc(periodInvoiceId);
+    }
+
     /**
      * Inserts unless the invoice ID exists. Only the ID, which encodes subscription and period (I2), counts
      * as a duplicate: {@code ON CONFLICT (id)}. The payment reference and (subscription, period) are unique

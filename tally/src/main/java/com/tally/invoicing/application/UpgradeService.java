@@ -7,6 +7,7 @@ import com.tally.invoicing.CreditNoteIssued;
 import com.tally.invoicing.InvoiceIssued;
 import com.tally.invoicing.InvoicePaid;
 import com.tally.invoicing.PricingReason;
+import com.tally.invoicing.UpgradeAlreadyInProgressException;
 import com.tally.invoicing.domain.CreditNote;
 import com.tally.invoicing.domain.CreditNotes;
 import com.tally.invoicing.domain.Invoice;
@@ -49,8 +50,6 @@ class UpgradeService {
 
     private static final Logger log = LoggerFactory.getLogger(UpgradeService.class);
 
-    private static final int FIRST_ADJUSTMENT = 1;
-
     private final SubscriptionApi subscriptions;
     private final Invoices invoices;
     private final AccountApi accounts;
@@ -79,9 +78,9 @@ class UpgradeService {
 
     /**
      * Charges {@code newPlanId} for the current period of the subscription, if it is ACTIVE and the period
-     * invoice is paid. The reference is the first adjustment of that invoice, so a retry charges the same
-     * reference (D1). The quote is remembered as an intent; documents and the plan change wait for the
-     * charge to succeed (ADR-041).
+     * invoice is paid. The reference is the next adjustment of that invoice, so a retry of the same
+     * upgrade charges the same reference (D1). The quote is remembered as an intent; documents and the
+     * plan change wait for the charge to succeed (ADR-041).
      */
     void upgrade(UUID subscriptionId, String newPlanId) {
         SubscriptionSnapshot subscription = subscriptions.get(subscriptionId).orElseThrow(() ->
@@ -107,15 +106,20 @@ class UpgradeService {
         }
         String token = account.paymentToken().orElseThrow(() ->
                 new IllegalStateException("Account " + subscription.accountId() + " has no payment token"));
-        String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), FIRST_ADJUSTMENT);
-        Optional<UpgradeIntent> existing = intents.findByReference(reference);
-        if (existing.map(UpgradeIntent::completed).orElse(false)) {
+        Optional<UpgradeIntent> openIntent = intents.findOpenForPeriodInvoice(periodInvoice.id());
+        if (openIntent.isPresent()) {
+            UpgradeIntent inFlight = openIntent.get();
+            if (!inFlight.newPlanId().equals(newPlanId)) {
+                throw new UpgradeAlreadyInProgressException(subscription.id(), inFlight.newPlanId());
+            }
+            // A retry of the same upgrade charges the same reference (D1).
+            payments.requestCollection(inFlight.paymentReference(), subscription.accountId(), quote.total(), token);
             return;
         }
-        if (existing.isEmpty()) {
-            intents.save(UpgradeIntent.place(reference, subscription.id(), subscription.accountId(), newPlanId,
-                    newVersion, periodInvoice.id(), quote));
-        }
+        int sequence = invoices.adjustmentsOf(periodInvoice.id()).size() + 1;
+        String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), sequence);
+        intents.save(UpgradeIntent.place(reference, subscription.id(), subscription.accountId(), newPlanId,
+                newVersion, periodInvoice.id(), quote));
         payments.requestCollection(reference, subscription.accountId(), quote.total(), token);
     }
 
@@ -141,15 +145,32 @@ class UpgradeService {
         Invoice periodInvoice = invoices.find(intent.periodInvoiceId()).orElseThrow(() ->
                 new IllegalStateException("Period invoice " + intent.periodInvoiceId() + " is missing for upgrade "
                         + paymentReference));
-        Invoice adjustment = issuePaidAdjustment(intent, periodInvoice, now);
-        issueCreditNote(intent, periodInvoice, adjustment.id(), now);
+        int sequence = sequenceOf(periodInvoice, paymentReference);
+        Invoice adjustment = issuePaidAdjustment(intent, periodInvoice, sequence, now);
+        issueCreditNote(intent, periodInvoice, sequence, adjustment.id(), now);
         subscriptions.changePlan(intent.subscriptionId(), intent.newPlanId(), intent.newOfferVersion());
         intents.markCompleted(paymentReference, now);
         return true;
     }
 
-    private void issueCreditNote(UpgradeIntent intent, Invoice periodInvoice, UUID appliedToInvoiceId,
-            Instant now) {
+    /**
+     * The adjustment sequence the reference spells, by searching upward from 1 (D1). The search is bounded
+     * above by the number of adjustments already issued for the period invoice plus one: the adjustment
+     * being completed has not been issued yet, so the reference can only spell that one or a lower one.
+     */
+    private int sequenceOf(Invoice periodInvoice, String paymentReference) {
+        int bound = invoices.adjustmentsOf(periodInvoice.id()).size() + 1;
+        for (int sequence = 1; sequence <= bound; sequence++) {
+            if (("INV-" + Invoice.idOfAdjustment(periodInvoice.id(), sequence)).equals(paymentReference)) {
+                return sequence;
+            }
+        }
+        throw new IllegalStateException("Payment reference " + paymentReference
+                + " is not an adjustment of period invoice " + periodInvoice.id());
+    }
+
+    private void issueCreditNote(UpgradeIntent intent, Invoice periodInvoice, int sequence,
+            UUID appliedToInvoiceId, Instant now) {
         List<InvoiceLine> creditLines = intent.quote().lines().stream()
                 .filter(line -> line.amount().minorUnits() < 0)
                 .map(line -> InvoiceLine.of(line.description(),
@@ -158,22 +179,28 @@ class UpgradeService {
         if (creditLines.isEmpty()) {
             return;
         }
-        UUID id = CreditNote.idOfUpgradeCredit(periodInvoice.id(), FIRST_ADJUSTMENT);
+        // The credit corrects the invoice that billed the plan being left: the period invoice on the
+        // first upgrade of the period (ADR-042), the previous adjustment on a later upgrade (ADR-044).
+        Invoice invoiceBeingLeft = sequence == 1 ? periodInvoice
+                : invoices.find(Invoice.idOfAdjustment(periodInvoice.id(), sequence - 1)).orElseThrow(() ->
+                        new IllegalStateException("Adjustment " + (sequence - 1) + " is missing for upgrade "
+                                + intent.paymentReference()));
+        UUID id = CreditNote.idOfUpgradeCredit(periodInvoice.id(), sequence);
         if (credits.find(id).isPresent()) {
             return;
         }
-        Money available = periodInvoice.amount();
-        for (CreditNote existing : credits.ofInvoice(periodInvoice.id())) {
+        Money available = invoiceBeingLeft.amount();
+        for (CreditNote existing : credits.ofInvoice(invoiceBeingLeft.id())) {
             available = available.minus(existing.amount());
         }
-        CreditNote creditNote = CreditNote.issueWithId(id, periodInvoice.id(), periodInvoice.accountId(), creditLines,
-                available, now, appliedToInvoiceId);
+        CreditNote creditNote = CreditNote.issueWithId(id, invoiceBeingLeft.id(), invoiceBeingLeft.accountId(),
+                creditLines, available, now, appliedToInvoiceId);
         credits.add(creditNote);
         events.publishEvent(new CreditNoteIssued(UUID.randomUUID(), now, creditNote.accountId(), creditNote.id(),
                 creditNote.invoiceId(), creditNote.amount(), CreditNote.ISSUED_VERSION));
     }
 
-    private Invoice issuePaidAdjustment(UpgradeIntent intent, Invoice periodInvoice, Instant now) {
+    private Invoice issuePaidAdjustment(UpgradeIntent intent, Invoice periodInvoice, int sequence, Instant now) {
         PriceQuote quote = intent.quote();
         List<InvoiceLine> lines = quote.lines().stream()
                 .filter(line -> line.amount().minorUnits() > 0)
@@ -184,7 +211,7 @@ class UpgradeService {
                     + " has no charge line to put on the adjustment invoice");
         }
         PricingReason reason = reasonOf(quote.reason());
-        Invoice adjustment = Invoice.issueAdjustment(periodInvoice, FIRST_ADJUSTMENT, intent.newPlanId(), lines, reason,
+        Invoice adjustment = Invoice.issueAdjustment(periodInvoice, sequence, intent.newPlanId(), lines, reason,
                 now, now);
         adjustment.paid(now);
         if (invoices.addIfAbsent(adjustment)) {

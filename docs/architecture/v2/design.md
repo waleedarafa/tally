@@ -42,6 +42,7 @@ A summary of the Design Record, Steps 6, 7, 10, 12 and 16. Section numbers here 
 
 An upgrade still takes effect in the period, not at period end (S3). The new plan's access is granted only after the charge succeeds (ADR-041). An upgrade is refused while the current period invoice is unpaid (ADR-042).
 The billing day belongs to the account, set by the first subscription and then unchanged (ADR-043). A later subscription that starts on another day has a short first period, priced by days (O4).
+A later upgrade in the same period uses the next adjustment and credits the invoice that billed the plan being left (ADR-044).
 
 Invoice numbers: gap-free per country, taken from a counter row in the same transaction as the invoice. This is the one stated exception to "one transaction changes one aggregate" *(gap-free requirement assumed; finance confirms)*.
 

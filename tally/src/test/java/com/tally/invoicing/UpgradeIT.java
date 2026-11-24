@@ -47,6 +47,8 @@ class UpgradeIT extends AbstractProviderIntegrationTest {
     static final Instant DAY_16 = Instant.parse("2026-04-16T10:00:00Z");
     static final String GOLDEN_BASIC = "GOLDEN_BASIC";
     static final String GOLDEN_PREMIUM = "GOLDEN_PREMIUM";
+    static final String GOLDEN_VIP = "GOLDEN_VIP";
+    static final Instant DAY_21 = Instant.parse("2026-04-21T10:00:00Z");
     static final Money BASIC_PRICE = Money.of(1200, "AED");
     static final Money CREDIT = Money.of(600, "AED");
     static final Money CHARGE = Money.of(1000, "AED");
@@ -160,6 +162,58 @@ class UpgradeIT extends AbstractProviderIntegrationTest {
         assertThat(FakeProvider.chargeCount(adjustment.paymentReference())).isEqualTo(1);
         assertThat(payments.collected(List.of(adjustment.paymentReference())))
                 .containsEntry(adjustment.paymentReference(), NET);
+    }
+
+    @Test
+    void aSecondUpgradeInTheSamePeriodUsesTheNextAdjustmentAndCreditsThePlanBeingLeft() {
+        UUID account = account(FakeProvider.token());
+        SubscriptionView subscription = subscriptions.subscribe(account, GOLDEN_BASIC);
+        InvoiceView period = awaitPeriodInvoice(account, InvoiceStatus.PAID);
+
+        clock.set(DAY_16);
+        invoicing.upgrade(subscription.id(), GOLDEN_PREMIUM);
+        UUID adjustment1Id = Invoice.idOfAdjustment(period.id(), 1);
+        await().atMost(Duration.ofSeconds(15)).until(() ->
+                invoices.find(adjustment1Id).map(i -> i.status() == InvoiceStatus.PAID).orElse(false));
+        await().atMost(Duration.ofSeconds(5)).until(() ->
+                !credits.ofInvoice(period.id()).isEmpty());
+        assertThat(subscriptions.get(subscription.id()).orElseThrow().planId()).isEqualTo(GOLDEN_PREMIUM);
+
+        insertOffer(GOLDEN_VIP, "Golden VIP", 3000);
+        clock.set(DAY_21);
+        invoicing.upgrade(subscription.id(), GOLDEN_VIP);
+
+        UUID adjustment2Id = Invoice.idOfAdjustment(period.id(), 2);
+        await().atMost(Duration.ofSeconds(15)).until(() ->
+                invoices.find(adjustment2Id).map(i -> i.status() == InvoiceStatus.PAID).orElse(false));
+        Invoice adjustment2 = invoices.find(adjustment2Id).orElseThrow();
+        assertThat(adjustment2.invoiceType()).isEqualTo(InvoiceKind.ADJUSTMENT);
+        assertThat(adjustment2.status()).isEqualTo(InvoiceStatus.PAID);
+        assertThat(adjustment2.amount()).isEqualTo(Money.of(1000, "AED"));
+        assertThat(adjustment2.planId()).isEqualTo(GOLDEN_VIP);
+        assertThat(adjustment2.paymentReference()).isEqualTo("INV-" + adjustment2Id);
+
+        Invoice adjustment1 = invoices.find(adjustment1Id).orElseThrow();
+        await().atMost(Duration.ofSeconds(5)).until(() ->
+                credits.find(CreditNote.idOfUpgradeCredit(period.id(), 2)).isPresent());
+        CreditNote credit2 = credits.find(CreditNote.idOfUpgradeCredit(period.id(), 2)).orElseThrow();
+        assertThat(credit2.invoiceId()).isEqualTo(adjustment1.id());
+        assertThat(credit2.amount()).isEqualTo(Money.of(667, "AED"));
+        assertThat(credit2.accountId()).isEqualTo(account);
+        assertThat(credit2.appliedToInvoiceId()).isEqualTo(adjustment2.id());
+        assertThat(credits.ofInvoice(adjustment1.id()).stream().map(CreditNote::id))
+                .containsExactly(credit2.id());
+        assertThat(credits.ofInvoice(period.id())).hasSize(1);
+
+        assertThat(subscriptions.get(subscription.id()).orElseThrow().planId()).isEqualTo(GOLDEN_VIP);
+        assertThat(subscriptions.get(subscription.id()).orElseThrow().offerVersion()).isEqualTo(1);
+
+        String reference1 = "INV-" + adjustment1Id;
+        String reference2 = "INV-" + adjustment2Id;
+        Quiesce.untilIdle(jdbc, clock, List.of(account), Duration.ofSeconds(10));
+        assertThat(FakeProvider.chargeCount(reference1)).isEqualTo(1);
+        assertThat(FakeProvider.chargeCount(reference2)).isEqualTo(1);
+        assertThat(payments.collected(List.of(reference2))).containsEntry(reference2, Money.of(333, "AED"));
     }
 
     @Test

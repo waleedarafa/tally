@@ -2,6 +2,7 @@ package com.tally.subscription.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.tally.subscription.EndReason;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.UUID;
@@ -82,7 +83,7 @@ class SubscriptionLifecycleTest {
         assertThat(cancelling.periodEnded(Instant.parse("2026-02-01T00:00:00Z"))).isTrue();
         assertThat(cancelling.status()).isEqualTo(SubscriptionStatus.ENDED);
         assertThat(cancelling.endedAt()).isEqualTo(Instant.parse("2026-02-01T00:00:00Z"));
-        assertThat(cancelling.endReason()).isNull();
+        assertThat(cancelling.endReason()).isEqualTo(EndReason.CANCELLED);
 
         // ENDED refuses everything, an end included.
         assertThat(cancelling.periodEnded(Instant.parse("2026-02-02T00:00:00Z"))).isFalse();

@@ -6,8 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
 import com.tally.account.Standing;
-import com.tally.invoicing.PricingReason;
 import com.tally.invoicing.PeriodInvoiceUnpaidException;
+import com.tally.invoicing.PricingReason;
+import com.tally.invoicing.UpgradeAlreadyInProgressException;
 import com.tally.invoicing.domain.CreditNote;
 import com.tally.invoicing.domain.CreditNotes;
 import com.tally.invoicing.domain.Invoice;
@@ -37,6 +38,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Currency;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -101,6 +103,13 @@ class UpgradeCommandTest {
         @Override public List<Invoice> ofSubscription(UUID subscriptionId) { return List.of(); }
 
         @Override public List<Invoice> issuedBetween(Instant from, Instant to) { return List.of(); }
+
+        @Override public List<Invoice> adjustmentsOf(UUID periodInvoiceId) {
+            return byId.values().stream()
+                    .filter(i -> periodInvoiceId.equals(i.periodInvoiceId()))
+                    .sorted(Comparator.comparing(Invoice::issuedAt))
+                    .toList();
+        }
     }
 
     static final class FakeAccounts implements AccountApi {
@@ -173,6 +182,13 @@ class UpgradeCommandTest {
             if (intent != null && !intent.completed()) {
                 byReference.put(paymentReference, intent.completed(completedAt));
             }
+        }
+
+        @Override
+        public Optional<UpgradeIntent> findOpenForPeriodInvoice(UUID periodInvoiceId) {
+            return byReference.values().stream()
+                    .filter(i -> !i.completed() && periodInvoiceId.equals(i.periodInvoiceId()))
+                    .findFirst();
         }
     }
 
@@ -353,5 +369,80 @@ class UpgradeCommandTest {
                 .hasMessageContaining("No subscription " + subscriptionId);
         assertThat(payments.calls).isEmpty();
         assertThat(invoices.addIfAbsentCalls).isZero();
+    }
+
+    @Test
+    void aDifferentPlanWhileAnOpenIntentExistsIsRefused() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = paidPeriodInvoice(accountId, subscriptionId);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        FakeAccounts accounts = accounts(accountId);
+        FakeOffers offers = new FakeOffers(OptionalInt.of(2));
+        FakePricing pricing = new FakePricing(goldenQuote(subscriptionId));
+        FakePayments payments = new FakePayments();
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
+        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
+                goldenQuote(subscriptionId)));
+
+        assertThatThrownBy(() -> upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))),
+                invoices, accounts, offers, pricing, payments, intents, new FakeCreditNotes(), new FakeEvents())
+                .upgrade(subscriptionId, "VIP"))
+                .isInstanceOf(UpgradeAlreadyInProgressException.class);
+        assertThat(payments.calls).isEmpty();
+        assertThat(intents.byReference).containsOnlyKeys(reference);
+    }
+
+    @Test
+    void aRetryOfTheSamePlanWhileTheIntentIsOpenChargesTheSameReferenceAgain() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = paidPeriodInvoice(accountId, subscriptionId);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        FakePayments payments = new FakePayments();
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
+        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
+                goldenQuote(subscriptionId)));
+
+        upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))), invoices,
+                accounts(accountId), new FakeOffers(OptionalInt.of(2)),
+                new FakePricing(goldenQuote(subscriptionId)), payments, intents, new FakeCreditNotes(), new FakeEvents())
+                .upgrade(subscriptionId, "PRO");
+
+        assertThat(payments.calls).singleElement().satisfies(call ->
+                assertThat(call.reference()).isEqualTo(reference));
+        assertThat(intents.byReference).containsOnlyKeys(reference);
+    }
+
+    @Test
+    void aFurtherUpgradeUsesTheNextSequence() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = paidPeriodInvoice(accountId, subscriptionId);
+        Invoice adjustment = Invoice.issueAdjustment(periodInvoice, 1, "PRO",
+                List.of(InvoiceLine.of("Change", Money.of(100, "AED"))),
+                new PricingReason("PRO", 2, "proration", Map.of()), NOW, NOW);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        invoices.add(adjustment);
+        FakePayments payments = new FakePayments();
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+
+        upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))), invoices,
+                accounts(accountId), new FakeOffers(OptionalInt.of(2)),
+                new FakePricing(goldenQuote(subscriptionId)), payments, intents, new FakeCreditNotes(), new FakeEvents())
+                .upgrade(subscriptionId, "VIP");
+
+        String expectedReference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 2);
+        assertThat(payments.calls).singleElement().satisfies(call ->
+                assertThat(call.reference()).isEqualTo(expectedReference));
+        assertThat(intents.byReference).containsOnlyKeys(expectedReference);
+        UpgradeIntent intent = intents.byReference.get(expectedReference);
+        assertThat(intent.periodInvoiceId()).isEqualTo(periodInvoice.id());
+        assertThat(intent.newPlanId()).isEqualTo("VIP");
     }
 }

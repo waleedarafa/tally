@@ -46,6 +46,18 @@ class JdbcUpgradeIntents implements UpgradeIntents {
     }
 
     @Override
+    public Optional<UpgradeIntent> findOpenForPeriodInvoice(UUID periodInvoiceId) {
+        var found = jdbc.query("""
+                SELECT payment_reference, subscription_id, account_id, new_plan_id, new_offer_version,
+                       period_invoice_id, quote::text, completed_at
+                FROM invoicing.upgrade_intent
+                WHERE period_invoice_id = ? AND completed_at IS NULL
+                ORDER BY payment_reference
+                """, this::mapRow, periodInvoiceId);
+        return found.stream().findFirst();
+    }
+
+    @Override
     public void markCompleted(String paymentReference, Instant completedAt) {
         jdbc.update("""
                 UPDATE invoicing.upgrade_intent SET completed_at = ?

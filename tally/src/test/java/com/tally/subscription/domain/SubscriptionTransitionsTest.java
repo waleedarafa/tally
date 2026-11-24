@@ -20,15 +20,15 @@ class SubscriptionTransitionsTest {
             SubscriptionStatus.TRIAL, Map.of(
                     Subscription.Event.TRIAL_ENDS, SubscriptionStatus.ACTIVE,
                     Subscription.Event.CANCEL_REQUESTED, SubscriptionStatus.CANCELLING,
-                    Subscription.Event.WRITE_OFF, SubscriptionStatus.ENDED),
+                    Subscription.Event.FORCE_END, SubscriptionStatus.ENDED),
             SubscriptionStatus.ACTIVE, Map.of(
                     Subscription.Event.CANCEL_REQUESTED, SubscriptionStatus.CANCELLING,
                     Subscription.Event.RENEW, SubscriptionStatus.ACTIVE,
                     Subscription.Event.LATE_CANCEL_REQUESTED, SubscriptionStatus.ENDED,
-                    Subscription.Event.WRITE_OFF, SubscriptionStatus.ENDED),
+                    Subscription.Event.FORCE_END, SubscriptionStatus.ENDED),
             SubscriptionStatus.CANCELLING, Map.of(
                     Subscription.Event.PERIOD_ENDS, SubscriptionStatus.ENDED,
-                    Subscription.Event.WRITE_OFF, SubscriptionStatus.ENDED));
+                    Subscription.Event.FORCE_END, SubscriptionStatus.ENDED));
 
     @Test
     void everyStateWithEveryEvent() {
@@ -44,7 +44,7 @@ class SubscriptionTransitionsTest {
         assertThat(tried).hasSize(SubscriptionStatus.values().length * Subscription.Event.values().length);
     }
 
-    /** ENDED refuses everything: every event, including a write-off and a renewal. */
+    /** ENDED refuses everything: every event, including a force-end and a renewal. */
     @Test
     void endedRefusesEveryEvent() {
         for (Subscription.Event event : Subscription.Event.values()) {
@@ -53,7 +53,7 @@ class SubscriptionTransitionsTest {
         }
     }
 
-    /** TRIAL is not renewed and does not end on a plain cancel; only a write-off ends it. */
+    /** TRIAL is not renewed and does not end on a plain cancel; only a force-end ends it. */
     @Test
     void trialDoesNotRenewOrEndOnCancel() {
         for (Subscription.Event event : List.of(Subscription.Event.RENEW, Subscription.Event.LATE_CANCEL_REQUESTED,
@@ -63,9 +63,9 @@ class SubscriptionTransitionsTest {
         }
     }
 
-    /** Cancelling ends only on the period ending or a write-off; it is not renewed. */
+    /** Cancelling ends only on the period ending or a force-end; it is not renewed. */
     @Test
-    void cancellingEndsOnlyOnPeriodEndOrWriteOff() {
+    void cancellingEndsOnlyOnPeriodEndOrForceEnd() {
         for (Subscription.Event event : List.of(Subscription.Event.RENEW, Subscription.Event.TRIAL_ENDS,
                 Subscription.Event.CANCEL_REQUESTED, Subscription.Event.LATE_CANCEL_REQUESTED)) {
             assertThat(Subscription.next(SubscriptionStatus.CANCELLING, event))
