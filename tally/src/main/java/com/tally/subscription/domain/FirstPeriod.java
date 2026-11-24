@@ -28,18 +28,22 @@ public record FirstPeriod(LocalDate start, LocalDate end, Money amount) {
         }
     }
 
+    /** The exclusive end of the first period that starts on {@code startDate} against {@code billingDay}. */
+    public static LocalDate endDate(LocalDate startDate, int billingDay) {
+        Objects.requireNonNull(startDate, "startDate");
+        BillingCalendar calendar = new BillingCalendar(billingDay);
+        LocalDate thisMonth = calendar.billingDateIn(YearMonth.from(startDate));
+        return startDate.isBefore(thisMonth) ? thisMonth : calendar.nextBillingDate(thisMonth);
+    }
+
     /**
      * The first period of a subscription starting on {@code startDate}, on an account with the given
      * billing day (1 to 31), at the given full-period price.
      */
     public static FirstPeriod of(LocalDate startDate, int billingDay, Money fullPeriodPrice) {
-        Objects.requireNonNull(startDate, "startDate");
         Objects.requireNonNull(fullPeriodPrice, "fullPeriodPrice");
+        LocalDate end = endDate(startDate, billingDay);
         BillingCalendar calendar = new BillingCalendar(billingDay);
-        LocalDate thisMonth = calendar.billingDateIn(YearMonth.from(startDate));
-        LocalDate end = startDate.isBefore(thisMonth)
-                ? thisMonth
-                : calendar.nextBillingDate(thisMonth);
         LocalDate previousBillingDate = calendar.billingDateIn(YearMonth.from(end).minusMonths(1));
         long firstPeriodDays = end.toEpochDay() - startDate.toEpochDay();
         long fullPeriodDays = end.toEpochDay() - previousBillingDate.toEpochDay();

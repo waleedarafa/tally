@@ -29,7 +29,8 @@ import java.util.UUID;
  * A subscription and its periods (design.md §2; Design Record §12: Subscription owns periods). Refers to
  * the account and offer by identifier only. S1: one current period, the latest. S2: periods never overlap
  * or leave gaps, by construction: the next starts where the last ended. S5: periods follow the account's
- * billing day, the local day the subscription started ({@link BillingCalendar}).
+ * billing day (ADR-043, {@link BillingCalendar}). A copy is stored as {@code anchorDay}; Account is the
+ * source of truth. A start that is not on that day has a short first period.
  */
 @Entity
 @Table(schema = "subscription", name = "subscription")
@@ -142,7 +143,7 @@ public class Subscription {
 
     /** Starts on the local day of {@code now} in the account's time zone, with period 1. */
     public static Subscription start(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone) {
-        return newSubscription(accountId, planId, offerVersion, now, zone, null);
+        return start(accountId, planId, offerVersion, now, zone, billingDayOf(now, zone), null);
     }
 
     /**
@@ -150,7 +151,25 @@ public class Subscription {
      */
     public static Subscription start(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone,
             UUID signUpKey) {
-        return newSubscription(accountId, planId, offerVersion, now, zone, signUpKey);
+        return start(accountId, planId, offerVersion, now, zone, billingDayOf(now, zone), signUpKey);
+    }
+
+    /**
+     * Starts as {@link #start}, against the account's billing day (ADR-043). The first period is short
+     * when {@code now} is not on that day.
+     */
+    public static Subscription start(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone,
+            int billingDay) {
+        return newSubscription(accountId, planId, offerVersion, now, zone, billingDay, null);
+    }
+
+    /**
+     * Starts as {@link #start} against the account's billing day, with the id determined by the account
+     * and {@code signUpKey} (ADR-043, ADR-045).
+     */
+    public static Subscription start(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone,
+            int billingDay, UUID signUpKey) {
+        return newSubscription(accountId, planId, offerVersion, now, zone, billingDay, signUpKey);
     }
 
     /**
@@ -158,9 +177,7 @@ public class Subscription {
      * Same dates and version as {@link #start}; only the status differs.
      */
     public static Subscription startTrial(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone) {
-        Subscription s = newSubscription(accountId, planId, offerVersion, now, zone, null);
-        s.status = SubscriptionStatus.TRIAL;
-        return s;
+        return startTrial(accountId, planId, offerVersion, now, zone, billingDayOf(now, zone), null);
     }
 
     /**
@@ -168,13 +185,36 @@ public class Subscription {
      */
     public static Subscription startTrial(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone,
             UUID signUpKey) {
-        Subscription s = newSubscription(accountId, planId, offerVersion, now, zone, signUpKey);
+        return startTrial(accountId, planId, offerVersion, now, zone, billingDayOf(now, zone), signUpKey);
+    }
+
+    /**
+     * Starts as {@link #startTrial}, against the account's billing day (ADR-043).
+     */
+    public static Subscription startTrial(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone,
+            int billingDay) {
+        Subscription s = newSubscription(accountId, planId, offerVersion, now, zone, billingDay, null);
         s.status = SubscriptionStatus.TRIAL;
         return s;
     }
 
+    /**
+     * Starts as {@link #startTrial} against the account's billing day, with the id determined by the
+     * account and {@code signUpKey} (ADR-043, ADR-045).
+     */
+    public static Subscription startTrial(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone,
+            int billingDay, UUID signUpKey) {
+        Subscription s = newSubscription(accountId, planId, offerVersion, now, zone, billingDay, signUpKey);
+        s.status = SubscriptionStatus.TRIAL;
+        return s;
+    }
+
+    private static int billingDayOf(Instant now, ZoneId zone) {
+        return LocalDate.ofInstant(now, zone).getDayOfMonth();
+    }
+
     private static Subscription newSubscription(UUID accountId, String planId, int offerVersion, Instant now,
-            ZoneId zone, UUID signUpKey) {
+            ZoneId zone, int billingDay, UUID signUpKey) {
         Subscription s = new Subscription();
         s.id = signUpKey != null ? idOfSignUp(accountId, signUpKey) : UUID.randomUUID();
         s.accountId = accountId;
@@ -182,8 +222,8 @@ public class Subscription {
         s.offerVersion = offerVersion;
         s.startedAt = now;
         LocalDate startedOn = LocalDate.ofInstant(now, zone);
-        s.anchorDay = BillingCalendar.startingOn(startedOn).anchorDay();
-        s.periods.add(new SubscriptionPeriod(1, startedOn, s.calendar().nextBillingDate(startedOn)));
+        s.anchorDay = new BillingCalendar(billingDay).anchorDay();
+        s.periods.add(new SubscriptionPeriod(1, startedOn, FirstPeriod.endDate(startedOn, billingDay)));
         s.version = 1;
         return s;
     }

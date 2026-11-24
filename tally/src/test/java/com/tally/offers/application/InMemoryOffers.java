@@ -2,10 +2,13 @@ package com.tally.offers.application;
 
 import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
+import com.tally.account.UnknownAccountException;
 import com.tally.offers.domain.Offer;
 import com.tally.offers.domain.OfferCatalogue;
 import com.tally.offers.domain.OfferKind;
 import com.tally.offers.domain.OfferKinds;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Currency;
@@ -13,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 /** In-memory ports for the golden tests: offers, kinds and accounts, no database. */
@@ -48,5 +52,20 @@ class InMemoryOffers implements OfferCatalogue, OfferKinds, AccountApi {
     @Override
     public void recordPaymentToken(UUID accountId, String paymentToken) {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean setBillingDayFrom(UUID accountId, Instant startedAt) {
+        AccountView current = accounts.get(accountId);
+        if (current == null) {
+            throw new UnknownAccountException(accountId);
+        }
+        if (current.billingDay().isPresent()) {
+            return false;
+        }
+        int day = LocalDate.ofInstant(startedAt, current.timeZone()).getDayOfMonth();
+        accounts.put(accountId, new AccountView(current.id(), current.currency(), current.timeZone(),
+                current.paymentToken(), current.standing(), OptionalInt.of(day)));
+        return true;
     }
 }

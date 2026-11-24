@@ -9,6 +9,10 @@ import com.tally.offers.domain.OfferTerms;
 import com.tally.shared.Money;
 import java.util.Currency;
 import java.util.Map;
+import com.tally.offers.Period;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /** Golden examples for FixedPricePhaseRule (ADR-015): one line, the period's price. Each runs twice (O3). */
@@ -49,5 +53,19 @@ class FixedPricePhaseRuleGoldenTest {
 
         assertThat(quote.total()).isEqualTo(Money.of(3500, "KWD"));
         assertThat(quote.total().toDecimal()).isEqualByComparingTo("3.500");
+    }
+
+
+    @Test
+    void aShortFirstPeriodIsPricedByDays() {
+        UUID account = golden.account("USD");
+        golden.ports.setBillingDayFrom(account, Instant.parse("2026-01-15T10:00:00Z"));
+        Period period = new Period(1, LocalDate.parse("2026-01-25"), LocalDate.parse("2026-02-15"));
+        PriceQuote quote = golden.quoteTwice(account, "BASIC", period);
+
+        // [2026-01-25, 2026-02-15) is 21 days; the regular period ending 2026-02-15 is [2026-01-15, 2026-02-15), 31 days.
+        assertThat(quote.lines()).containsExactly(
+                new PriceLine("Period 1, 2026-01-25 to 2026-02-15", Money.of(677, "USD"))); // 999 * 21/31 half up
+        assertThat(quote.total()).isEqualTo(Money.of(677, "USD"));
     }
 }

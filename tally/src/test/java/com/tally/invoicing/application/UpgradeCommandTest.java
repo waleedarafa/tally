@@ -125,6 +125,11 @@ class UpgradeCommandTest {
         }
 
         @Override public void recordPaymentToken(UUID accountId, String paymentToken) {}
+
+        @Override
+        public boolean setBillingDayFrom(UUID accountId, Instant startedAt) {
+            return false;
+        }
     }
 
     static final class FakeOffers implements Offers {

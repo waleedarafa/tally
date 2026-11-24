@@ -12,6 +12,7 @@ import com.tally.account.domain.AccountUser;
 import com.tally.account.domain.AccountUserRepository;
 import com.tally.platform.CallerAccounts;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.Optional;
@@ -98,6 +99,14 @@ class AccountService implements AccountApi, AccountStanding, AccountUsers, Calle
         accounts.findById(accountId)
                 .orElseThrow(() -> new UnknownAccountException(accountId))
                 .recordPaymentToken(paymentToken);
+    }
+
+    @Override
+    @Transactional
+    public boolean setBillingDayFrom(UUID accountId, Instant startedAt) {
+        return accounts.findById(accountId)
+                .orElseThrow(() -> new UnknownAccountException(accountId))
+                .setBillingDayFrom(startedAt);
     }
 
     /**

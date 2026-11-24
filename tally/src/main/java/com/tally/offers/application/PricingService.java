@@ -14,6 +14,7 @@ import com.tally.offers.UnknownPlanException;
 import com.tally.offers.domain.Offer;
 import com.tally.offers.domain.OfferCatalogue;
 import com.tally.offers.domain.OfferVersion;
+import com.tally.offers.domain.PeriodPrice;
 import com.tally.offers.domain.ProrationPolicy;
 import com.tally.offers.domain.PricingRuleRegistry;
 import com.tally.shared.Money;
@@ -52,6 +53,10 @@ class PricingService implements Pricing, Offers {
                 .orElseThrow(() -> new UnknownPlanException(request.offerId(), currency));
         Money price = version.terms().priceIn(account.currency())
                 .orElseThrow(() -> new UnknownPlanException(request.offerId(), currency));
+        if (account.billingDay().isPresent()) {
+            // A short first period is priced by days (ADR-043, O4). A regular period is the full price.
+            price = PeriodPrice.of(price, request.period(), account.billingDay().getAsInt());
+        }
         return PriceQuote.of(request, version.number(),
                 rules.ruleFor(version.kind()).lines(version.terms(), price, request.period()),
                 new QuoteReason(request.offerId(), version.number(), version.kind(), Map.of()));

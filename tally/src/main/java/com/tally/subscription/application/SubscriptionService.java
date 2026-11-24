@@ -20,6 +20,8 @@ import com.tally.subscription.domain.SubscriptionChanges;
 import com.tally.subscription.domain.Subscriptions;
 import com.tally.subscription.domain.Subscriptions.Add;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.ArrayList;
@@ -94,17 +96,25 @@ class SubscriptionService implements SubscriptionApi {
         if (subscriptions.hasLive(accountId)) {
             throw new AlreadySubscribedException(accountId);
         }
+        Instant startedAt = clock.instant();
+        // The day is decided here; it is written only if this call inserts the subscription, so a
+        // same-key retry does not flush a second versioned account update (and a two-tab sign-up
+        // still fails on the one-live index before any account write — SignUpApiIT).
+        int billingDay = account.billingDay().orElse(LocalDate.ofInstant(startedAt, account.timeZone()).getDayOfMonth());
         Subscription subscription = trial
                 ? (signUpKey != null
-                        ? Subscription.startTrial(accountId, planId, offerVersion, clock.instant(), account.timeZone(),
-                                signUpKey)
-                        : Subscription.startTrial(accountId, planId, offerVersion, clock.instant(), account.timeZone()))
+                        ? Subscription.startTrial(accountId, planId, offerVersion, startedAt, account.timeZone(),
+                                billingDay, signUpKey)
+                        : Subscription.startTrial(accountId, planId, offerVersion, startedAt, account.timeZone(),
+                                billingDay))
                 : (signUpKey != null
-                        ? Subscription.start(accountId, planId, offerVersion, clock.instant(), account.timeZone(),
-                                signUpKey)
-                        : Subscription.start(accountId, planId, offerVersion, clock.instant(), account.timeZone()));
+                        ? Subscription.start(accountId, planId, offerVersion, startedAt, account.timeZone(),
+                                billingDay, signUpKey)
+                        : Subscription.start(accountId, planId, offerVersion, startedAt, account.timeZone(),
+                                billingDay));
         return switch (subscriptions.add(subscription)) {
             case ADDED -> {
+                accounts.setBillingDayFrom(accountId, startedAt);
                 changeLog.record(subscription, SubscriptionChangeType.STARTED);
                 renewals.scheduleNext(subscription, account.timeZone());
                 yield view(subscription);
