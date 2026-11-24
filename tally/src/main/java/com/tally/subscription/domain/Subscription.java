@@ -17,7 +17,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -29,6 +32,49 @@ import java.util.UUID;
 @Entity
 @Table(schema = "subscription", name = "subscription")
 public class Subscription {
+
+    /** What can happen to a subscription (design.md §5). Every state change goes through {@link #next}. */
+    public enum Event {
+        /** The trial ends (design.md §5: TRIAL → ACTIVE). */
+        TRIAL_ENDS,
+        /** The household asks to cancel (design.md §5: TRIAL or ACTIVE → CANCELLING). */
+        CANCEL_REQUESTED,
+        /** A renewal for the current period (design.md §5: ACTIVE → ACTIVE). */
+        RENEW,
+        /**
+         * A cancel requested before period end but processed after renewal: the next period is reversed
+         * (design.md §5: ACTIVE → ENDED).
+         */
+        LATE_CANCEL_REQUESTED,
+        /** The current period ends (design.md §5: CANCELLING → ENDED). */
+        PERIOD_ENDS,
+        /** A write-off: any live state → ENDED (design.md §5). */
+        WRITE_OFF
+    }
+
+    /** The transition table (design.md §5). Anything absent is refused. */
+    static final Map<SubscriptionStatus, Map<Event, SubscriptionStatus>> TRANSITIONS = new EnumMap<>(SubscriptionStatus.class);
+
+    static {
+        on(SubscriptionStatus.TRIAL, Event.TRIAL_ENDS, SubscriptionStatus.ACTIVE);
+        on(SubscriptionStatus.TRIAL, Event.CANCEL_REQUESTED, SubscriptionStatus.CANCELLING);
+        on(SubscriptionStatus.TRIAL, Event.WRITE_OFF, SubscriptionStatus.ENDED);
+        on(SubscriptionStatus.ACTIVE, Event.CANCEL_REQUESTED, SubscriptionStatus.CANCELLING);
+        on(SubscriptionStatus.ACTIVE, Event.RENEW, SubscriptionStatus.ACTIVE);
+        on(SubscriptionStatus.ACTIVE, Event.LATE_CANCEL_REQUESTED, SubscriptionStatus.ENDED);
+        on(SubscriptionStatus.ACTIVE, Event.WRITE_OFF, SubscriptionStatus.ENDED);
+        on(SubscriptionStatus.CANCELLING, Event.PERIOD_ENDS, SubscriptionStatus.ENDED);
+        on(SubscriptionStatus.CANCELLING, Event.WRITE_OFF, SubscriptionStatus.ENDED);
+    }
+
+    private static void on(SubscriptionStatus from, Event event, SubscriptionStatus to) {
+        TRANSITIONS.computeIfAbsent(from, f -> new EnumMap<>(Event.class)).put(event, to);
+    }
+
+    /** The state {@code event} moves {@code from} to, or empty if the table refuses it (ADR-018). */
+    public static Optional<SubscriptionStatus> next(SubscriptionStatus from, Event event) {
+        return Optional.ofNullable(TRANSITIONS.getOrDefault(from, Map.of()).get(event));
+    }
 
     @Id
     private UUID id;
@@ -80,6 +126,20 @@ public class Subscription {
 
     /** Starts on the local day of {@code now} in the account's time zone, with period 1. */
     public static Subscription start(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone) {
+        return newSubscription(accountId, planId, offerVersion, now, zone);
+    }
+
+    /**
+     * Starts on the local day of {@code now}, with period 1, in TRIAL (design.md §5): the trial ends into ACTIVE.
+     * Same dates and version as {@link #start}; only the status differs.
+     */
+    public static Subscription startTrial(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone) {
+        Subscription s = newSubscription(accountId, planId, offerVersion, now, zone);
+        s.status = SubscriptionStatus.TRIAL;
+        return s;
+    }
+
+    private static Subscription newSubscription(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone) {
         Subscription s = new Subscription();
         s.id = UUID.randomUUID();
         s.accountId = accountId;
@@ -94,14 +154,52 @@ public class Subscription {
     }
 
     /**
+     * Trial conversion: TRIAL → ACTIVE (design.md §5). Returns false and changes nothing if the subscription is not
+     * in TRIAL.
+     */
+    public boolean endTrial() {
+        if (status != SubscriptionStatus.TRIAL) {
+            return false;
+        }
+        change(Event.TRIAL_ENDS);
+        return true;
+    }
+
+    /**
+     * A cancel requested: TRIAL or ACTIVE → CANCELLING (design.md §5). Returns false and changes nothing otherwise.
+     */
+    public boolean cancel() {
+        if (status != SubscriptionStatus.TRIAL && status != SubscriptionStatus.ACTIVE) {
+            return false;
+        }
+        change(Event.CANCEL_REQUESTED);
+        return true;
+    }
+
+    /**
+     * The current period ends while cancelling: CANCELLING → ENDED (design.md §5). The end date is set so the
+     * household's access ends at the boundary of the paid period. Returns false and changes nothing otherwise:
+     * ENDED refuses everything, an end included.
+     */
+    public boolean periodEnded(Instant now) {
+        if (status != SubscriptionStatus.CANCELLING) {
+            return false;
+        }
+        change(Event.PERIOD_ENDS);
+        endedAt = now;
+        return true;
+    }
+
+    /**
      * Renews into period {@code number}: the period after the current one. Returns false and changes
-     * nothing if that period already exists, so a repeated renewal is harmless (ADR-003), or if the subscription has
-     * ended: ENDED is never renewed (design.md §5).
+     * nothing if that period already exists, so a repeated renewal is harmless (ADR-003), or if the subscription is
+     * not ACTIVE: renew(n) is for a live ACTIVE subscription only (design.md §5).
      *
      * @throws IllegalStateException if {@code number} skips a period
      */
     public boolean renew(int number) {
-        if (status == SubscriptionStatus.ENDED) {
+        if (status != SubscriptionStatus.ACTIVE) {
+            // ENDED refuses everything; a trial or cancelling subscription is not renewed either (design.md §5).
             return false;
         }
         SubscriptionPeriod current = currentPeriod();
@@ -112,6 +210,7 @@ public class Subscription {
             throw new IllegalStateException("Subscription " + id + " is in period " + current.number()
                     + "; it cannot renew into period " + number);
         }
+        change(Event.RENEW);
         periods.add(new SubscriptionPeriod(number, current.end(), calendar().nextBillingDate(current.end())));
         return true;
     }
@@ -129,10 +228,16 @@ public class Subscription {
         if (status == SubscriptionStatus.ENDED) {
             return false;
         }
-        status = SubscriptionStatus.ENDED;
+        change(Event.WRITE_OFF);
         endReason = reason;
         endedAt = now;
         return true;
+    }
+
+    /** Moves to the state {@code event} allows, or throws (ADR-018). Nothing changes on a refusal. */
+    private void change(Event event) {
+        status = next(status, event).orElseThrow(() -> new IllegalStateException(
+                "Subscription " + id + " is " + status + ": " + event + " is not allowed (ADR-018)"));
     }
 
     public SubscriptionStatus status() {

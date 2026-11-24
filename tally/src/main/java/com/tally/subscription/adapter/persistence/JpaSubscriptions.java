@@ -24,8 +24,12 @@ class JpaSubscriptions implements Subscriptions {
     @PersistenceContext
     private EntityManager entities;
 
-    /** The sign-up's duplicate guard (V37). */
-    static final String ONE_LIVE_PER_ACCOUNT = "subscription_one_live_per_account";
+    /** The sign-up's duplicate guard (V44: one live subscription per account, any live state). */
+    static final String ONE_LIVE_PER_ACCOUNT = "subscription_one_live_subscription_per_account";
+
+    /** The live states of the subscription (design.md §5): TRIAL, ACTIVE and CANCELLING; not ENDED. */
+    static final List<SubscriptionStatus> LIVE = List.of(SubscriptionStatus.TRIAL,
+            SubscriptionStatus.ACTIVE, SubscriptionStatus.CANCELLING);
 
     @Override
     public boolean addIfNoneLive(Subscription subscription) {
@@ -49,8 +53,8 @@ class JpaSubscriptions implements Subscriptions {
     @Override
     public boolean hasLive(UUID accountId) {
         return entities.createQuery("SELECT count(s) FROM Subscription s WHERE s.accountId = :account"
-                + " AND s.status = :live", Long.class).setParameter("account", accountId)
-                .setParameter("live", SubscriptionStatus.ACTIVE).getSingleResult() > 0;
+                + " AND s.status IN (:live)", Long.class).setParameter("account", accountId)
+                .setParameter("live", LIVE).getSingleResult() > 0;
     }
 
     @Override
@@ -60,8 +64,8 @@ class JpaSubscriptions implements Subscriptions {
 
     @Override
     public List<Subscription> lockLive(UUID accountId) {
-        return entities.createQuery("SELECT s FROM Subscription s WHERE s.accountId = :account AND s.status = :live",
-                Subscription.class).setParameter("account", accountId).setParameter("live", SubscriptionStatus.ACTIVE)
+        return entities.createQuery("SELECT s FROM Subscription s WHERE s.accountId = :account AND s.status IN (:live)",
+                Subscription.class).setParameter("account", accountId).setParameter("live", LIVE)
                 .setLockMode(LockModeType.PESSIMISTIC_WRITE).getResultList();
     }
 

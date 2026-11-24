@@ -9,8 +9,8 @@ public interface Subscriptions {
 
     /**
      * Adds a new live subscription now, unless the account already has one. Returns false, and adds nothing, only
-     * when the guard {@code subscription_one_live_per_account} fires, as it does for a concurrent sign-up of the same
-     * account (CLAUDE.md rule 11); any other failure is thrown. The caller's transaction cannot continue after false.
+     * when the guard {@code subscription_one_live_subscription_per_account} fires, as it does for a concurrent
+     * sign-up of the same account (CLAUDE.md rule 11); any other failure is thrown. The caller's transaction cannot continue after false.
      */
     boolean addIfNoneLive(Subscription subscription);
 
