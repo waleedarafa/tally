@@ -9,7 +9,7 @@ platform: shared
 account: shared, platform
 flags: shared, platform
 payment: shared, platform
-offers: shared, platform, account
+offers: shared, platform, account, flags
 subscription: shared, platform, account, offers
 invoicing: shared, platform, account, offers, subscription, payment
 collections: shared, platform, account, subscription, invoicing

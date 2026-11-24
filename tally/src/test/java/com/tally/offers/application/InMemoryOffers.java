@@ -3,6 +3,8 @@ package com.tally.offers.application;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
 import com.tally.account.UnknownAccountException;
+import com.tally.flags.FlagsApi;
+import com.tally.flags.domain.Flags;
 import com.tally.offers.domain.Offer;
 import com.tally.offers.domain.OfferCatalogue;
 import com.tally.offers.domain.OfferKind;
@@ -11,20 +13,32 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Currency;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
 
-/** In-memory ports for the golden tests: offers, kinds and accounts, no database. */
-class InMemoryOffers implements OfferCatalogue, OfferKinds, AccountApi {
+/** In-memory ports for the golden tests: offers, kinds, accounts and flags, no database. */
+class InMemoryOffers implements OfferCatalogue, OfferKinds, AccountApi, FlagsApi {
 
     final Map<String, Offer> offers = new HashMap<>();
     final List<OfferKind> kinds = new ArrayList<>();
     final Map<UUID, AccountView> accounts = new HashMap<>();
+    final Flags flags = new Flags();
+
+    @Override
+    public Map<String, Boolean> statesFor(UUID accountId, String country) {
+        Map<String, Boolean> states = new LinkedHashMap<>();
+        for (String name : flags.names()) {
+            states.put(name, flags.isOn(name, accountId, country));
+        }
+        return Collections.unmodifiableMap(states);
+    }
 
     @Override
     public Optional<Offer> offer(String offerId) {

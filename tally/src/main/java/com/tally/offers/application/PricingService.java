@@ -3,6 +3,7 @@ package com.tally.offers.application;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
 import com.tally.account.UnknownAccountException;
+import com.tally.flags.FlagsApi;
 import com.tally.offers.ChangeRequest;
 import com.tally.offers.Offers;
 import com.tally.offers.PriceLine;
@@ -20,7 +21,6 @@ import com.tally.shared.Money;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.OptionalInt;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -39,12 +39,14 @@ class PricingService implements Pricing, Offers {
     private final AccountApi accounts;
     private final OfferCatalogue catalogue;
     private final PricingRuleRegistry rules;
+    private final FlagsApi flags;
     private final Clock clock;
 
-    PricingService(AccountApi accounts, OfferCatalogue catalogue, PricingRuleRegistry rules, Clock clock) {
+    PricingService(AccountApi accounts, OfferCatalogue catalogue, PricingRuleRegistry rules, FlagsApi flags, Clock clock) {
         this.accounts = accounts;
         this.catalogue = catalogue;
         this.rules = rules;
+        this.flags = flags;
         this.clock = clock;
     }
 
@@ -62,7 +64,8 @@ class PricingService implements Pricing, Offers {
         }
         return PriceQuote.of(request, version.number(),
                 rules.ruleFor(version.kind()).lines(version.terms(), price, request.period()),
-                new QuoteReason(request.offerId(), version.number(), version.kind(), Map.of()));
+                new QuoteReason(request.offerId(), version.number(), version.kind(),
+                        flags.statesFor(account.id(), account.country())));
     }
 
     @Override
@@ -79,7 +82,8 @@ class PricingService implements Pricing, Offers {
         Money total = lines.stream().map(PriceLine::amount).reduce(Money::plus)
                 .orElseThrow(() -> new IllegalArgumentException("A change quote has at least one line"));
         return new PriceQuote(request.subscriptionId(), request.newOfferId(), newVersion.number(), request.period(),
-                lines, total, new QuoteReason(request.newOfferId(), newVersion.number(), newVersion.kind(), Map.of()));
+                lines, total, new QuoteReason(request.newOfferId(), newVersion.number(), newVersion.kind(),
+                        flags.statesFor(account.id(), account.country())));
     }
 
     private OfferVersion version(String offerId, int number, String currency) {

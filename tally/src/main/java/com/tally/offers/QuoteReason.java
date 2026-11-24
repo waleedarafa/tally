@@ -4,8 +4,8 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Why a quote is what it is (D7, ADR-010): the offer and the version priced, the kind whose rule priced
- * it, and the state of every feature flag that took part. No flags exist yet, so {@code flags} is empty.
+ * Why a quote is what it is (D7, ADR-010): the offer and version priced, the kind whose rule priced
+ * it, and the state of every defined feature flag for the account at quote time.
  */
 public record QuoteReason(String offerId, int offerVersion, String kind, Map<String, Boolean> flags) {
 

@@ -5,7 +5,7 @@
  * a start-up check that every approved kind has a rule. A mid-period change is priced by a pure
  * {@code ProrationPolicy} (O4: unused days credited at the old price, remaining days charged at the new).
  */
-@ApplicationModule(displayName = "Offers and Pricing", allowedDependencies = { "shared", "platform", "account" })
+@ApplicationModule(displayName = "Offers and Pricing", allowedDependencies = { "shared", "platform", "account", "flags" })
 package com.tally.offers;
 
 import org.springframework.modulith.ApplicationModule;

@@ -41,7 +41,7 @@ class ProrationQuoteTest {
 
     final InMemoryOffers ports = new InMemoryOffers();
     final PricingService pricing = new PricingService(ports, ports,
-            new PricingRuleRegistry(List.of(new FixedPricePhaseRule(), new FreeTrialRule())), new TestClock());
+            new PricingRuleRegistry(List.of(new FixedPricePhaseRule(), new FreeTrialRule())), ports, new TestClock());
 
     UUID aedAccount;
     UUID kwdAccount;

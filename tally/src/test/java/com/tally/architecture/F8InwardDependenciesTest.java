@@ -9,15 +9,15 @@ import org.junit.jupiter.params.provider.FieldSource;
 /**
  * F8 (Design Record §10 C): inside {@code offers}, {@code subscription}, {@code invoicing}, {@code payment}
  * and {@code flags}, code never depends outward. The domain does not depend on the application layer, and
- * neither depends on an adapter. Adapters depend inward on both. The application-layer rule covers only the
- * modules that have an application package ({@code offers}, {@code subscription}, {@code invoicing} and
- * {@code payment}); {@code flags} has only a domain plus a later persistence adapter and no application package.
+ * neither depends on an adapter. Adapters depend inward on both. The application-layer rule covers the
+ * modules that have an application package: {@code offers}, {@code subscription}, {@code invoicing},
+ * {@code payment} and {@code flags}.
  */
 class F8InwardDependenciesTest {
 
     static final java.util.List<String> MODULES = InsideLayout.PORTS_AND_ADAPTERS;
 
-    static final java.util.List<String> MODULES_WITH_APPLICATION = List.of("offers", "subscription", "invoicing", "payment");
+    static final java.util.List<String> MODULES_WITH_APPLICATION = List.of("offers", "subscription", "invoicing", "payment", "flags");
 
     @ParameterizedTest
     @FieldSource("MODULES")
