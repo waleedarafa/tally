@@ -15,6 +15,7 @@ import com.tally.subscription.SubscriptionView;
 import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
@@ -72,8 +73,10 @@ class NegativeInvoiceIT extends AbstractIntegrationTest {
         // Experimental, so other contexts on the shared database start without this rule.
         jdbc.update("INSERT INTO offers.offer_kind (id, status) VALUES ('over-credit', 'EXPERIMENTAL')");
         jdbc.update("INSERT INTO offers.offer (id, name) VALUES ('OVER', 'Over-credited')");
+        // Sign-up uses the test clock, not the database's now(), for the account's local date (ADR-047).
+        var published = clock.instant().atOffset(ZoneOffset.UTC);
         jdbc.update("INSERT INTO offers.offer_version (offer_id, version, kind, published_at, effective_from)"
-                + " VALUES ('OVER', 1, 'over-credit', now(), (now() AT TIME ZONE 'UTC')::date)");
+                + " VALUES ('OVER', 1, 'over-credit', ?, ?)", published, published.toLocalDate());
         jdbc.update("INSERT INTO offers.offer_version_price (offer_id, version, currency, amount_minor)"
                 + " VALUES ('OVER', 1, 'USD', 1000)");
         UUID account = testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();

@@ -14,6 +14,7 @@ import com.tally.offers.domain.Offer;
 import com.tally.offers.domain.OfferKind;
 import com.tally.offers.domain.OfferTerms;
 import com.tally.offers.domain.PricingRuleRegistry;
+import com.tally.platform.TestClock;
 import com.tally.shared.Money;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -40,7 +41,7 @@ class ProrationQuoteTest {
 
     final InMemoryOffers ports = new InMemoryOffers();
     final PricingService pricing = new PricingService(ports, ports,
-            new PricingRuleRegistry(List.of(new FixedPricePhaseRule(), new FreeTrialRule())));
+            new PricingRuleRegistry(List.of(new FixedPricePhaseRule(), new FreeTrialRule())), new TestClock());
 
     UUID aedAccount;
     UUID kwdAccount;

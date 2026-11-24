@@ -12,6 +12,7 @@ import com.tally.support.Quiesce;
 import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
@@ -77,8 +78,10 @@ class ZeroInvoiceIT extends AbstractProviderIntegrationTest {
         // Finance approves the kind and marketing publishes an offer of it: data, no release.
         jdbc.update("UPDATE offers.offer_kind SET status = 'APPROVED' WHERE id = 'free-trial'");
         jdbc.update("INSERT INTO offers.offer (id, name) VALUES ('TRIAL', 'One month free')");
+        // Sign-up uses the test clock, not the database's now(), for the account's local date (ADR-047).
+        var published = clock.instant().atOffset(ZoneOffset.UTC);
         jdbc.update("INSERT INTO offers.offer_version (offer_id, version, kind, free_periods, published_at, effective_from)"
-                + " VALUES ('TRIAL', 1, 'free-trial', 1, now(), (now() AT TIME ZONE 'UTC')::date)");
+                + " VALUES ('TRIAL', 1, 'free-trial', 1, ?, ?)", published, published.toLocalDate());
         jdbc.update("INSERT INTO offers.offer_version_price (offer_id, version, currency, amount_minor)"
                 + " VALUES ('TRIAL', 1, 'AED', 3699)");
         UUID account = testAccounts.open(Currency.getInstance("AED"), ZoneId.of("Asia/Dubai")).id();

@@ -11,16 +11,16 @@ import com.tally.offers.Pricing;
 import com.tally.offers.QuoteReason;
 import com.tally.offers.QuoteRequest;
 import com.tally.offers.UnknownPlanException;
-import com.tally.offers.domain.Offer;
 import com.tally.offers.domain.OfferCatalogue;
 import com.tally.offers.domain.OfferVersion;
 import com.tally.offers.domain.PeriodPrice;
 import com.tally.offers.domain.ProrationPolicy;
 import com.tally.offers.domain.PricingRuleRegistry;
 import com.tally.shared.Money;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -28,7 +28,8 @@ import org.springframework.stereotype.Service;
 /**
  * Quotes the offer version a subscription is on through the rule of its kind (ADR-015; decision A). The
  * account gives the currency; the version's terms give the price in it; the rule gives the lines. New
- * sign-ups get the offer's current version ({@link #currentVersion}). A mid-period change is priced by
+ * sign-ups get the offer's current version ({@link #currentVersion}): the version in force on the
+ * account's local date (ADR-047), not the latest published row. A mid-period change is priced by
  * {@link ProrationPolicy} instead of a kind's rule: unused days are credited at the old price and
  * remaining days are charged at the new, by days (O4; ADR-040).
  */
@@ -38,11 +39,13 @@ class PricingService implements Pricing, Offers {
     private final AccountApi accounts;
     private final OfferCatalogue catalogue;
     private final PricingRuleRegistry rules;
+    private final Clock clock;
 
-    PricingService(AccountApi accounts, OfferCatalogue catalogue, PricingRuleRegistry rules) {
+    PricingService(AccountApi accounts, OfferCatalogue catalogue, PricingRuleRegistry rules, Clock clock) {
         this.accounts = accounts;
         this.catalogue = catalogue;
         this.rules = rules;
+        this.clock = clock;
     }
 
     @Override
@@ -84,18 +87,22 @@ class PricingService implements Pricing, Offers {
                 .orElseThrow(() -> new UnknownPlanException(offerId, currency));
     }
 
+    /**
+     * The version in force on the account's local date (ADR-047): the clock instant in the account's
+     * time zone, as a {@link LocalDate}. Not the latest published row, even if it is not yet in force.
+     *
+     * @throws com.tally.account.UnknownAccountException if there is no such account
+     */
     @Override
     public OptionalInt currentVersion(String offerId, UUID accountId) {
         AccountView account = account(accountId);
-        return currentVersion(offerId).filter(v -> v.terms().priceIn(account.currency()).isPresent())
+        LocalDate asOf = LocalDate.ofInstant(clock.instant(), account.timeZone());
+        return catalogue.offer(offerId).flatMap(offer -> offer.currentOn(asOf))
+                .filter(v -> v.terms().priceIn(account.currency()).isPresent())
                 .map(v -> OptionalInt.of(v.number())).orElse(OptionalInt.empty());
     }
 
     private AccountView account(UUID accountId) {
         return accounts.get(accountId).orElseThrow(() -> new UnknownAccountException(accountId));
-    }
-
-    private Optional<OfferVersion> currentVersion(String offerId) {
-        return catalogue.offer(offerId).flatMap(Offer::current);
     }
 }

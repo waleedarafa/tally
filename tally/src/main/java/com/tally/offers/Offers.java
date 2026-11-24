@@ -7,8 +7,10 @@ import java.util.UUID;
 public interface Offers {
 
     /**
-     * The offer's current version, if it can be sold to the account: what a new subscription signs up to
-     * and keeps (decision A).
+     * The version in force on the account's local date (ADR-047): the clock instant in the account's
+     * time zone, as a {@code LocalDate}, through an offer version's {@code effectiveFrom}. Not the
+     * latest published row, even if it is not yet in force. What a new subscription signs up to and
+     * keeps (decision A).
      *
      * @throws com.tally.account.UnknownAccountException if there is no such account
      */
