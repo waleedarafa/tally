@@ -33,12 +33,14 @@ A summary of the Design Record, Steps 6, 7, 10, 12 and 16. Section numbers here 
 | S4 Cancel at period end; no refund for the current period | `Subscription` |
 | S5 Periods follow the account's billing day | `Subscription` |
 | I1 An issued invoice never changes; corrections are credit notes | `Invoice`, `CreditNote` |
-| I2 At most one invoice per subscription per period | `Invoice` ID = subscription + period number |
+| I2 At most one period invoice per subscription per period; an adjustment invoice is a separate document with its own ID, tied to the period (ADR-040) | Period invoice: `Invoice` ID = subscription + period number |
 | I3 Invoice lines are amounts from a PriceQuote | `Invoice` |
 | I6 No new invoice while blocked | **a policy, not an invariant**: checked at issue, corrected by credit note |
 | P1 A reference is charged at most once | `Payment`, ID = reference |
 | P2 No new attempt while one is requested, sent or unknown | `Payment` |
 | P3 Only a provider token, never a card number | `Payment` |
+
+An upgrade still takes effect in the period, not at period end (S3). The new plan's access is granted only after the charge succeeds (ADR-041).
 
 Invoice numbers: gap-free per country, taken from a counter row in the same transaction as the invoice. This is the one stated exception to "one transaction changes one aggregate" *(gap-free requirement assumed; finance confirms)*.
 
