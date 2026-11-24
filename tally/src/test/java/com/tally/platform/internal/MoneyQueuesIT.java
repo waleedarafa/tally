@@ -24,7 +24,7 @@ class MoneyQueuesIT extends AbstractIntegrationTest {
     void theRenewalsPaymentCollectionAndCollectionsRetryAreTheMoneyQueues() {
         // collections-retry since Slice 1R PR-8: a retry collects money.
         assertThat(queues.queues()).filteredOn(q -> q.definition().money()).extracting(JdbcDurableQueue::name)
-                .containsExactlyInAnyOrder("renewals", "payment-collection", "collections-retry");
+                .containsExactlyInAnyOrder("renewals", "payment-collection", "collections-retry", "tax-quote");
 
         for (JdbcDurableQueue queue : queues.queues()) {
             String money = String.valueOf(queue.definition().money());

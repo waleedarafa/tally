@@ -22,6 +22,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Invoicing's reactions to other modules' events. Each runs after the publisher commits, in its own
@@ -58,6 +60,7 @@ class InvoicingListeners {
      * the subscription and period number, so a duplicate delivery, even a concurrent one, adds nothing.
      */
     @ApplicationModuleListener
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void on(SubscriptionChanged changed) {
         boolean billable = changed.type() == SubscriptionChangeType.STARTED
                 || changed.type() == SubscriptionChangeType.PERIOD_RENEWED;
