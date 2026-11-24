@@ -38,7 +38,12 @@ class InMemoryOffers implements OfferCatalogue, OfferKinds, AccountApi {
 
     /** A test account (AccountApi opens none: an account is opened only for a user, by its web layer). */
     public AccountView open(Currency currency, ZoneId timeZone) {
-        AccountView account = new AccountView(UUID.randomUUID(), currency, timeZone, Optional.empty(),
+        return open(currency, timeZone, "US");
+    }
+
+    /** A test account (AccountApi opens none: an account is opened only for a user, by its web layer). */
+    public AccountView open(Currency currency, ZoneId timeZone, String country) {
+        AccountView account = new AccountView(UUID.randomUUID(), currency, timeZone, country, Optional.empty(),
                 com.tally.account.Standing.GOOD, java.util.OptionalInt.empty());
         accounts.put(account.id(), account);
         return account;
@@ -65,7 +70,7 @@ class InMemoryOffers implements OfferCatalogue, OfferKinds, AccountApi {
         }
         int day = LocalDate.ofInstant(startedAt, current.timeZone()).getDayOfMonth();
         accounts.put(accountId, new AccountView(current.id(), current.currency(), current.timeZone(),
-                current.paymentToken(), current.standing(), OptionalInt.of(day)));
+                current.country(), current.paymentToken(), current.standing(), OptionalInt.of(day)));
         return true;
     }
 }

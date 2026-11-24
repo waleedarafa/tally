@@ -23,5 +23,7 @@ public interface AccountUsers {
      */
     Opened openFor(String user, Currency currency, ZoneId timeZone);
 
+    Opened openFor(String user, Currency currency, ZoneId timeZone, String country);
+
     Optional<AccountView> accountOf(String user);
 }
