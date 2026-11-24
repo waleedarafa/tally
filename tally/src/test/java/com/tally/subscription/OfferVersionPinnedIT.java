@@ -54,8 +54,8 @@ class OfferVersionPinnedIT extends AbstractProviderIntegrationTest {
         if (version == 1) {
             jdbc.update("INSERT INTO offers.offer (id, name) VALUES ('PINNED', 'Pinned')");
         }
-        jdbc.update("INSERT INTO offers.offer_version (offer_id, version, kind, published_at)"
-                + " VALUES ('PINNED', ?, 'fixed-price-phase', now())", version);
+        jdbc.update("INSERT INTO offers.offer_version (offer_id, version, kind, published_at, effective_from)"
+                + " VALUES ('PINNED', ?, 'fixed-price-phase', now(), (now() AT TIME ZONE 'UTC')::date)", version);
         jdbc.update("INSERT INTO offers.offer_version_price (offer_id, version, currency, amount_minor)"
                 + " VALUES ('PINNED', ?, 'USD', ?)", version, usdMinorUnits);
     }

@@ -93,8 +93,8 @@ class UpgradeIT extends AbstractProviderIntegrationTest {
     void insertOffer(String id, String name, long amountMinor) {
         jdbc.update("INSERT INTO offers.offer (id, name) VALUES (?, ?) ON CONFLICT (id) DO NOTHING", id, name);
         jdbc.update("""
-                INSERT INTO offers.offer_version (offer_id, version, kind, published_at)
-                VALUES (?, 1, 'fixed-price-phase', TIMESTAMPTZ '2026-01-01 00:00:00+00')
+                INSERT INTO offers.offer_version (offer_id, version, kind, published_at, effective_from)
+                VALUES (?, 1, 'fixed-price-phase', TIMESTAMPTZ '2026-01-01 00:00:00+00', DATE '2026-01-01')
                 ON CONFLICT (offer_id, version) DO NOTHING
                 """, id);
         jdbc.update("""

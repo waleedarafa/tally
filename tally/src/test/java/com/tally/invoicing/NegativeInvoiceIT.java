@@ -72,8 +72,8 @@ class NegativeInvoiceIT extends AbstractIntegrationTest {
         // Experimental, so other contexts on the shared database start without this rule.
         jdbc.update("INSERT INTO offers.offer_kind (id, status) VALUES ('over-credit', 'EXPERIMENTAL')");
         jdbc.update("INSERT INTO offers.offer (id, name) VALUES ('OVER', 'Over-credited')");
-        jdbc.update("INSERT INTO offers.offer_version (offer_id, version, kind, published_at)"
-                + " VALUES ('OVER', 1, 'over-credit', now())");
+        jdbc.update("INSERT INTO offers.offer_version (offer_id, version, kind, published_at, effective_from)"
+                + " VALUES ('OVER', 1, 'over-credit', now(), (now() AT TIME ZONE 'UTC')::date)");
         jdbc.update("INSERT INTO offers.offer_version_price (offer_id, version, currency, amount_minor)"
                 + " VALUES ('OVER', 1, 'USD', 1000)");
         UUID account = testAccounts.open(Currency.getInstance("USD"), ZoneId.of("UTC")).id();

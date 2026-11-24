@@ -10,7 +10,6 @@ import com.tally.offers.domain.OfferVersion;
 import com.tally.shared.Money;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.HashMap;
 import java.util.List;
@@ -43,15 +42,13 @@ class JdbcOffers implements OfferCatalogue, OfferKinds {
                             .put(currency, new Money(rs.getLong("amount_minor"), currency));
                 }, offerId);
         List<OfferVersion> versions = jdbc.query(
-                "SELECT version, kind, free_periods, published_at FROM offers.offer_version"
+                "SELECT version, kind, free_periods, published_at, effective_from FROM offers.offer_version"
                         + " WHERE offer_id = ? ORDER BY version",
                 (rs, n) -> {
-                    // Temporary: there is no effective_from column yet; backfill with the UTC date of
-                    // published_at (ADR-047) until V53 lands.
                     Instant publishedAt = rs.getTimestamp("published_at").toInstant();
                     return new OfferVersion(rs.getInt("version"), rs.getString("kind"),
                             new OfferTerms(prices.getOrDefault(rs.getInt("version"), Map.of()), rs.getInt("free_periods")),
-                            publishedAt, LocalDate.ofInstant(publishedAt, ZoneOffset.UTC));
+                            publishedAt, rs.getObject("effective_from", LocalDate.class));
                 },
                 offerId);
         return Optional.of(Offer.of(offerId, names.getFirst(), versions));
