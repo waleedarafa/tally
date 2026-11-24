@@ -17,6 +17,19 @@ public interface SubscriptionApi {
     SubscriptionView subscribe(UUID accountId, String planId);
 
     /**
+     * Starts a subscription whose id is a function of the account and {@code signUpKey} (ADR-045). A
+     * retry with the same key returns the existing subscription and does not throw
+     * {@link AlreadySubscribedException}. A different key of an account that already has a live
+     * subscription is still already subscribed, for as long as one live subscription per account remains
+     * the rule.
+     *
+     * @throws com.tally.account.UnknownAccountException if there is no such account
+     * @throws com.tally.offers.UnknownPlanException if the plan cannot be sold to the account
+     * @throws AlreadySubscribedException if the account already has a live subscription that is not this sign-up
+     */
+    SubscriptionView subscribe(UUID accountId, String planId, UUID signUpKey);
+
+    /**
      * Starts a subscription in TRIAL (design.md §5): same guards as {@link #subscribe}, with period 1 from the local day it
      * starts, and it publishes STARTED like any start. The trial ends into ACTIVE via {@link #endTrial}.
      *

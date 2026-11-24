@@ -97,4 +97,20 @@ class SubscriptionTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(subscription.status()).isEqualTo(SubscriptionStatus.ACTIVE);
     }
+
+    @Test
+    void aSignUpKeyDeterminesTheSubscriptionId() {
+        UUID account = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        UUID key = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        UUID otherKey = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        UUID otherAccount = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        Instant now = Instant.parse("2026-01-31T10:00:00Z");
+        ZoneId utc = ZoneId.of("UTC");
+
+        assertThat(Subscription.idOfSignUp(account, key))
+                .isEqualTo(Subscription.idOfSignUp(account, key))
+                .isEqualTo(Subscription.start(account, "BASIC", 1, now, utc, key).id());
+        assertThat(Subscription.idOfSignUp(account, key)).isNotEqualTo(Subscription.idOfSignUp(account, otherKey));
+        assertThat(Subscription.idOfSignUp(account, key)).isNotEqualTo(Subscription.idOfSignUp(otherAccount, key));
+    }
 }

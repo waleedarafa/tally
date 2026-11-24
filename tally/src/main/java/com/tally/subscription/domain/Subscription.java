@@ -13,6 +13,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -128,9 +129,28 @@ public class Subscription {
     protected Subscription() {
     }
 
+    /**
+     * The subscription id of an HTTP sign-up: a function of the account and the Idempotency-Key, so a
+     * retry or takeover of the same key addresses the same row (ADR-045).
+     */
+    public static UUID idOfSignUp(UUID accountId, UUID signUpKey) {
+        Objects.requireNonNull(accountId, "accountId");
+        Objects.requireNonNull(signUpKey, "signUpKey");
+        return UUID.nameUUIDFromBytes(("subscription-sign-up:" + accountId + ":" + signUpKey)
+                .getBytes(StandardCharsets.UTF_8));
+    }
+
     /** Starts on the local day of {@code now} in the account's time zone, with period 1. */
     public static Subscription start(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone) {
-        return newSubscription(accountId, planId, offerVersion, now, zone);
+        return newSubscription(accountId, planId, offerVersion, now, zone, null);
+    }
+
+    /**
+     * Starts as {@link #start}, with the id determined by the account and {@code signUpKey} (ADR-045).
+     */
+    public static Subscription start(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone,
+            UUID signUpKey) {
+        return newSubscription(accountId, planId, offerVersion, now, zone, signUpKey);
     }
 
     /**
@@ -138,14 +158,25 @@ public class Subscription {
      * Same dates and version as {@link #start}; only the status differs.
      */
     public static Subscription startTrial(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone) {
-        Subscription s = newSubscription(accountId, planId, offerVersion, now, zone);
+        Subscription s = newSubscription(accountId, planId, offerVersion, now, zone, null);
         s.status = SubscriptionStatus.TRIAL;
         return s;
     }
 
-    private static Subscription newSubscription(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone) {
+    /**
+     * Starts as {@link #startTrial}, with the id determined by the account and {@code signUpKey} (ADR-045).
+     */
+    public static Subscription startTrial(UUID accountId, String planId, int offerVersion, Instant now, ZoneId zone,
+            UUID signUpKey) {
+        Subscription s = newSubscription(accountId, planId, offerVersion, now, zone, signUpKey);
+        s.status = SubscriptionStatus.TRIAL;
+        return s;
+    }
+
+    private static Subscription newSubscription(UUID accountId, String planId, int offerVersion, Instant now,
+            ZoneId zone, UUID signUpKey) {
         Subscription s = new Subscription();
-        s.id = UUID.randomUUID();
+        s.id = signUpKey != null ? idOfSignUp(accountId, signUpKey) : UUID.randomUUID();
         s.accountId = accountId;
         s.planId = planId;
         s.offerVersion = offerVersion;
@@ -305,6 +336,10 @@ public class Subscription {
 
     public int offerVersion() {
         return offerVersion;
+    }
+
+    public int anchorDay() {
+        return anchorDay;
     }
 
     public Instant startedAt() {

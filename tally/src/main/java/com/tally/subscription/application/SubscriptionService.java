@@ -18,7 +18,9 @@ import com.tally.subscription.domain.Subscription;
 import com.tally.subscription.domain.SubscriptionStatus;
 import com.tally.subscription.domain.SubscriptionChanges;
 import com.tally.subscription.domain.Subscriptions;
+import com.tally.subscription.domain.Subscriptions.Add;
 import java.time.Clock;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.ArrayList;
 import java.util.List;
@@ -55,7 +57,13 @@ class SubscriptionService implements SubscriptionApi {
     @Override
     @Transactional
     public SubscriptionView subscribe(UUID accountId, String planId) {
-        return start(accountId, planId, false);
+        return start(accountId, planId, false, null);
+    }
+
+    @Override
+    @Transactional
+    public SubscriptionView subscribe(UUID accountId, String planId, UUID signUpKey) {
+        return start(accountId, planId, false, Objects.requireNonNull(signUpKey, "signUpKey"));
     }
 
     /**
@@ -65,10 +73,10 @@ class SubscriptionService implements SubscriptionApi {
     @Override
     @Transactional
     public SubscriptionView startTrial(UUID accountId, String planId) {
-        return start(accountId, planId, true);
+        return start(accountId, planId, true, null);
     }
 
-    private SubscriptionView start(UUID accountId, String planId, boolean trial) {
+    private SubscriptionView start(UUID accountId, String planId, boolean trial, UUID signUpKey) {
         AccountView account = accounts.get(accountId).orElseThrow(() -> new UnknownAccountException(accountId));
         if (account.standing() == Standing.BLOCKED) {
             throw new AccountBlockedException(accountId);
@@ -76,20 +84,42 @@ class SubscriptionService implements SubscriptionApi {
         // The offer can be sold in the account's currency, at its current version.
         int offerVersion = offers.currentVersion(planId, accountId)
                 .orElseThrow(() -> new UnknownPlanException(planId, accountId));
+        if (signUpKey != null) {
+            Optional<Subscription> existing = subscriptions.find(Subscription.idOfSignUp(accountId, signUpKey));
+            if (existing.isPresent()) {
+                // A retry or takeover of the same key: return the same row, do not start it again (ADR-045).
+                return view(existing.get());
+            }
+        }
         if (subscriptions.hasLive(accountId)) {
             throw new AlreadySubscribedException(accountId);
         }
         Subscription subscription = trial
-                ? Subscription.startTrial(accountId, planId, offerVersion, clock.instant(), account.timeZone())
-                : Subscription.start(accountId, planId, offerVersion, clock.instant(), account.timeZone());
-        if (!subscriptions.addIfNoneLive(subscription)) {
-            // A concurrent subscribe for the same account won: one live subscription per account is the guard.
-            throw new AlreadySubscribedException(accountId);
-        }
-        changeLog.record(subscription, SubscriptionChangeType.STARTED);
-        renewals.scheduleNext(subscription, account.timeZone());
-        return new SubscriptionView(subscription.id(), accountId, planId, subscription.startedAt(),
-                subscription.version(), subscription.offerVersion());
+                ? (signUpKey != null
+                        ? Subscription.startTrial(accountId, planId, offerVersion, clock.instant(), account.timeZone(),
+                                signUpKey)
+                        : Subscription.startTrial(accountId, planId, offerVersion, clock.instant(), account.timeZone()))
+                : (signUpKey != null
+                        ? Subscription.start(accountId, planId, offerVersion, clock.instant(), account.timeZone(),
+                                signUpKey)
+                        : Subscription.start(accountId, planId, offerVersion, clock.instant(), account.timeZone()));
+        return switch (subscriptions.add(subscription)) {
+            case ADDED -> {
+                changeLog.record(subscription, SubscriptionChangeType.STARTED);
+                renewals.scheduleNext(subscription, account.timeZone());
+                yield view(subscription);
+            }
+            case ALREADY_PRESENT ->
+                // The same id was committed by a concurrent takeover of this key.
+                view(subscriptions.find(subscription.id()).orElseThrow(() ->
+                        new IllegalStateException("Subscription " + subscription.id() + " was reported present")));
+            case ACCOUNT_HAS_LIVE -> throw new AlreadySubscribedException(accountId);
+        };
+    }
+
+    private static SubscriptionView view(Subscription subscription) {
+        return new SubscriptionView(subscription.id(), subscription.accountId(), subscription.planId(),
+                subscription.startedAt(), subscription.version(), subscription.offerVersion());
     }
 
     /**

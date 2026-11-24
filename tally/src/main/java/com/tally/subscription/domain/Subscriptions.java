@@ -8,11 +8,19 @@ import java.util.UUID;
 public interface Subscriptions {
 
     /**
-     * Adds a new live subscription now, unless the account already has one. Returns false, and adds nothing, only
-     * when the guard {@code subscription_one_live_subscription_per_account} fires, as it does for a concurrent
-     * sign-up of the same account (CLAUDE.md rule 11); any other failure is thrown. The caller's transaction cannot continue after false.
+     * Result of {@link #add}: {@code ADDED} if this row is new; {@code ALREADY_PRESENT} if this id already
+     * exists (a same-key retry, ADR-045); {@code ACCOUNT_HAS_LIVE} only when the guard
+     * {@code subscription_one_live_subscription_per_account} fires (CLAUDE.md rule 11). Any other failure
+     * is thrown. After {@code ALREADY_PRESENT} or {@code ACCOUNT_HAS_LIVE} the caller's transaction cannot
+     * continue.
      */
-    boolean addIfNoneLive(Subscription subscription);
+    enum Add {
+        ADDED,
+        ALREADY_PRESENT,
+        ACCOUNT_HAS_LIVE
+    }
+
+    Add add(Subscription subscription);
 
     Optional<Subscription> find(UUID subscriptionId);
 

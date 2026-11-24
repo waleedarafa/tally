@@ -8,6 +8,9 @@ import com.tally.AbstractIntegrationTest;
 import com.tally.account.AccountApi;
 import com.tally.account.UnknownAccountException;
 import com.tally.offers.UnknownPlanException;
+import com.tally.subscription.domain.Subscription;
+import com.tally.subscription.domain.Subscriptions;
+import com.tally.subscription.domain.Subscriptions.Add;
 import com.tally.support.TestAccounts;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -25,6 +28,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @RecordApplicationEvents
 class SubscriptionApiIT extends AbstractIntegrationTest {
@@ -88,6 +92,12 @@ class SubscriptionApiIT extends AbstractIntegrationTest {
 
     @Autowired
     DataSource dataSource;
+
+    @Autowired
+    Subscriptions store;
+
+    @Autowired
+    TransactionTemplate transactions;
 
     long sessionsWaitingOnALock() {
         return jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()"
@@ -179,5 +189,62 @@ class SubscriptionApiIT extends AbstractIntegrationTest {
                 .containsExactlyInAnyOrder(first.id() + ",2", again.id() + ",2");
         assertThatThrownBy(() -> subscriptions.subscribe(account, "PREMIUM"))
                 .as("still one live subscription").isInstanceOf(AlreadySubscribedException.class);
+    }
+
+    @Test
+    void aSecondSubscribeWithTheSameSignUpKeyReturnsTheSameSubscription() {
+        UUID account = account();
+        UUID key = UUID.randomUUID();
+
+        SubscriptionView first = subscriptions.subscribe(account, "BASIC", key);
+        SubscriptionView again = subscriptions.subscribe(account, "BASIC", key);
+
+        assertThat(first.id()).isEqualTo(Subscription.idOfSignUp(account, key));
+        assertThat(again.id()).isEqualTo(first.id());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM subscription.subscription WHERE account_id = ?",
+                Long.class, account)).isEqualTo(1);
+        assertThat(subscriptions.timeline(first.id())).extracting(TimelineEntry::type)
+                .containsExactly(SubscriptionChangeType.STARTED);
+        assertThat(events.stream(SubscriptionChanged.class)).hasSize(1);
+
+        assertThatThrownBy(() -> subscriptions.subscribe(account, "PREMIUM", UUID.randomUUID()))
+                .isInstanceOf(AlreadySubscribedException.class);
+        assertThat(events.stream(SubscriptionChanged.class)).hasSize(1);
+    }
+
+    @Test
+    void twoConcurrentSubscribesWithTheSameSignUpKeyCreateOneSubscription() throws Exception {
+        UUID account = account();
+        UUID key = UUID.randomUUID();
+
+        CompletableFuture<SubscriptionView> first = CompletableFuture.supplyAsync(
+                () -> subscriptions.subscribe(account, "BASIC", key));
+        CompletableFuture<SubscriptionView> second = CompletableFuture.supplyAsync(
+                () -> subscriptions.subscribe(account, "BASIC", key));
+
+        SubscriptionView one = first.get(20, TimeUnit.SECONDS);
+        SubscriptionView other = second.get(20, TimeUnit.SECONDS);
+
+        assertThat(one.id()).isEqualTo(other.id()).isEqualTo(Subscription.idOfSignUp(account, key));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM subscription.subscription WHERE account_id = ?",
+                Long.class, account)).isEqualTo(1);
+        assertThat(subscriptions.timeline(one.id())).extracting(TimelineEntry::type)
+                .containsExactly(SubscriptionChangeType.STARTED);
+    }
+
+    @Test
+    void addingASubscriptionWhoseIdAlreadyExistsIsAlreadyPresent() {
+        UUID account = account();
+        UUID key = UUID.randomUUID();
+        Subscription first = Subscription.start(account, "BASIC", 1, clock.instant(), ZoneId.of("America/New_York"),
+                key);
+        transactions.executeWithoutResult(tx -> assertThat(store.add(first)).isEqualTo(Add.ADDED));
+
+        Subscription retry = Subscription.start(account, "BASIC", 1, clock.instant(), ZoneId.of("America/New_York"),
+                key);
+        assertThat(retry.id()).isEqualTo(first.id());
+        transactions.executeWithoutResult(tx -> assertThat(store.add(retry)).isEqualTo(Add.ALREADY_PRESENT));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM subscription.subscription WHERE account_id = ?",
+                Long.class, account)).isEqualTo(1);
     }
 }

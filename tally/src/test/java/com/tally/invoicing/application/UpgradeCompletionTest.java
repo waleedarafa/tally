@@ -81,6 +81,7 @@ class UpgradeCompletionTest {
         }
 
         @Override public SubscriptionView subscribe(UUID accountId, String planId) { throw new UnsupportedOperationException(); }
+        @Override public SubscriptionView subscribe(UUID accountId, String planId, UUID signUpKey) { throw new UnsupportedOperationException(); }
         @Override public SubscriptionView startTrial(UUID accountId, String planId) { throw new UnsupportedOperationException(); }
         @Override public boolean endTrial(UUID subscriptionId) { throw new UnsupportedOperationException(); }
         @Override public boolean cancel(UUID subscriptionId) { throw new UnsupportedOperationException(); }
