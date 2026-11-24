@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.JsonEnumDefaultValue;
  * version does not know (CLAUDE.md rule 7). Never stored: the invoice table's check rejects it.
  */
 public enum InvoiceStatus {
-    PAYMENT_PENDING, PAID, PAYMENT_FAILED,
+    DRAFT, TAX_QUOTED, PAYMENT_PENDING, PAID, PAYMENT_FAILED,
     @JsonEnumDefaultValue
     UNKNOWN
 }
