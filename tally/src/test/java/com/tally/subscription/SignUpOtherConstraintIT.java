@@ -7,7 +7,6 @@ import com.tally.AbstractIntegrationTest;
 import com.tally.subscription.domain.Subscription;
 import com.tally.subscription.domain.SubscriptionPeriod;
 import com.tally.subscription.domain.Subscriptions;
-import com.tally.subscription.domain.Subscriptions.Add;
 import com.tally.support.TestAccounts;
 import java.lang.reflect.Field;
 import java.time.LocalDate;
@@ -21,9 +20,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * WAR-85: a database failure at sign-up, other than the one-live-subscription guard, must not be
- * reported as "already subscribed" (CLAUDE.md rule 11). The example is a period that ends on the
- * day it starts, which fails {@code end_date > start_date}.
+ * WAR-85: a database failure at sign-up must not be reported as "already subscribed" (CLAUDE.md
+ * rule 11). The example is a period that ends on the day it starts, which fails
+ * {@code end_date > start_date}.
  */
 class SignUpOtherConstraintIT extends AbstractIntegrationTest {
 
@@ -43,11 +42,8 @@ class SignUpOtherConstraintIT extends AbstractIntegrationTest {
         LocalDate start = subscription.currentPeriod().start();
         setPeriods(subscription, List.of(new SubscriptionPeriod(1, start, start)));
 
-        assertThatThrownBy(() -> transactions.executeWithoutResult(tx -> {
-            if (subscriptions.add(subscription) == Add.ACCOUNT_HAS_LIVE) {
-                throw new AlreadySubscribedException(account);
-            }
-        })).isInstanceOf(DataIntegrityViolationException.class)
+        assertThatThrownBy(() -> transactions.executeWithoutResult(tx -> subscriptions.add(subscription)))
+                .isInstanceOf(DataIntegrityViolationException.class)
                 .isNotInstanceOf(AlreadySubscribedException.class);
 
         assertThat(subscriptions.hasLive(account)).isFalse();

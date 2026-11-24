@@ -7,7 +7,6 @@ import com.tally.account.UnknownAccountException;
 import com.tally.offers.Offers;
 import com.tally.offers.UnknownPlanException;
 import com.tally.subscription.AccountBlockedException;
-import com.tally.subscription.AlreadySubscribedException;
 import com.tally.subscription.EndReason;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionSnapshot;
@@ -93,13 +92,11 @@ class SubscriptionService implements SubscriptionApi {
                 return view(existing.get());
             }
         }
-        if (subscriptions.hasLive(accountId)) {
-            throw new AlreadySubscribedException(accountId);
-        }
         Instant startedAt = clock.instant();
         // The day is decided here; it is written only if this call inserts the subscription, so a
-        // same-key retry does not flush a second versioned account update (and a two-tab sign-up
-        // still fails on the one-live index before any account write — SignUpApiIT).
+        // same-key retry does not flush a second versioned account update. Concurrent different-key
+        // sign-ups both succeed; they serialise on the account row when writing the billing day
+        // (ADR-046, SignUpApiIT).
         int billingDay = account.billingDay().orElse(LocalDate.ofInstant(startedAt, account.timeZone()).getDayOfMonth());
         Subscription subscription = trial
                 ? (signUpKey != null
@@ -123,7 +120,6 @@ class SubscriptionService implements SubscriptionApi {
                 // The same id was committed by a concurrent takeover of this key.
                 view(subscriptions.find(subscription.id()).orElseThrow(() ->
                         new IllegalStateException("Subscription " + subscription.id() + " was reported present")));
-            case ACCOUNT_HAS_LIVE -> throw new AlreadySubscribedException(accountId);
         };
     }
 

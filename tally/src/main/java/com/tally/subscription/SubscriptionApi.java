@@ -12,20 +12,16 @@ public interface SubscriptionApi {
      *
      * @throws com.tally.account.UnknownAccountException if there is no such account
      * @throws com.tally.offers.UnknownPlanException if the plan cannot be sold to the account
-     * @throws AlreadySubscribedException if the account already has a live subscription (one live subscription per account)
      */
     SubscriptionView subscribe(UUID accountId, String planId);
 
     /**
      * Starts a subscription whose id is a function of the account and {@code signUpKey} (ADR-045). A
-     * retry with the same key returns the existing subscription and does not throw
-     * {@link AlreadySubscribedException}. A different key of an account that already has a live
-     * subscription is still already subscribed, for as long as one live subscription per account remains
-     * the rule.
+     * retry with the same key returns the existing subscription. A different key starts a new
+     * subscription of the same account (ADR-046).
      *
      * @throws com.tally.account.UnknownAccountException if there is no such account
      * @throws com.tally.offers.UnknownPlanException if the plan cannot be sold to the account
-     * @throws AlreadySubscribedException if the account already has a live subscription that is not this sign-up
      */
     SubscriptionView subscribe(UUID accountId, String planId, UUID signUpKey);
 
@@ -35,7 +31,6 @@ public interface SubscriptionApi {
      *
      * @throws com.tally.account.UnknownAccountException if there is no such account
      * @throws com.tally.offers.UnknownPlanException if the plan cannot be sold to the account
-     * @throws AlreadySubscribedException if the account already has a live subscription (one live subscription per account)
      */
     SubscriptionView startTrial(UUID accountId, String planId);
 

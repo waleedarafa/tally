@@ -12,23 +12,20 @@ import jakarta.persistence.PersistenceContext;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.stereotype.Repository;
 
 /**
  * Implements {@link Subscriptions} on the EntityManager. An adapter class rather than a Spring Data
  * interface: a new subscription carries its id and version, which Spring Data's save would merge, and
  * Hibernate refuses to merge a versioned entity that does not exist yet. {@code @Repository} translates
- * persistence exceptions; {@link #add} reads the constraint name before they are translated.
+ * persistence exceptions. {@link #add} uses {@code ON CONFLICT (id) DO NOTHING} so a same-key retry
+ * does not abort the transaction (ADR-045).
  */
 @Repository
 class JpaSubscriptions implements Subscriptions {
 
     @PersistenceContext
     private EntityManager entities;
-
-    /** The sign-up's duplicate guard (V44: one live subscription per account, any live state). */
-    static final String ONE_LIVE_PER_ACCOUNT = "subscription_one_live_subscription_per_account";
 
     /** The live states of the subscription (design.md §5): TRIAL, ACTIVE and CANCELLING; not ENDED. */
     static final List<SubscriptionStatus> LIVE = List.of(SubscriptionStatus.TRIAL,
@@ -38,73 +35,52 @@ class JpaSubscriptions implements Subscriptions {
     public Add add(Subscription subscription) {
         // ON CONFLICT (id) DO NOTHING does not abort the transaction, so a same-key retry can
         // return the existing row (ADR-045). An advisory lock serialises two inserts of the same
-        // id, so the second meets the row on the primary key and not on the one-live unique index
-        // (the invoice insert uses the same pattern).
-        // FlushMode.COMMIT: do not flush a pending account update first. SignUpApiIT's two-tab race
-        // relies on the subscription insert (or its unique-index failure) happening before the
-        // versioned account write, otherwise the loser becomes concurrent-change instead of
-        // already-subscribed.
+        // id (the invoice insert uses the same pattern). FlushMode.COMMIT: do not flush a pending
+        // account update first, so a versioned payment-token write is not flushed before the insert.
         entities.createNativeQuery(
                 "SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtextextended(:id, 0))) held")
                 .setFlushMode(FlushModeType.COMMIT)
                 .setParameter("id", subscription.id().toString())
                 .getSingleResult();
-        try {
-            int inserted = entities.createNativeQuery("""
-                    INSERT INTO subscription.subscription (id, account_id, plan_id, offer_version, started_at,
-                        anchor_day, version, status, end_reason, ended_at)
-                    VALUES (:id, :accountId, :planId, :offerVersion, :startedAt,
-                        :anchorDay, :version, :status, :endReason, :endedAt)
-                    ON CONFLICT (id) DO NOTHING
+        int inserted = entities.createNativeQuery("""
+                INSERT INTO subscription.subscription (id, account_id, plan_id, offer_version, started_at,
+                    anchor_day, version, status, end_reason, ended_at)
+                VALUES (:id, :accountId, :planId, :offerVersion, :startedAt,
+                    :anchorDay, :version, :status, :endReason, :endedAt)
+                ON CONFLICT (id) DO NOTHING
+                """)
+                .setFlushMode(FlushModeType.COMMIT)
+                .setParameter("id", subscription.id())
+                .setParameter("accountId", subscription.accountId())
+                .setParameter("planId", subscription.planId())
+                .setParameter("offerVersion", subscription.offerVersion())
+                .setParameter("startedAt", subscription.startedAt())
+                .setParameter("anchorDay", subscription.anchorDay())
+                .setParameter("version", subscription.version())
+                .setParameter("status", subscription.status().name())
+                .setParameter("endReason", subscription.endReason() == null ? null : subscription.endReason().name())
+                .setParameter("endedAt", subscription.endedAt())
+                .executeUpdate();
+        if (inserted == 0) {
+            return Add.ALREADY_PRESENT;
+        }
+        List<SubscriptionPeriod> periods = subscription.periods();
+        for (int i = 0; i < periods.size(); i++) {
+            SubscriptionPeriod period = periods.get(i);
+            entities.createNativeQuery("""
+                    INSERT INTO subscription.subscription_period (subscription_id, position, number,
+                        start_date, end_date)
+                    VALUES (:id, :position, :number, :startDate, :endDate)
                     """)
                     .setFlushMode(FlushModeType.COMMIT)
                     .setParameter("id", subscription.id())
-                    .setParameter("accountId", subscription.accountId())
-                    .setParameter("planId", subscription.planId())
-                    .setParameter("offerVersion", subscription.offerVersion())
-                    .setParameter("startedAt", subscription.startedAt())
-                    .setParameter("anchorDay", subscription.anchorDay())
-                    .setParameter("version", subscription.version())
-                    .setParameter("status", subscription.status().name())
-                    .setParameter("endReason", subscription.endReason() == null ? null : subscription.endReason().name())
-                    .setParameter("endedAt", subscription.endedAt())
+                    .setParameter("position", i)
+                    .setParameter("number", period.number())
+                    .setParameter("startDate", period.start())
+                    .setParameter("endDate", period.end())
                     .executeUpdate();
-            if (inserted == 0) {
-                return Add.ALREADY_PRESENT;
-            }
-            List<SubscriptionPeriod> periods = subscription.periods();
-            for (int i = 0; i < periods.size(); i++) {
-                SubscriptionPeriod period = periods.get(i);
-                entities.createNativeQuery("""
-                        INSERT INTO subscription.subscription_period (subscription_id, position, number,
-                            start_date, end_date)
-                        VALUES (:id, :position, :number, :startDate, :endDate)
-                        """)
-                        .setFlushMode(FlushModeType.COMMIT)
-                        .setParameter("id", subscription.id())
-                        .setParameter("position", i)
-                        .setParameter("number", period.number())
-                        .setParameter("startDate", period.start())
-                        .setParameter("endDate", period.end())
-                        .executeUpdate();
-            }
-            return Add.ADDED;
-        } catch (RuntimeException e) {
-            if (ONE_LIVE_PER_ACCOUNT.equals(constraintName(e))) {
-                return Add.ACCOUNT_HAS_LIVE;
-            }
-            throw e;
         }
-    }
-
-    /** The Hibernate constraint name, if this failure is a constraint violation; otherwise null. */
-    private static String constraintName(Throwable thrown) {
-        for (Throwable cause = thrown; cause != null; cause = cause.getCause()) {
-            if (cause instanceof ConstraintViolationException violation) {
-                return violation.getConstraintName();
-            }
-        }
-        return null;
+        return Add.ADDED;
     }
 
     @Override

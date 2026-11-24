@@ -69,13 +69,15 @@ class SubscriptionApiIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void anAccountHasAtMostOneSubscription() {
+    void anAccountMayHaveSeveralLiveSubscriptions() {
         UUID account = account();
-        subscriptions.subscribe(account, "BASIC");
+        SubscriptionView basic = subscriptions.subscribe(account, "BASIC");
+        SubscriptionView premium = subscriptions.subscribe(account, "PREMIUM");
 
-        assertThatThrownBy(() -> subscriptions.subscribe(account, "PREMIUM"))
-                .isInstanceOf(AlreadySubscribedException.class);
-        assertThat(events.stream(SubscriptionChanged.class)).hasSize(1);
+        assertThat(premium.id()).isNotEqualTo(basic.id());
+        assertThat(events.stream(SubscriptionChanged.class)).hasSize(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM subscription.subscription WHERE account_id = ?",
+                Long.class, account)).isEqualTo(2);
     }
 
     @Test
@@ -187,8 +189,6 @@ class SubscriptionApiIT extends AbstractIntegrationTest {
                 + " AND split_part(queue_key, ':', 1) = ?", String.class, account.toString()))
                 .as("each subscription's renewal row; the ended one's does nothing when it runs")
                 .containsExactlyInAnyOrder(first.id() + ",2", again.id() + ",2");
-        assertThatThrownBy(() -> subscriptions.subscribe(account, "PREMIUM"))
-                .as("still one live subscription").isInstanceOf(AlreadySubscribedException.class);
     }
 
     @Test
@@ -207,9 +207,9 @@ class SubscriptionApiIT extends AbstractIntegrationTest {
                 .containsExactly(SubscriptionChangeType.STARTED);
         assertThat(events.stream(SubscriptionChanged.class)).hasSize(1);
 
-        assertThatThrownBy(() -> subscriptions.subscribe(account, "PREMIUM", UUID.randomUUID()))
-                .isInstanceOf(AlreadySubscribedException.class);
-        assertThat(events.stream(SubscriptionChanged.class)).hasSize(1);
+        SubscriptionView other = subscriptions.subscribe(account, "PREMIUM", UUID.randomUUID());
+        assertThat(other.id()).isNotEqualTo(first.id());
+        assertThat(events.stream(SubscriptionChanged.class)).hasSize(2);
     }
 
     @Test

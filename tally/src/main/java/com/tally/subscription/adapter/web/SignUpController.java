@@ -30,9 +30,9 @@ import tools.jackson.databind.json.JsonMapper;
  * <p>The {@code Idempotency-Key} is required, belongs to the caller (ADR-027; Slice 4), and is handled by
  * the platform's shared mechanism ({@link IdempotentEndpoints}): the sign-up and its stored response commit
  * together; a request that died is taken over after the request timeout. The subscription id is a function
- * of the account and the Idempotency-Key (ADR-045), so a takeover cannot insert a second row. The
- * one-live-per-account rule still refuses a different sign-up of the same account. Every error is an RFC 9457
- * problem with the type codes of design.md §8, or {@code about:blank}.
+ * of the account and the Idempotency-Key (ADR-045), so a takeover cannot insert a second row. A different
+ * key starts a new subscription of the same account (ADR-046). Every error is an RFC 9457 problem with the
+ * type codes of design.md §8, or {@code about:blank}.
  */
 @RestController
 class SignUpController {

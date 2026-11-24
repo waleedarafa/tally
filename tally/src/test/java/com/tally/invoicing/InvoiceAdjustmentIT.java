@@ -23,7 +23,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * AT-12, the adjustment case (ADR-040): the daily duplicate-invoices check must not count an adjustment
  * as a duplicate of its period invoice. It boots the app, so V46 is applied and ddl-auto validate runs.
  * A retry of the same adjustment inserts nothing; two period invoices for overlapping periods on one
- * account are still a violation.
+ * subscription are still a violation. Overlapping period invoices of two subscriptions of the same
+ * account are not (ADR-046).
  */
 class InvoiceAdjustmentIT extends AbstractIntegrationTest {
 
@@ -76,18 +77,28 @@ class InvoiceAdjustmentIT extends AbstractIntegrationTest {
         // The period invoice and its adjustment, overlapping dates, same account: not a violation.
         assertThat(duplicateInvoices.violations()).isZero();
 
-        // A second period invoice for an overlapping period on one account is still a violation.
-        UUID otherAccount = UUID.randomUUID();
-        UUID otherSubscription = UUID.randomUUID();
-        Invoice firstOther = periodInvoice(otherAccount, otherSubscription, 1,
+        // Two period invoices of different subscriptions of one account may overlap (ADR-046).
+        UUID sharedAccount = UUID.randomUUID();
+        Invoice firstOfAccount = periodInvoice(sharedAccount, UUID.randomUUID(), 1,
                 LocalDate.parse("2026-01-15"), LocalDate.parse("2026-02-15"), clock.instant());
-        Invoice secondOther = periodInvoice(otherAccount, UUID.randomUUID(), 1,
+        Invoice secondOfAccount = periodInvoice(sharedAccount, UUID.randomUUID(), 1,
                 LocalDate.parse("2026-01-20"), LocalDate.parse("2026-02-20"), clock.instant());
         transactions.executeWithoutResult(tx -> {
-            assertThat(invoices.addIfAbsent(firstOther)).isTrue();
-            assertThat(invoices.addIfAbsent(secondOther)).isTrue();
+            assertThat(invoices.addIfAbsent(firstOfAccount)).isTrue();
+            assertThat(invoices.addIfAbsent(secondOfAccount)).isTrue();
         });
+        assertThat(duplicateInvoices.violations()).isZero();
 
+        // Two overlapping period invoices of one subscription are still a violation.
+        UUID oneSubscription = UUID.randomUUID();
+        Invoice firstOfSub = periodInvoice(UUID.randomUUID(), oneSubscription, 1,
+                LocalDate.parse("2026-01-15"), LocalDate.parse("2026-02-15"), clock.instant());
+        Invoice secondOfSub = periodInvoice(firstOfSub.accountId(), oneSubscription, 2,
+                LocalDate.parse("2026-01-20"), LocalDate.parse("2026-02-20"), clock.instant());
+        transactions.executeWithoutResult(tx -> {
+            assertThat(invoices.addIfAbsent(firstOfSub)).isTrue();
+            assertThat(invoices.addIfAbsent(secondOfSub)).isTrue();
+        });
         assertThat(duplicateInvoices.violations()).isEqualTo(1);
     }
 

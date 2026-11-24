@@ -311,12 +311,15 @@ class ContractIT extends AbstractIntegrationTest {
     void signUp() throws Exception {
         UUID account = account();
         String key = key();
-        valid(by(account, json(post("/v1/subscriptions").header("Idempotency-Key", key), signUp(account, "BASIC"))),
-                201);
+        MvcResult first = valid(by(account, json(post("/v1/subscriptions").header("Idempotency-Key", key),
+                signUp(account, "BASIC"))), 201);
         valid(by(account, json(post("/v1/subscriptions").header("Idempotency-Key", key), signUp(account, "PREMIUM"))),
                 422);
-        valid(by(account, json(post("/v1/subscriptions").header("Idempotency-Key", key()), signUp(account, "BASIC"))),
-                409);
+        // A different key starts another subscription of the same account (ADR-046).
+        MvcResult second = valid(by(account, json(post("/v1/subscriptions").header("Idempotency-Key", key()),
+                signUp(account, "BASIC"))), 201);
+        assertThat(second.getResponse().getContentAsString())
+                .isNotEqualTo(first.getResponse().getContentAsString());
         UUID other = account();
         valid(by(other, json(post("/v1/subscriptions").header("Idempotency-Key", key()), signUp(other, "NO-SUCH-PLAN"))),
                 422);

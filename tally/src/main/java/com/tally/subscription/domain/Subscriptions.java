@@ -9,15 +9,14 @@ public interface Subscriptions {
 
     /**
      * Result of {@link #add}: {@code ADDED} if this row is new; {@code ALREADY_PRESENT} if this id already
-     * exists (a same-key retry, ADR-045); {@code ACCOUNT_HAS_LIVE} only when the guard
-     * {@code subscription_one_live_subscription_per_account} fires (CLAUDE.md rule 11). Any other failure
-     * is thrown. After {@code ALREADY_PRESENT} or {@code ACCOUNT_HAS_LIVE} the caller's transaction cannot
-     * continue.
+     * exists (a same-key retry, ADR-045). Any other failure is thrown. After {@code ALREADY_PRESENT}
+     * the caller's transaction cannot continue on this connection if a later statement is issued
+     * against a constraint that aborted it; a primary-key conflict is handled with
+     * {@code ON CONFLICT DO NOTHING} and does not abort.
      */
     enum Add {
         ADDED,
-        ALREADY_PRESENT,
-        ACCOUNT_HAS_LIVE
+        ALREADY_PRESENT
     }
 
     Add add(Subscription subscription);

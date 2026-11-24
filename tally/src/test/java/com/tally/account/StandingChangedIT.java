@@ -15,7 +15,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -124,9 +123,9 @@ class StandingChangedIT extends AbstractIntegrationTest {
     }
 
     /**
-     * Two callers set the same standing at the same time, both having read the account before either commits. The
-     * version is an optimistic lock: the second waits for the first's row lock, then finds the version changed and
-     * fails, so one event is published, not two (CLAUDE.md rule 7).
+     * Two callers set the same standing at the same time. {@code set} locks the account row (ADR-046): the second
+     * waits for the first to commit, then finds the standing already set and changes nothing, so one event is
+     * published, not two (CLAUDE.md rule 7).
      */
     @Test
     void twoEqualChangesAtTheSameTimePublishOneEvent() throws Exception {
@@ -148,8 +147,7 @@ class StandingChangedIT extends AbstractIntegrationTest {
             await().atMost(Duration.ofSeconds(10)).until(this::someoneWaitsForARowLock);
         });
 
-        assertThatThrownBy(() -> second.get(10, TimeUnit.SECONDS))
-                .hasCauseInstanceOf(ObjectOptimisticLockingFailureException.class);
+        second.get(10, TimeUnit.SECONDS);
         assertThat(publishedFor(account)).singleElement().extracting(StandingChanged::standing)
                 .isEqualTo(Standing.BLOCKED);
     }
