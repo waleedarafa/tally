@@ -768,15 +768,38 @@ components:
         description:
           type: string
     FlagDetail:
-      allOf:
-        - $ref: "#/components/schemas/FlagSummary"
-        - type: object
-          required: [changes]
-          properties:
-            changes:
-              type: array
-              items:
-                $ref: "#/components/schemas/FlagChange"
+      type: object
+      required: [name, defaultOn, accounts, countries, releasedAt, removeBy, overdue, changeCount, lastChangeAt, changes]
+      properties:
+        name:
+          type: string
+        defaultOn:
+          type: boolean
+        accounts:
+          type: object
+          additionalProperties:
+            type: boolean
+        countries:
+          type: object
+          additionalProperties:
+            type: boolean
+        releasedAt:
+          type: [string, "null"]
+          format: date-time
+        removeBy:
+          type: [string, "null"]
+          format: date-time
+        overdue:
+          type: boolean
+        changeCount:
+          type: integer
+        lastChangeAt:
+          type: [string, "null"]
+          format: date-time
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FlagChange"
     FlagReport:
       type: object
       required: [asOf, flags, overdue]
