@@ -202,7 +202,7 @@ class FlagsAdminController {
         return endpoints.handle(keys, caller.keyScope(), key, new AdminChange("remove", name, null, null),
                 () -> {
                     admin.remove(name, caller.id());
-                    return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+                    return ResponseEntity.status(HttpStatus.NO_CONTENT).contentType(MediaType.APPLICATION_JSON).body("");
                 }, this::refusal);
     }
 
