@@ -31,6 +31,7 @@ import org.springframework.web.client.RestTemplate;
  *       (ADR-039; spike S-2).</li>
  * </ul>
  * The health and metrics endpoints are not under {@code /v1/} and stay open, on the management port.
+ * Everything under /v1/admin/ also needs the scope billing:admin (ADR-053); a token without it gets 403.
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
@@ -39,7 +40,9 @@ class ApiSecurity {
     @Bean
     SecurityFilterChain api(HttpSecurity http) throws Exception {
         http.securityMatcher("/v1/**")
-                .authorizeHttpRequests(requests -> requests.anyRequest().authenticated())
+                .authorizeHttpRequests(requests -> requests
+                        .requestMatchers("/v1/admin/**").hasAuthority("SCOPE_billing:admin")
+                        .anyRequest().authenticated())
                 .oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))
                 .sessionManagement(sessions -> sessions.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // A bearer token is sent by the client, never by a browser on its own: no cookie, so no CSRF.
