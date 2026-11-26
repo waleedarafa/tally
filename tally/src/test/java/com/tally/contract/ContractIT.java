@@ -65,10 +65,17 @@ class ContractIT extends AbstractIntegrationTest {
     static final Path SPECIFICATION = Path.of("..", "docs", "api", "openapi.yaml").toAbsolutePath().normalize();
 
     /** Every operation this class tests; it must be exactly the operations in the specification. */
-    static final Set<String> TESTED = Set.of(
+    static final Set<String> TESTED = new TreeSet<>(List.of(
             "POST /v1/accounts", "GET /v1/accounts/{id}", "GET /v1/me/account",
             "GET /v1/payments/{reference}/status", "POST /v1/subscriptions",
-            "POST /v1/accounts/{accountId}/collections/payment-requests");
+            "POST /v1/accounts/{accountId}/collections/payment-requests",
+            "GET /v1/admin/flags", "POST /v1/admin/flags", "GET /v1/admin/flags/{name}",
+            "DELETE /v1/admin/flags/{name}", "PUT /v1/admin/flags/{name}/default",
+            "PUT /v1/admin/flags/{name}/accounts/{accountId}",
+            "DELETE /v1/admin/flags/{name}/accounts/{accountId}",
+            "PUT /v1/admin/flags/{name}/countries/{country}",
+            "DELETE /v1/admin/flags/{name}/countries/{country}",
+            "POST /v1/admin/flags/{name}/release"));
 
     static final OpenApiInteractionValidator VALIDATOR = OpenApiInteractionValidator
             .createForSpecificationUrl(SPECIFICATION.toUri().toString()).build();
