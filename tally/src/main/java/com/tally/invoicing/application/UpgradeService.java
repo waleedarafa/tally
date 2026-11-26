@@ -13,6 +13,9 @@ import com.tally.invoicing.domain.CreditNotes;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.InvoiceLine;
 import com.tally.invoicing.domain.Invoices;
+import com.tally.invoicing.domain.TaxQuote;
+import com.tally.invoicing.domain.TaxRates;
+import com.tally.invoicing.domain.TaxRequest;
 import com.tally.invoicing.domain.PeriodInvoicePaidGuard;
 import com.tally.invoicing.domain.UpgradeIntent;
 import com.tally.invoicing.domain.UpgradeIntents;
@@ -28,6 +31,7 @@ import com.tally.shared.Money;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionSnapshot;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -60,10 +64,11 @@ class UpgradeService {
     private final CreditNotes credits;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final TaxRates taxRates;
 
     UpgradeService(SubscriptionApi subscriptions, Invoices invoices, AccountApi accounts, Offers offers,
             Pricing pricing, PaymentApi payments, UpgradeIntents intents, CreditNotes credits,
-            ApplicationEventPublisher events, Clock clock) {
+            ApplicationEventPublisher events, Clock clock, TaxRates taxRates) {
         this.subscriptions = subscriptions;
         this.invoices = invoices;
         this.accounts = accounts;
@@ -74,6 +79,7 @@ class UpgradeService {
         this.credits = credits;
         this.events = events;
         this.clock = clock;
+        this.taxRates = taxRates;
     }
 
     /**
@@ -113,14 +119,17 @@ class UpgradeService {
                 throw new UpgradeAlreadyInProgressException(subscription.id(), inFlight.newPlanId());
             }
             // A retry of the same upgrade charges the same reference (D1).
-            payments.requestCollection(inFlight.paymentReference(), subscription.accountId(), quote.total(), token);
+            payments.requestCollection(inFlight.paymentReference(), subscription.accountId(), inFlight.charge(), token);
             return;
         }
         int sequence = invoices.adjustmentsOf(periodInvoice.id()).size() + 1;
         String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), sequence);
-        intents.save(UpgradeIntent.place(reference, subscription.id(), subscription.accountId(), newPlanId,
-                newVersion, periodInvoice.id(), quote));
-        payments.requestCollection(reference, subscription.accountId(), quote.total(), token);
+        TaxQuote tax = taxRates.quote(new TaxRequest(account.country(), quote.total().currency(),
+                UpgradeIntent.netChargeOf(quote), effectiveDate));
+        UpgradeIntent intent = UpgradeIntent.place(reference, subscription.id(), subscription.accountId(), newPlanId,
+                newVersion, periodInvoice.id(), quote, tax);
+        intents.save(intent);
+        payments.requestCollection(reference, subscription.accountId(), intent.charge(), token);
     }
 
     /**
@@ -171,13 +180,16 @@ class UpgradeService {
 
     private void issueCreditNote(UpgradeIntent intent, Invoice periodInvoice, int sequence,
             UUID appliedToInvoiceId, Instant now) {
-        List<InvoiceLine> creditLines = intent.quote().lines().stream()
+        List<InvoiceLine> creditLines = new ArrayList<>(intent.quote().lines().stream()
                 .filter(line -> line.amount().minorUnits() < 0)
                 .map(line -> InvoiceLine.of(line.description(),
                         new Money(-line.amount().minorUnits(), line.amount().currency())))
-                .toList();
+                .toList());
         if (creditLines.isEmpty()) {
             return;
+        }
+        if (intent.creditTax().minorUnits() > 0) {
+            creditLines.add(InvoiceLine.of(intent.tax().description(), intent.creditTax()));
         }
         // The credit corrects the invoice that billed the plan being left: the period invoice on the
         // first upgrade of the period (ADR-042), the previous adjustment on a later upgrade (ADR-044).
@@ -211,8 +223,9 @@ class UpgradeService {
                     + " has no charge line to put on the adjustment invoice");
         }
         PricingReason reason = reasonOf(quote.reason());
-        Invoice adjustment = Invoice.issueAdjustment(periodInvoice, sequence, intent.newPlanId(), lines, reason,
-                now, now);
+        Invoice adjustment = Invoice.draftAdjustment(periodInvoice, sequence, intent.newPlanId(), lines, reason, now);
+        adjustment.quoteTax(intent.tax());
+        adjustment.issue(now);
         adjustment.paid(now);
         if (invoices.addIfAbsent(adjustment)) {
             events.publishEvent(new InvoiceIssued(UUID.randomUUID(), now, adjustment.accountId(), adjustment.id(),

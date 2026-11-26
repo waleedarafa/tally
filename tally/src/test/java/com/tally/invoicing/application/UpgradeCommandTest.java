@@ -14,6 +14,9 @@ import com.tally.invoicing.domain.CreditNotes;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.InvoiceLine;
 import com.tally.invoicing.domain.Invoices;
+import com.tally.invoicing.domain.TaxQuote;
+import com.tally.invoicing.domain.TaxRates;
+import com.tally.invoicing.domain.TaxUnavailableException;
 import com.tally.invoicing.domain.UpgradeIntent;
 import com.tally.invoicing.domain.UpgradeIntents;
 import com.tally.offers.ChangeRequest;
@@ -27,6 +30,7 @@ import com.tally.offers.QuoteRequest;
 import com.tally.payment.PaymentApi;
 import com.tally.payment.PaymentStatus;
 import com.tally.shared.Money;
+import com.tally.shared.Ratio;
 import com.tally.subscription.EndReason;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionSnapshot;
@@ -263,6 +267,13 @@ class UpgradeCommandTest {
                 new QuoteReason("PRO", 2, "proration", Map.of()));
     }
 
+    static PriceQuote goldenQuoteWithLines(UUID subscriptionId) {
+        return new PriceQuote(subscriptionId, "PRO", 2, new Period(PERIOD, PERIOD_START, PERIOD_END),
+                List.of(new PriceLine("Unused Basic", Money.of(-600, "AED")),
+                        new PriceLine("Premium remaining", Money.of(1000, "AED"))),
+                GOLDEN_NET, new QuoteReason("PRO", 2, "proration", Map.of()));
+    }
+
     static FakeAccounts accounts(UUID accountId) {
         return new FakeAccounts(accountId, Optional.of("tok_123"));
     }
@@ -276,11 +287,97 @@ class UpgradeCommandTest {
     static UpgradeService upgradeService(SubscriptionApi subscriptions, FakeInvoices invoices, FakeAccounts accounts,
             FakeOffers offers, FakePricing pricing, FakePayments payments, FakeUpgradeIntents intents,
             FakeCreditNotes credits, FakeEvents events) {
+        return upgradeService(subscriptions, invoices, accounts, offers, pricing, payments, intents, credits, events,
+                request -> TaxQuote.zero());
+    }
+
+    static UpgradeService upgradeService(SubscriptionApi subscriptions, FakeInvoices invoices, FakeAccounts accounts,
+            FakeOffers offers, FakePricing pricing, FakePayments payments, FakeUpgradeIntents intents,
+            FakeCreditNotes credits, FakeEvents events, TaxRates taxRates) {
         return new UpgradeService(subscriptions, invoices, accounts, offers, pricing, payments, intents, credits,
-                events, Clock.fixed(NOW, ZoneId.of("UTC")));
+                events, Clock.fixed(NOW, ZoneId.of("UTC")), taxRates);
     }
 
     // --- Tests ---
+
+    @Test
+    void anUpgradeIsChargedTheNetOfBothDocumentsWithVat() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = paidPeriodInvoice(accountId, subscriptionId);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        FakeAccounts accounts = accounts(accountId);
+        FakeOffers offers = new FakeOffers(OptionalInt.of(2));
+        PriceQuote quote = goldenQuoteWithLines(subscriptionId);
+        FakePricing pricing = new FakePricing(quote);
+        FakePayments payments = new FakePayments();
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        TaxQuote tax = new TaxQuote(Ratio.of(5, 100), "VAT (5%)");
+
+        upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))), invoices,
+                accounts, offers, pricing, payments, intents, new FakeCreditNotes(), new FakeEvents(),
+                request -> tax)
+                .upgrade(subscriptionId, "PRO");
+
+        FakePayments.Call call = payments.calls.get(0);
+        assertThat(call.reference()).isEqualTo("INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1));
+        assertThat(call.amount()).isEqualTo(Money.of(420, "AED"));
+        assertThat(call.token()).isEqualTo("tok_123");
+        UpgradeIntent intent = intents.byReference.get(call.reference());
+        assertThat(intent.tax()).isEqualTo(tax);
+        assertThat(intent.netCharge()).isEqualTo(Money.of(1000, "AED"));
+    }
+
+    @Test
+    void whenTaxIsDownTheUpgradeIsRefusedAndNothingIsWritten() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = paidPeriodInvoice(accountId, subscriptionId);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        FakePayments payments = new FakePayments();
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        PriceQuote quote = goldenQuoteWithLines(subscriptionId);
+
+        assertThatThrownBy(() -> upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))),
+                invoices, accounts(accountId), new FakeOffers(OptionalInt.of(2)), new FakePricing(quote), payments,
+                intents, new FakeCreditNotes(), new FakeEvents(),
+                request -> { throw new TaxUnavailableException("down"); })
+                .upgrade(subscriptionId, "PRO"))
+                .isInstanceOf(TaxUnavailableException.class);
+
+        assertThat(payments.calls).isEmpty();
+        assertThat(intents.byReference).isEmpty();
+    }
+
+    @Test
+    void aRetryChargesTheStoredAmountAndDoesNotAskForTaxAgain() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = paidPeriodInvoice(accountId, subscriptionId);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        PriceQuote quote = goldenQuoteWithLines(subscriptionId);
+        TaxQuote tax = new TaxQuote(Ratio.of(5, 100), "VAT (5%)");
+        String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
+                quote, tax));
+        FakePayments payments = new FakePayments();
+
+        upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))), invoices,
+                accounts(accountId), new FakeOffers(OptionalInt.of(2)), new FakePricing(quote), payments, intents,
+                new FakeCreditNotes(), new FakeEvents(), request -> { throw new AssertionError("taxRates must not be asked again"); })
+                .upgrade(subscriptionId, "PRO");
+
+        assertThat(payments.calls).singleElement().satisfies(call -> {
+            assertThat(call.reference()).isEqualTo(reference);
+            assertThat(call.amount()).isEqualTo(Money.of(420, "AED"));
+        });
+        assertThat(intents.byReference).containsOnlyKeys(reference);
+    }
+
 
     @Test
     void anActiveSubscriptionIsChargedTheChangeQuote() {
