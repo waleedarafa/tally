@@ -94,6 +94,11 @@ Billing's side of the access facts (ADR-033). It holds no access rule.
 | Zero invoice | An invoice of zero, such as a free trial's period: paid when issued, never sent to Payment (Slice 1R) |
 | VAT point | The invoice date (H8) |
 | Adjustment invoice | The invoice that charges an upgrade at once (H5) |
+| Tax quote | What `TaxRates` answers for an invoice: a rate and a description, from the jurisdiction of the account's country. A zero rate (such as the US test default, EXEMPT) adds no tax line (`ADR-050`) |
+| Tax line | The one line appended to an invoice for VAT: each pre-tax line is taxed on its own and rounded half up (`ADR-017`), and the rounded amounts are summed |
+| Draft invoice | An invoice whose tax could not be quoted yet. It has no issue date, sends nothing to Payment and publishes no `InvoiceIssued` (`ADR-050`) |
+| Tax-quote queue | The money queue (`invoicing.tax_quote_queue`) that retries a draft invoice until tax answers; an invoice is never issued without tax (`ADR-050`) |
+| Invoice states | `DRAFT`, then `TAX_QUOTED`, then `PAYMENT_PENDING` (or `PAID` when the total is zero) (`ADR-050`) |
 
 ## Collections (`collections`)
 
