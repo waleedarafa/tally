@@ -37,6 +37,9 @@ From the Step 7 canvas and `design.md` §2 and §4.
 |---|---|
 | Feature flag | A named switch in `flags` (`ADR-010`, `ADR-048`, `ADR-049`), off by default, evaluated as account assignment, then country assignment, then default; changes are logged, persisted as a snapshot (`V56__flags.sql`), and every defined flag's state is recorded on `QuoteReason` |
 | Full release | Explicit release of a flag once its default is on and no assignment is off; starts a 30-day clock after which the flag is overdue and must be removed (`ADR-010`, `ADR-048`) |
+| Flags admin API | The ten staff endpoints under `/v1/admin/flags`: the report, one flag with its change log, define, set the default, assign or clear an account or a country, release and remove. They need the scope `billing:admin`; every change takes an Idempotency-Key and runs under a database lock so two changes never overwrite each other (`ADR-053`) |
+| Flag report | What `GET /v1/admin/flags` answers: every flag with its default, assignments, release date, remove-by date and change count, and the list of overdue flags, as of the injected clock (`ADR-053`) |
+| Overdue flag | A flag released more than 30 days ago and not yet removed (`ADR-010`, `ADR-048`, `ADR-053`) |
 
 ## Subscription (`subscription`)
 
@@ -93,12 +96,15 @@ Billing's side of the access facts (ADR-033). It holds no access rule.
 | Reference | The opaque label Payment collects against |
 | Zero invoice | An invoice of zero, such as a free trial's period: paid when issued, never sent to Payment (Slice 1R) |
 | VAT point | The invoice date (H8) |
-| Adjustment invoice | The invoice that charges an upgrade at once (H5) |
+| Adjustment invoice | The invoice that charges an upgrade at once (H5). It carries VAT like any invoice (`ADR-051`) |
 | Tax quote | What `TaxRates` answers for an invoice: a rate and a description, from the jurisdiction of the account's country. A zero rate (such as the US test default, EXEMPT) adds no tax line (`ADR-050`) |
 | Tax line | The one line appended to an invoice for VAT: each pre-tax line is taxed on its own and rounded half up (`ADR-017`), and the rounded amounts are summed |
 | Draft invoice | An invoice whose tax could not be quoted yet. It has no issue date, sends nothing to Payment and publishes no `InvoiceIssued` (`ADR-050`) |
 | Tax-quote queue | The money queue (`invoicing.tax_quote_queue`) that retries a draft invoice until tax answers; an invoice is never issued without tax (`ADR-050`) |
 | Invoice states | `DRAFT`, then `TAX_QUOTED`, then `PAYMENT_PENDING` (or `PAID` when the total is zero) (`ADR-050`) |
+| Upgrade tax | VAT on an upgrade: quoted when the upgrade is requested and stored on the upgrade intent, so a retry charges the same amount. The charge is the new plan's remaining days plus its VAT, less the old plan's unused days plus their VAT, each rounded half up per line. If the tax service is down the upgrade is refused and nothing is charged (`ADR-051`) |
+| Oldest retrying age | The gauge `tally.queue.oldest_retrying_age_seconds{queue,money}`: the age since creation of the oldest queue item that has been attempted at least once and is not finished. A retry moves the item's due and finished times but never its creation time, so the gauge keeps growing through an outage (`ADR-052`) |
+| TaxQuoteStuck | The page-level alert that fires when the tax-quote queue's oldest retrying age exceeds one hour; the runbook is `docs/runbooks/tax-quote-stuck.md` (`ADR-052`) |
 
 ## Collections (`collections`)
 
@@ -150,6 +156,7 @@ Billing's side of the access facts (ADR-033). It holds no access rule.
 | Identity provider | The service that signs in a user and issues tokens. No product is chosen; Tally reads its issuer and the location of its key set from settings (ADR-032) |
 | Token (of a caller) | A signed JWT from the identity provider on every request under `/v1/`. Tally checks its signature, issuer, audience and expiry itself, the expiry on the injected clock (rule 16). Not the payment token, the provider's stand-in for a card |
 | Caller | Who sends a request: the token's user and, once found, the user's account (`platform.Caller`). Found once for each request; every `/v1/` handler takes it (F16) |
+| Staff scope | `billing:admin`: the scope a token needs for any `/v1/admin/` path. A household's token, which has no scope, gets 403 (`ADR-053`) |
 | Service token | A token for a service, not a household: the streaming platform's token for Access has audience `tally-access` and scope `access:read` (Slice 4 brief, decision 1). A household's token gets 403 at Access |
 | Key set | The identity provider's public keys (JWKS), fetched from its key set location and used to check signatures. Billing keeps it in memory (ADR-039, option B); Access keeps the last one in its database, `access.identity_key_set` (option A) |
 | Hold-off | After any fetch of the key set, Access uses the set it keeps for this time (30 s) before it fetches again, so tokens with unknown key IDs cannot hold every token behind a provider that hangs. A key the provider adds is accepted at most one hold-off after it is first seen (review of #92) |
