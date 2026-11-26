@@ -73,12 +73,12 @@ class F16EveryApiHandlerTakesACallerTest {
                 .check(InsideLayout.CLASSES);
     }
 
-    /** The rule sees the handlers: it would pass on nothing otherwise. */
+    /** The rule sees the handlers: it would pass on nothing otherwise. Six handlers of the household API plus the ten of the flags admin API (ADR-053). */
     @Test
     void theRuleSeesEveryApiHandler() {
         long handlers = InsideLayout.CLASSES.stream().flatMap(owner -> owner.getMethods().stream())
                 .filter(API_HANDLERS::test).count();
 
-        assertThat(handlers).as("the /v1/ handlers of docs/api/openapi.yaml").isEqualTo(6);
+        assertThat(handlers).as("the /v1/ handlers of docs/api/openapi.yaml").isEqualTo(16);
     }
 }
