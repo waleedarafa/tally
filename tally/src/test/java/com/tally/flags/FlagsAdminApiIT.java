@@ -34,7 +34,8 @@ import org.springframework.web.context.WebApplicationContext;
 /**
  * Contract tests for the flags admin HTTP API (ADR-053): the report, the define/default/account/country
  * assignments, release and remove. Every request answers through the security filter chain, and every change
- * goes through the idempotency claim with a fresh key per change. One fresh household token per test.
+ * goes through the idempotency claim with a fresh key per change. Changes use one staff token with the scope
+ * billing:admin; a household token is used only to show that it is refused.
  */
 class FlagsAdminApiIT extends AbstractIntegrationTest {
 
