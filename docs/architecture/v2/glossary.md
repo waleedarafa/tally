@@ -39,6 +39,7 @@ From the Step 7 canvas and `design.md` §2 and §4.
 | Full release | Explicit release of a flag once its default is on and no assignment is off; starts a 30-day clock after which the flag is overdue and must be removed (`ADR-010`, `ADR-048`) |
 | Flags admin API | The ten staff endpoints under `/v1/admin/flags`: the report, one flag with its change log, define, set the default, assign or clear an account or a country, release and remove. They need the scope `billing:admin`; every change takes an Idempotency-Key and runs under a database lock so two changes never overwrite each other (`ADR-053`) |
 | Flag report | What `GET /v1/admin/flags` answers: every flag with its default, assignments, release date, remove-by date and change count, and the list of overdue flags, as of the injected clock (`ADR-053`) |
+| Flags admin screen | The static page at `/admin/flags/index.html`: the report with overdue flags marked, one flag's detail and change log, and buttons for the ten admin operations. It calls the flags admin API with a staff token the operator pastes, kept in memory only (`ADR-055`) |
 | Overdue flag | A flag released more than 30 days ago and not yet removed (`ADR-010`, `ADR-048`, `ADR-053`) |
 
 ## Subscription (`subscription`)
