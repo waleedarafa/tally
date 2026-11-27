@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tally flags admin</title>
+<style>
+  :root { font-family: system-ui, sans-serif; color: #1c1e21; background: #fafbfc; }
+  body { margin: 2rem auto; max-width: 1100px; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; margin-bottom: 1rem; }
+  h2 { font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; color: #5a6068; margin: 1.2rem 0 .4rem; }
+  h3 { font-size: .85rem; color: #39404a; margin: .8rem 0 .2rem; }
+  label { font-size: .85rem; color: #39404a; }
+  input, button { font: inherit; }
+  input { padding: .3rem .45rem; border: 1px solid #c8ccd0; border-radius: 6px; background: #fff; }
+  button { padding: .35rem .6rem; border: 1px solid #b6bcc3; border-radius: 6px; background: #fff; cursor: pointer; }
+  button:hover { background: #eef1f4; }
+  button.primary { background: #1c66d1; border-color: #1c66d1; color: #fff; }
+  button.primary:hover { background: #1558b5; }
+  button.details { font-size: .8rem; padding: .2rem .45rem; }
+  #token { width: min(26rem, 60vw); }
+  #load { margin-left: .4rem; }
+  #status { margin: .6rem 0; padding: .45rem .6rem; border-radius: 6px; min-height: 1.1rem; white-space: pre-wrap; word-break: break-word; }
+  #status.error { background: #fdebde; border: 1px solid #f0b79a; color: #7a2e0c; }
+  #status.ok { background: #e7f5ec; border: 1px solid #a8dfc0; color: #1c5934; }
+  #asOf { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #overdue { margin: .6rem 0; padding: .5rem .7rem; border-radius: 6px; }
+  #overdue.empty { background: #eefaf0; border: 1px solid #b6e2c0; color: #1c5934; }
+  #overdue.has { background: #fdebde; border: 1px solid #f0b79a; color: #7a2e0c; }
+  #overdue ul { margin: .3rem 0 0; padding-left: 1.3rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .85rem; margin-top: .5rem; }
+  th, td { border-bottom: 1px solid #e2e5e9; text-align: left; padding: .35rem .4rem; vertical-align: top; word-break: break-word; }
+  th { color: #5a6068; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+  tr.overdue td { background: #fdebde; }
+  tr.overdue td:first-child { box-shadow: inset 4px 0 0 #d9480f; }
+  section#detail { border: 1px solid #e2e5e9; border-radius: 8px; padding: .8rem; margin: .6rem 0; }
+  section#detail:empty { display: none; }
+  section#detail h2 { margin: 0 0 .4rem; }
+  dl.fields { display: grid; grid-template-columns: max-content 1fr; gap: .15rem .8rem; margin: .2rem 0 0; }
+  dl.fields dt { color: #5a6068; text-transform: uppercase; letter-spacing: .04em; font-size: .78rem; }
+  dl.fields dd { margin: 0; word-break: break-word; }
+  ul.plain, ol.plain { margin: .2rem 0 0; padding-left: 1.3rem; }
+  li.empty { list-style: none; color: #5a6068; margin-left: -1.3rem; }
+  form { border: 1px solid #e2e5e9; border-radius: 8px; padding: .8rem; margin-top: .6rem; }
+  form h2 { margin-top: 0; }
+  form > div { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; margin: .45rem 0; }
+  form label { display: inline-block; }
+  input#newName, input#flagName, input#accountId { min-width: 12rem; }
+  input#country { min-width: 4rem; }
+</style>
+</head>
+<body>
+<h1>Tally flags admin</h1>
+
+<label for="token">Staff token <span style="color:#5a6068">(kept in memory only for the life of the page)</span></label>
+<input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste a staff token">
+<button id="load" type="button">Load report</button>
+
+<div id="status" role="status" aria-live="polite"></div>
+
+<h2>Report</h2>
+<p>asOf: <span id="asOf">—</span></p>
+<div id="overdue" aria-label="Overdue flags"></div>
+<table>
+  <thead>
+    <tr>
+      <th>name</th><th>default</th><th>accounts</th><th>countries</th>
+      <th>released at</th><th>remove by</th><th>overdue</th><th>changes</th><th>last change</th><th></th>
+    </tr>
+  </thead>
+  <tbody id="report"></tbody>
+</table>
+
+<section id="detail" aria-label="Flag detail"></section>
+
+<form id="flag-form" novalidate>
+  <h2>Manage flags</h2>
+  <div>
+    <label for="newName">New flag</label>
+    <input id="newName" name="newName" type="text" autocomplete="off" spellcheck="false">
+    <button id="define" type="submit" class="primary">Define</button>
+  </div>
+  <div>
+    <label for="flagName">Flag</label>
+    <input id="flagName" name="flagName" type="text" autocomplete="off" spellcheck="false" placeholder="flag-name">
+  </div>
+  <div>
+    <label><input id="defaultOn" name="defaultOn" type="checkbox"> default on</label>
+    <button id="setDefault" type="button">Set default</button>
+  </div>
+  <div>
+    <label for="accountId">Account ID</label>
+    <input id="accountId" name="accountId" type="text" autocomplete="off" spellcheck="false">
+    <label><input id="accountOn" name="accountOn" type="checkbox"> on</label>
+    <button id="assignAccount" type="button">Assign account</button>
+    <button id="clearAccount" type="button">Clear account</button>
+  </div>
+  <div>
+    <label for="country">Country</label>
+    <input id="country" name="country" type="text" maxlength="2" placeholder="US" autocomplete="off" spellcheck="false">
+    <label><input id="countryOn" name="countryOn" type="checkbox"> on</label>
+    <button id="assignCountry" type="button">Assign country</button>
+    <button id="clearCountry" type="button">Clear country</button>
+  </div>
+  <div>
+    <button id="release" type="button">Release</button>
+    <button id="remove" type="button">Remove</button>
+  </div>
+</form>
+
+<script src="flags.js" defer></script>
+</body>
+</html>
