@@ -122,7 +122,7 @@ class InvoicingListeners {
                         invoice.accountId(), invoice.id(), invoice.paymentReference(), invoice.amount(),
                         invoice.version()));
             }
-        }, () -> unknownReference(failed.reference()));
+        }, () -> { if (!upgrades.closeAfterDecline(failed.reference())) { unknownReference(failed.reference()); } });
     }
 
     /** Payment is shared by design: a reference may not be an invoice of ours (FR-014). */

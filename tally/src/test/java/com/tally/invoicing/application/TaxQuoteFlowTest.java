@@ -13,6 +13,7 @@ import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.InvoiceLine;
 import com.tally.invoicing.domain.Invoices;
 import com.tally.invoicing.domain.TaxQuote;
+import com.tally.invoicing.domain.TaxQuoteRefusedException;
 import com.tally.invoicing.domain.TaxRates;
 import com.tally.invoicing.domain.TaxRequest;
 import com.tally.invoicing.domain.TaxUnavailableException;
@@ -32,6 +33,7 @@ import com.tally.platform.QueueHandler;
 import com.tally.platform.QueueItem;
 import com.tally.shared.Money;
 import com.tally.shared.Ratio;
+import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -70,11 +72,26 @@ class TaxQuoteFlowTest {
         int addIfAbsentCalls = 0;
         int updateCalls = 0;
 
-        void add(Invoice invoice) { byId.put(invoice.id(), invoice); }
+        /** Mimics a row loaded from the database: persisted, so the version the caller writes is the database's. */
+        private static void markPersisted(Invoice invoice) {
+            try {
+                Field f = Invoice.class.getDeclaredField("persisted");
+                f.setAccessible(true);
+                f.setBoolean(invoice, true);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        void add(Invoice invoice) {
+            markPersisted(invoice);
+            byId.put(invoice.id(), invoice);
+        }
 
         @Override public boolean addIfAbsent(Invoice invoice) {
             addIfAbsentCalls++;
             if (byId.containsKey(invoice.id())) { return false; }
+            markPersisted(invoice);
             byId.put(invoice.id(), invoice);
             return true;
         }
@@ -83,7 +100,18 @@ class TaxQuoteFlowTest {
 
         @Override public Optional<Invoice> forPaymentReference(String paymentReference) { return Optional.empty(); }
 
-        @Override public void update(Invoice invoice) { updateCalls++; byId.put(invoice.id(), invoice); }
+        /** Bumps the version by one, as saveAndFlush does (JPA's @Version). */
+        @Override public void update(Invoice invoice) {
+            updateCalls++;
+            try {
+                Field f = Invoice.class.getDeclaredField("version");
+                f.setAccessible(true);
+                f.setLong(invoice, invoice.version() + 1);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+            byId.put(invoice.id(), invoice);
+        }
 
         @Override public List<Invoice> ofAccount(UUID accountId) { return List.of(); }
 
@@ -118,7 +146,7 @@ class TaxQuoteFlowTest {
 
     static final class FakeTaxRates implements TaxRates {
         private final TaxQuote quote;
-        private final TaxUnavailableException exception;
+        private final RuntimeException exception;
 
         int calls = 0;
         boolean transactionActiveInsideQuote = false;
@@ -126,6 +154,8 @@ class TaxQuoteFlowTest {
         FakeTaxRates(TaxQuote quote) { this.quote = quote; this.exception = null; }
 
         FakeTaxRates(TaxUnavailableException exception) { this.quote = null; this.exception = exception; }
+
+        FakeTaxRates(TaxQuoteRefusedException exception) { this.quote = null; this.exception = exception; }
 
         @Override public TaxQuote quote(TaxRequest request) {
             calls++;
@@ -263,6 +293,38 @@ class TaxQuoteFlowTest {
         FakeAccounts accounts = new FakeAccounts(account);
         FakePricing pricing = new FakePricing(quoteOneLine(subscriptionId, 1417, "AED"));
         FakeTaxRates taxRates = new FakeTaxRates(new TaxUnavailableException("service down"));
+        FakeEvents events = new FakeEvents();
+        FakeQueues queues = new FakeQueues();
+        TransactionTemplate transactions = transactions();
+        TaxQuoteWorker worker = worker(queues, invoices, accounts, taxRates, events, transactions);
+        InvoiceIssuer issuer = issuer(queues, invoices, accounts, pricing, taxRates, events, transactions, worker);
+
+        Optional<Invoice> result = issuer.issue(accountId, subscriptionId, "BASIC", 1, 1, PERIOD_START, PERIOD_END, NOW);
+
+        assertThat(result).isPresent();
+        Invoice invoice = result.get();
+        assertThat(invoice.status()).isEqualTo(InvoiceStatus.DRAFT);
+        assertThat(invoice.issuedAt()).isNull();
+        assertThat(invoice.version()).isZero();
+        assertThat(invoice.lines()).hasSize(1);
+        assertThat(invoices.find(invoice.id())).isPresent();
+        assertThat(events.published).noneMatch(e -> e instanceof InvoiceIssued);
+        assertThat(events.published).noneMatch(e -> e instanceof InvoicePaid);
+        assertThat(queues.queue.keys).containsExactly(invoice.id().toString());
+        assertThat(queues.queue.dueAts).containsExactly(NOW.plus(RETRY_DELAY));
+        assertThat(taxRates.calls).isEqualTo(1);
+        assertThat(taxRates.transactionActiveInsideQuote).isFalse();
+    }
+
+    @Test
+    void aRefusedQuoteStoresADraftAndQueuesIt() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        AccountView account = account(accountId, "AED", "AE");
+        FakeInvoices invoices = new FakeInvoices();
+        FakeAccounts accounts = new FakeAccounts(account);
+        FakePricing pricing = new FakePricing(quoteOneLine(subscriptionId, 1417, "AED"));
+        FakeTaxRates taxRates = new FakeTaxRates(new TaxQuoteRefusedException("service refused the request"));
         FakeEvents events = new FakeEvents();
         FakeQueues queues = new FakeQueues();
         TransactionTemplate transactions = transactions();

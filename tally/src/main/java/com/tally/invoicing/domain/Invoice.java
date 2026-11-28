@@ -187,21 +187,19 @@ public class Invoice {
 
     /**
      * Issues the invoice (ADR-050): TAX_QUOTED → PAYMENT_PENDING, or PAID when the gross total is zero.
-     * Only then is the invoice set to issuedAt, and it is only then that the version is written: an
-     * invoice loaded from the database is already past this point and keeps its version.
+     * A stored draft takes its version from the database, so a zero total is issued in two writes: the
+     * issue (PAYMENT_PENDING), then paid(now); the two events carry two versions (ADR-016).
      */
     public void issue(Instant now) {
         if (status != InvoiceStatus.TAX_QUOTED) {
             throw new IllegalStateException("Only a TAX_QUOTED invoice can be issued: " + status);
         }
         this.issuedAt = Objects.requireNonNull(now, "now");
-        if (amountMinor == 0) {
+        if (amountMinor == 0 && !persisted) {
             // Issued and paid in one step: two changes, so InvoiceIssued and InvoicePaid stay in order.
             this.status = InvoiceStatus.PAID;
             this.paidAt = now;
-            if (!persisted) {
-                this.version = ISSUED_VERSION + 1;
-            }
+            this.version = ISSUED_VERSION + 1;
         } else {
             this.status = InvoiceStatus.PAYMENT_PENDING;
             if (!persisted) {

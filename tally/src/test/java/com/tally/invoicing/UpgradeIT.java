@@ -10,6 +10,12 @@ import com.tally.invoicing.domain.CreditNotes;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.InvoiceKind;
 import com.tally.invoicing.domain.Invoices;
+import com.tally.invoicing.domain.UpgradeIntent;
+import com.tally.invoicing.domain.UpgradeIntents;
+import com.tally.offers.Period;
+import com.tally.offers.PriceLine;
+import com.tally.offers.PriceQuote;
+import com.tally.offers.QuoteReason;
 import com.tally.payment.PaymentApi;
 import com.tally.platform.TestClock;
 import com.tally.shared.Money;
@@ -25,6 +31,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +75,9 @@ class UpgradeIT extends AbstractProviderIntegrationTest {
 
     @Autowired
     Invoices invoices;
+
+    @Autowired
+    UpgradeIntents intents;
 
     @Autowired
     CreditNotes credits;
@@ -162,6 +172,29 @@ class UpgradeIT extends AbstractProviderIntegrationTest {
         assertThat(FakeProvider.chargeCount(adjustment.paymentReference())).isEqualTo(1);
         assertThat(payments.collected(List.of(adjustment.paymentReference())))
                 .containsEntry(adjustment.paymentReference(), NET);
+    }
+
+    @Test
+    void aSecondOpenIntentForTheSamePeriodInvoiceIsNotPlaced() {
+        UUID account = account(FakeProvider.token());
+        SubscriptionView subscription = subscriptions.subscribe(account, GOLDEN_BASIC);
+        InvoiceView period = awaitPeriodInvoice(account, InvoiceStatus.PAID);
+
+        PriceQuote quote = new PriceQuote(subscription.id(), GOLDEN_PREMIUM, 1,
+                new Period(1, period.periodStart(), period.periodEnd()),
+                List.of(new PriceLine("Change", NET)), NET,
+                new QuoteReason(GOLDEN_PREMIUM, 1, "proration", Map.of()));
+
+        assertThat(intents.place(UpgradeIntent.place("INV-A", subscription.id(), account, GOLDEN_PREMIUM, 1,
+                period.id(), quote))).isTrue();
+        assertThat(intents.place(UpgradeIntent.place("INV-B", subscription.id(), account, GOLDEN_PREMIUM, 1,
+                period.id(), quote))).isFalse();
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM invoicing.upgrade_intent WHERE period_invoice_id = ?",
+                Long.class, period.id())).isEqualTo(1);
+
+        assertThat(intents.place(UpgradeIntent.place("INV-A", subscription.id(), account, GOLDEN_PREMIUM, 1,
+                period.id(), quote))).isFalse();
     }
 
     @Test
@@ -263,5 +296,37 @@ class UpgradeIT extends AbstractProviderIntegrationTest {
         assertThat(jdbc.queryForObject(
                 "SELECT completed_at IS NOT NULL FROM invoicing.upgrade_intent WHERE payment_reference = ?",
                 Boolean.class, reference)).isFalse();
+
+        await().atMost(Duration.ofSeconds(15)).until(() -> jdbc.queryForObject(
+                "SELECT closed_reason FROM invoicing.upgrade_intent WHERE payment_reference = ?",
+                String.class, reference).equals("DECLINED"));
+    }
+
+    @Test
+    void aDeclinedUpgradeCanBeRetriedWithAFreshReference() {
+        UUID account = account(FakeProvider.token());
+        SubscriptionView subscription = subscriptions.subscribe(account, GOLDEN_BASIC);
+        InvoiceView period = awaitPeriodInvoice(account, InvoiceStatus.PAID);
+
+        clock.set(DAY_16);
+        FakeProvider.mode("DECLINE_HARD(100)");
+        invoicing.upgrade(subscription.id(), GOLDEN_PREMIUM);
+
+        String baseReference = "INV-" + Invoice.idOfAdjustment(period.id(), 1);
+        await().atMost(Duration.ofSeconds(15)).until(() -> jdbc.queryForObject(
+                "SELECT closed_reason FROM invoicing.upgrade_intent WHERE payment_reference = ?",
+                String.class, baseReference).equals("DECLINED"));
+
+        FakeProvider.mode("NORMAL");
+        invoicing.upgrade(subscription.id(), GOLDEN_PREMIUM);
+
+        String retryReference = baseReference + "-retry-2";
+        await().atMost(Duration.ofSeconds(15)).until(() ->
+                subscriptions.get(subscription.id()).map(s -> s.planId().equals(GOLDEN_PREMIUM)).orElse(false));
+        await().atMost(Duration.ofSeconds(15)).until(() ->
+                invoices.find(Invoice.idOfAdjustment(period.id(), 1)).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> jdbc.queryForObject(
+                "SELECT completed_at IS NOT NULL FROM invoicing.upgrade_intent WHERE payment_reference = ?",
+                Boolean.class, retryReference));
     }
 }

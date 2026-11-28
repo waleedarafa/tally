@@ -2,6 +2,7 @@ package com.tally.invoicing.adapter.tax;
 
 import com.tally.invoicing.application.TaxProperties;
 import com.tally.invoicing.domain.TaxQuote;
+import com.tally.invoicing.domain.TaxQuoteRefusedException;
 import com.tally.invoicing.domain.TaxRates;
 import com.tally.invoicing.domain.TaxRequest;
 import com.tally.invoicing.domain.TaxUnavailableException;
@@ -17,11 +18,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 /**
  * Anticorruption layer to the external tax service (ADR-050): translates the service's wire model
  * into {@link TaxQuote} or throws {@link TaxUnavailableException}. The domain never sees the wire.
- * With no base URL configured, quoting is settings-backed: it reads the jurisdiction's fallback rate
+ * With no base URL configured, quoting is settings-backed: it reads the jurisdiction's configured rate
  * from {@link TaxProperties}.
  */
 @Component
@@ -66,26 +68,41 @@ class AclTaxRates implements TaxRates {
                         request.netAmount().minorUnits(), request.taxPointDate())
                         .retrieve()
                         .body(ExternalTaxResponse.class);
-            } catch (HttpStatusCodeException | ResourceAccessException e) {
+            } catch (HttpStatusCodeException e) {
+                if (e.getStatusCode().is5xxServerError() || e.getStatusCode().value() == 429) {
+                    throw new TaxUnavailableException("External tax service unavailable for " + request.country(), e);
+                }
+                throw new TaxQuoteRefusedException("Tax service refused the request for " + request.country() + ": "
+                        + e.getStatusCode().value(), e);
+            } catch (ResourceAccessException e) {
                 throw new TaxUnavailableException("External tax service unavailable for " + request.country(), e);
+            } catch (RestClientException e) {
+                throw new TaxQuoteRefusedException("Tax service response could not be read for " + request.country(), e);
             }
             if (response == null) {
                 throw new TaxUnavailableException("Empty tax response for " + request.country());
             }
-            return translate(response);
+            return translate(response, request.country().toUpperCase(Locale.ROOT));
         }
         TaxProperties.Rate configured = properties.rates().get(request.country().toUpperCase(Locale.ROOT));
         if (configured == null) {
-            throw new TaxUnavailableException("No tax rate configured for jurisdiction " + request.country());
+            throw new TaxQuoteRefusedException("No tax rate configured for jurisdiction " + request.country());
         }
         ExternalTaxResponse wire = new ExternalTaxResponse(request.country().toUpperCase(Locale.ROOT),
                 configured.ratePercent(), configured.taxCode(), configured.status());
-        return translate(wire);
+        return translate(wire, request.country().toUpperCase(Locale.ROOT));
     }
 
-    TaxQuote translate(ExternalTaxResponse wire) {
-        if (wire == null || wire.status() == null) {
-            throw new TaxUnavailableException("Missing tax status");
+    TaxQuote translate(ExternalTaxResponse wire, String requestedJurisdiction) {
+        if (wire == null) {
+            throw new TaxQuoteRefusedException("Missing tax response");
+        }
+        if (wire.jurisdiction() == null || !wire.jurisdiction().equalsIgnoreCase(requestedJurisdiction)) {
+            throw new TaxQuoteRefusedException("Tax answer for " + wire.jurisdiction() + " does not match the requested "
+                    + requestedJurisdiction);
+        }
+        if (wire.status() == null) {
+            throw new TaxQuoteRefusedException("Missing tax status");
         }
         switch (wire.status().toUpperCase(Locale.ROOT)) {
             case "UNAVAILABLE" -> throw new TaxUnavailableException("Tax rate unavailable for " + wire.jurisdiction());
@@ -94,7 +111,7 @@ class AclTaxRates implements TaxRates {
             }
             case "ACTIVE" -> {
                 if (wire.ratePercent() == null || wire.ratePercent().compareTo(BigDecimal.ZERO) < 0) {
-                    throw new IllegalStateException("Tax rate cannot be negative: " + wire.ratePercent());
+                    throw new TaxQuoteRefusedException("Tax rate cannot be negative or missing: " + wire.ratePercent());
                 }
                 if (wire.ratePercent().compareTo(BigDecimal.ZERO) == 0) {
                     return TaxQuote.zero();
@@ -105,7 +122,7 @@ class AclTaxRates implements TaxRates {
                 long denominator = 100L * BigInteger.TEN.pow(decimalPlaces).longValueExact();
                 return new TaxQuote(Ratio.of(numerator, denominator), "VAT (" + scaled.toPlainString() + "%)");
             }
-            default -> throw new TaxUnavailableException("Unknown tax service status: " + wire.status());
+            default -> throw new TaxQuoteRefusedException("Unknown tax service status: " + wire.status());
         }
     }
 }

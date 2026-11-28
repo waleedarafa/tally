@@ -124,7 +124,7 @@ class UpgradeCompletionTest {
                 UpgradeCommandTest.snapshot(subscriptionId, accountId, true));
         PriceQuote quote = goldenQuote(subscriptionId);
         String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
-        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
+        intents.place(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
 
         UpgradeCommandTest.upgradeService(subscriptions, invoices, new FakeAccounts(accountId, Optional.of("tok_123")),
                 new FakeOffers(OptionalInt.of(2)), new FakePricing(quote), payments, intents, credits, events)
@@ -187,7 +187,7 @@ class UpgradeCompletionTest {
         PriceQuote quote = goldenQuote(subscriptionId);
         TaxQuote tax = new TaxQuote(Ratio.of(5, 100), "VAT (5%)");
         String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
-        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
+        intents.place(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
                 quote, tax));
 
         UpgradeCommandTest.upgradeService(subscriptions, invoices, new FakeAccounts(accountId, Optional.of("tok_123")),
@@ -236,7 +236,7 @@ class UpgradeCompletionTest {
                 UpgradeCommandTest.snapshot(subscriptionId, accountId, true));
         PriceQuote quote = goldenQuote(subscriptionId);
         String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
-        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
+        intents.place(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
         var service = UpgradeCommandTest.upgradeService(subscriptions, invoices,
                 new FakeAccounts(accountId, Optional.of("tok_123")), new FakeOffers(OptionalInt.of(2)),
                 new FakePricing(quote), new FakePayments(), intents, credits, events);
@@ -321,7 +321,7 @@ class UpgradeCompletionTest {
                 UpgradeCommandTest.snapshot(subscriptionId, accountId, true));
         PriceQuote quote = goldenQuote(subscriptionId);
         String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
-        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
+        intents.place(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
         var upgrades = UpgradeCommandTest.upgradeService(subscriptions, invoices,
                 new FakeAccounts(accountId, Optional.of("tok_123")), new FakeOffers(OptionalInt.of(2)),
                 new FakePricing(quote), payments, intents, credits, events);
@@ -335,5 +335,39 @@ class UpgradeCompletionTest {
         assertThat(credits.ofInvoice(periodInvoice.id())).hasSize(1);
         assertThat(invoices.find(Invoice.idOfAdjustment(periodInvoice.id(), 1)).orElseThrow().status())
                 .isEqualTo(InvoiceStatus.PAID);
+    }
+
+    @Test
+    void aChargeWhosePlanDoesNotChangeIssuesNoDocumentsAndIsDueForRefund() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = paidPeriodInvoice(accountId, subscriptionId);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        FakeCreditNotes credits = new FakeCreditNotes();
+        FakeEvents events = new FakeEvents();
+        FakePayments payments = new FakePayments();
+        // changePlan returns false: the subscription is already on PRO at version 2.
+        RecordingSubscriptions subscriptions = new RecordingSubscriptions(
+                new SubscriptionSnapshot(subscriptionId, accountId, "PRO", 2, true, PERIOD, PERIOD_START, PERIOD_END));
+        PriceQuote quote = goldenQuote(subscriptionId);
+        String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
+        intents.place(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
+
+        boolean found = UpgradeCommandTest.upgradeService(subscriptions, invoices,
+                new FakeAccounts(accountId, Optional.of("tok_123")), new FakeOffers(OptionalInt.of(2)),
+                new FakePricing(quote), payments, intents, credits, events)
+                .completeAfterCharge(reference);
+
+        assertThat(found).isTrue();
+        assertThat(subscriptions.changePlanCalls).containsExactly("PRO:2");
+        assertThat(invoices.addIfAbsentCalls).isZero();
+        assertThat(credits.addCalls).isZero();
+        assertThat(events.published).isEmpty();
+        assertThat(intents.byReference.get(reference).closed()).isTrue();
+        assertThat(intents.byReference.get(reference).closure()).isEqualTo(UpgradeIntent.Closure.REFUND_DUE);
+        assertThat(intents.byReference.get(reference).closedAt()).isEqualTo(NOW);
+        assertThat(intents.byReference.get(reference).completed()).isFalse();
     }
 }

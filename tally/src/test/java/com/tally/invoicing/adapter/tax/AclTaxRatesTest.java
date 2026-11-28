@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import com.tally.invoicing.application.TaxProperties;
 import com.tally.invoicing.domain.TaxQuote;
+import com.tally.invoicing.domain.TaxQuoteRefusedException;
 import com.tally.invoicing.domain.TaxRequest;
 import com.tally.invoicing.domain.TaxUnavailableException;
 import com.tally.shared.Money;
@@ -105,7 +106,7 @@ class AclTaxRatesTest {
         TaxProperties props = settingsBacked(Map.of("AE", new TaxProperties.Rate(new BigDecimal("5"), "VAT-AE", "ACTIVE")));
 
         assertThatThrownBy(() -> new AclTaxRates(props).quote(request("DE")))
-                .isInstanceOf(TaxUnavailableException.class)
+                .isInstanceOf(TaxQuoteRefusedException.class)
                 .hasMessageContaining("No tax rate configured for jurisdiction DE");
     }
 
@@ -151,5 +152,87 @@ class AclTaxRatesTest {
                 .isInstanceOf(TaxUnavailableException.class)
                 .hasMessageContaining("External tax service unavailable for SA");
         server.verify();
+    }
+
+    @Test
+    void aClientErrorIsRefused() {
+        for (HttpStatus status : new HttpStatus[] {HttpStatus.BAD_REQUEST, HttpStatus.NOT_FOUND}) {
+            RestClient.Builder builder = RestClient.builder();
+            MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+            AclTaxRates adapter = new AclTaxRates(settingsBacked(Map.of()), builder.build());
+            server.expect(requestTo("/tax/rates?jurisdiction=AE&currency=SAR&amount=1000&date=2026-01-15"))
+                    .andRespond(withStatus(status));
+
+            assertThatThrownBy(() -> adapter.quote(request("AE")))
+                    .isInstanceOf(TaxQuoteRefusedException.class)
+                    .hasMessageContaining("Tax service refused the request for AE: " + status.value());
+            server.verify();
+        }
+    }
+
+    @Test
+    void aServerErrorOrTooManyRequestsIsUnavailable() {
+        for (HttpStatus status : new HttpStatus[] {HttpStatus.SERVICE_UNAVAILABLE, HttpStatus.TOO_MANY_REQUESTS}) {
+            RestClient.Builder builder = RestClient.builder();
+            MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+            AclTaxRates adapter = new AclTaxRates(settingsBacked(Map.of()), builder.build());
+            server.expect(requestTo("/tax/rates?jurisdiction=SA&currency=SAR&amount=1000&date=2026-01-15"))
+                    .andRespond(withStatus(status));
+
+            assertThatThrownBy(() -> adapter.quote(request("SA")))
+                    .isInstanceOf(TaxUnavailableException.class)
+                    .hasMessageContaining("External tax service unavailable for SA");
+            server.verify();
+        }
+    }
+
+    @Test
+    void anUnreadableBodyIsRefused() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AclTaxRates adapter = new AclTaxRates(settingsBacked(Map.of()), builder.build());
+        server.expect(requestTo("/tax/rates?jurisdiction=AE&currency=SAR&amount=1000&date=2026-01-15"))
+                .andRespond(withSuccess("not json", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> adapter.quote(request("AE")))
+                .isInstanceOf(TaxQuoteRefusedException.class);
+        server.verify();
+    }
+
+    @Test
+    void anActiveRateWithNoPercentIsRefused() {
+        AclTaxRates adapter = new AclTaxRates(settingsBacked(Map.of()));
+
+        assertThatThrownBy(() -> adapter.translate(new AclTaxRates.ExternalTaxResponse("AE", null, "VAT", "ACTIVE"), "AE"))
+                .isInstanceOf(TaxQuoteRefusedException.class);
+    }
+
+    @Test
+    void anUnknownStatusIsRefused() {
+        AclTaxRates adapter = new AclTaxRates(settingsBacked(Map.of()));
+
+        assertThatThrownBy(() -> adapter.translate(
+                new AclTaxRates.ExternalTaxResponse("AE", new BigDecimal("5"), "VAT", "PAUSED"), "AE"))
+                .isInstanceOf(TaxQuoteRefusedException.class)
+                .hasMessageContaining("Unknown tax service status: PAUSED");
+    }
+
+    @Test
+    void anAnswerForAnotherJurisdictionIsRefused() {
+        AclTaxRates adapter = new AclTaxRates(settingsBacked(Map.of()));
+
+        assertThatThrownBy(() -> adapter.translate(
+                new AclTaxRates.ExternalTaxResponse("SA", new BigDecimal("15"), "VAT", "ACTIVE"), "AE"))
+                .isInstanceOf(TaxQuoteRefusedException.class)
+                .hasMessageContaining("Tax answer for SA does not match the requested AE");
+    }
+
+    @Test
+    void aJurisdictionWithNoConfiguredRateIsRefused() {
+        TaxProperties props = settingsBacked(Map.of("AE", new TaxProperties.Rate(new BigDecimal("5"), "VAT-AE", "ACTIVE")));
+
+        assertThatThrownBy(() -> new AclTaxRates(props).quote(request("FR")))
+                .isInstanceOf(TaxQuoteRefusedException.class)
+                .hasMessageContaining("No tax rate configured for jurisdiction FR");
     }
 }

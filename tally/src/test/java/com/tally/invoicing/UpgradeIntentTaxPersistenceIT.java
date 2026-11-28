@@ -78,12 +78,12 @@ class UpgradeIntentTaxPersistenceIT extends AbstractIntegrationTest {
         String reference = reference();
         UpgradeIntent intent = place(invoice, reference, tax);
 
-        transactions.executeWithoutResult(tx -> intents.save(intent));
+        transactions.executeWithoutResult(tx -> intents.place(intent));
 
-        UpgradeIntent loaded = intents.findByReference(reference).orElseThrow();
+        UpgradeIntent loaded = intents.forReference(reference).orElseThrow();
         assertThat(loaded.tax()).isEqualTo(tax);
         assertThat(loaded.charge()).isEqualTo(Money.of(420, "AED"));
-        UpgradeIntent open = intents.findOpenForPeriodInvoice(invoice.id()).orElseThrow();
+        UpgradeIntent open = intents.openFor(invoice.id()).orElseThrow();
         assertThat(open.tax()).isEqualTo(tax);
     }
 
@@ -94,9 +94,9 @@ class UpgradeIntentTaxPersistenceIT extends AbstractIntegrationTest {
         UpgradeIntent intent = UpgradeIntent.place(reference, invoice.subscriptionId(), invoice.accountId(),
                 "PRO", 2, invoice.id(), goldenQuote(invoice.subscriptionId()));
 
-        transactions.executeWithoutResult(tx -> intents.save(intent));
+        transactions.executeWithoutResult(tx -> intents.place(intent));
 
-        UpgradeIntent loaded = intents.findByReference(reference).orElseThrow();
+        UpgradeIntent loaded = intents.forReference(reference).orElseThrow();
         assertThat(loaded.tax()).isEqualTo(TaxQuote.zero());
         Map<String, Object> row = jdbc.queryForMap(
                 "SELECT tax_rate_numerator, tax_rate_denominator, tax_description FROM invoicing.upgrade_intent WHERE payment_reference = ?",
@@ -114,11 +114,11 @@ class UpgradeIntentTaxPersistenceIT extends AbstractIntegrationTest {
         UpgradeIntent intent = place(invoice, reference, tax);
 
         transactions.executeWithoutResult(tx -> {
-            intents.save(intent);
+            intents.place(intent);
             intents.markCompleted(reference, Instant.parse("2026-02-01T10:00:00Z"));
         });
 
-        UpgradeIntent loaded = intents.findByReference(reference).orElseThrow();
+        UpgradeIntent loaded = intents.forReference(reference).orElseThrow();
         assertThat(loaded.completed()).isTrue();
         assertThat(loaded.tax()).isEqualTo(tax);
     }
@@ -129,7 +129,7 @@ class UpgradeIntentTaxPersistenceIT extends AbstractIntegrationTest {
         String reference = reference();
         UpgradeIntent intent = place(invoice, reference,
                 new TaxQuote(Ratio.of(5, 100), "VAT (5%)"));
-        transactions.executeWithoutResult(tx -> intents.save(intent));
+        transactions.executeWithoutResult(tx -> intents.place(intent));
 
         assertThatThrownBy(() -> jdbc.update(
                 "UPDATE invoicing.upgrade_intent SET tax_rate_numerator = 5, tax_rate_denominator = NULL, tax_description = NULL WHERE payment_reference = ?",
