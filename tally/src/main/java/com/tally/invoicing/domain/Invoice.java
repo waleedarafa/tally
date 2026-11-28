@@ -13,7 +13,9 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderColumn;
+import jakarta.persistence.PostLoad;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.persistence.Version;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -72,7 +74,8 @@ public class Invoice {
     @Column(name = "payment_reference", nullable = false)
     private String paymentReference;
 
-    @Column(name = "issued_at", nullable = false)
+    /** Null while the invoice is unissued (DRAFT or TAX_QUOTED); set at issue. */
+    @Column(name = "issued_at")
     private Instant issuedAt;
 
     /** When the invoice was due to be billed: local midnight of its billing date, or the subscribe time (D6). */
@@ -107,7 +110,102 @@ public class Invoice {
     @Version
     private long version;
 
+    /** Whether this invoice has been loaded from or written to the database; only then does issue not set the version. */
+    @Transient
+    private boolean persisted;
+
+    @PostLoad
+    void markPersisted() {
+        this.persisted = true;
+    }
+
     protected Invoice() {
+    }
+
+    /**
+     * Drafts the period invoice for one period of a subscription, from a quote's amounts (design.md §7:
+     * takes amounts, never an offer). The amount is the sum of the lines, never rounded again
+     * (ADR-017). I2: the ID is derived from the subscription and period number, so there is one invoice
+     * per period. A negative total is refused; the daily invariant checks the same rule a second time.
+     * The invoice is unissued: status DRAFT, no issuedAt, version 0.
+     */
+    public static Invoice draft(UUID accountId, UUID subscriptionId, String planId, int periodNumber,
+            List<InvoiceLine> lines, PricingReason quoteReason, LocalDate periodStart, LocalDate periodEnd,
+            Instant billedFor) {
+        if (lines.isEmpty()) {
+            throw new IllegalArgumentException("An invoice has at least one line");
+        }
+        Money amount = lines.stream().map(InvoiceLine::amount).reduce(Money::plus).orElseThrow();
+        if (amount.minorUnits() < 0) {
+            // Owing the customer money is a credit note's job (I1), never an invoice's (FR-024).
+            throw new IllegalArgumentException("An invoice cannot total less than zero: " + amount
+                    + " for period " + periodNumber + " of subscription " + subscriptionId);
+        }
+        Invoice i = new Invoice();
+        i.status = InvoiceStatus.DRAFT;
+        i.issuedAt = null;
+        i.version = 0L;
+        i.persisted = false;
+        i.lines = new ArrayList<>(lines);
+        i.offerVersion = quoteReason.offerVersion();
+        i.quoteReason = quoteReason;
+        i.id = idOf(subscriptionId, periodNumber);
+        i.invoiceType = InvoiceKind.PERIOD;
+        i.periodNumber = periodNumber;
+        i.accountId = accountId;
+        i.subscriptionId = subscriptionId;
+        i.planId = planId;
+        i.amountMinor = amount.minorUnits();
+        i.currency = amount.currency().getCurrencyCode();
+        i.periodStart = periodStart;
+        i.periodEnd = periodEnd;
+        // The opaque reference Payment reports results by (FR-014).
+        i.paymentReference = "INV-" + i.id;
+        i.billedFor = billedFor;
+        return i;
+    }
+
+    /**
+     * Quotes tax on a draft (ADR-050): per-line half-up (ADR-017), summed, with the tax line appended
+     * when the total is positive. Zero tax adds no line.
+     */
+    public void quoteTax(TaxQuote tax) {
+        if (status != InvoiceStatus.DRAFT) {
+            throw new IllegalStateException("Tax can only be quoted on a DRAFT invoice: " + status);
+        }
+        Objects.requireNonNull(tax, "tax");
+        Money taxTotal = Money.of(0, currency);
+        for (InvoiceLine line : lines) {
+            taxTotal = taxTotal.plus(line.amount().times(tax.rate()));
+        }
+        if (taxTotal.minorUnits() > 0) {
+            lines.add(InvoiceLine.of(tax.description(), taxTotal));
+            amountMinor = amount().plus(taxTotal).minorUnits();
+        }
+        status = InvoiceStatus.TAX_QUOTED;
+    }
+
+    /**
+     * Issues the invoice (ADR-050): TAX_QUOTED → PAYMENT_PENDING, or PAID when the gross total is zero.
+     * A stored draft takes its version from the database, so a zero total is issued in two writes: the
+     * issue (PAYMENT_PENDING), then paid(now); the two events carry two versions (ADR-016).
+     */
+    public void issue(Instant now) {
+        if (status != InvoiceStatus.TAX_QUOTED) {
+            throw new IllegalStateException("Only a TAX_QUOTED invoice can be issued: " + status);
+        }
+        this.issuedAt = Objects.requireNonNull(now, "now");
+        if (amountMinor == 0 && !persisted) {
+            // Issued and paid in one step: two changes, so InvoiceIssued and InvoicePaid stay in order.
+            this.status = InvoiceStatus.PAID;
+            this.paidAt = now;
+            this.version = ISSUED_VERSION + 1;
+        } else {
+            this.status = InvoiceStatus.PAYMENT_PENDING;
+            if (!persisted) {
+                this.version = ISSUED_VERSION;
+            }
+        }
     }
 
     /**
@@ -120,41 +218,10 @@ public class Invoice {
     public static Invoice issue(UUID accountId, UUID subscriptionId, String planId, int periodNumber,
             List<InvoiceLine> lines, PricingReason quoteReason, LocalDate periodStart, LocalDate periodEnd,
             Instant billedFor, Instant now) {
-        if (lines.isEmpty()) {
-            throw new IllegalArgumentException("An invoice has at least one line");
-        }
-        Money amount = lines.stream().map(InvoiceLine::amount).reduce(Money::plus).orElseThrow();
-        if (amount.minorUnits() < 0) {
-            // Owing the customer money is a credit note's job (I1), never an invoice's (FR-024).
-            throw new IllegalArgumentException("An invoice cannot total less than zero: " + amount
-                    + " for period " + periodNumber + " of subscription " + subscriptionId);
-        }
-        Invoice i = new Invoice();
-        i.lines = new ArrayList<>(lines);
-        i.offerVersion = quoteReason.offerVersion();
-        i.quoteReason = quoteReason;
-        i.id = idOf(subscriptionId, periodNumber);
-        i.invoiceType = InvoiceKind.PERIOD;
-        i.periodNumber = periodNumber;
-        i.accountId = accountId;
-        i.subscriptionId = subscriptionId;
-        i.planId = planId;
-        i.status = InvoiceStatus.PAYMENT_PENDING;
-        i.amountMinor = amount.minorUnits();
-        i.currency = amount.currency().getCurrencyCode();
-        i.periodStart = periodStart;
-        i.periodEnd = periodEnd;
-        // The opaque reference Payment reports results by (FR-014).
-        i.paymentReference = "INV-" + i.id;
-        i.issuedAt = now;
-        i.billedFor = billedFor;
-        i.version = ISSUED_VERSION;
-        if (amount.minorUnits() == 0) {
-            // Issued and paid in one insert: two changes, so InvoiceIssued and InvoicePaid stay in order.
-            i.status = InvoiceStatus.PAID;
-            i.paidAt = now;
-            i.version = ISSUED_VERSION + 1;
-        }
+        Invoice i = draft(accountId, subscriptionId, planId, periodNumber, lines, quoteReason, periodStart,
+                periodEnd, billedFor);
+        i.quoteTax(TaxQuote.zero());
+        i.issue(now);
         return i;
     }
 

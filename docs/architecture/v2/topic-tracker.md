@@ -29,13 +29,13 @@ Drivers are the D-numbers of [`drivers.md`](drivers.md). The course review used 
 | B Architecture styles | 8 |  |  |  | 4 | 3 | 1 |
 | C Inside a module | 6 | 1 |  | 1 |  | 4 |  |
 | D Data and reliability | 27 | 3 | 3 | 3 | 4 | 13 | 1 |
-| D2 Distributed coordination | 11 | 3 | 2 | 1 | 4 | 1 |  |
+| D2 Distributed coordination | 11 | 1 | 2 | 1 | 6 | 1 |  |
 | E Evolution and governance | 15 | 3 |  | 2 | 4 | 5 | 1 |
 | F Delivery | 17 | 4 | 4 | 5 | 4 |  |  |
 | G Teams | 8 | 3 | 3 |  | 1 |  | 1 |
 | H Runtime infrastructure | 11 | 4 | 3 | 2 | 1 | 1 |  |
 | I Security | 13 | 6 | 2 | 1 | 1 | 1 | 2 |
-| **All** | **140** | **28** | **17** | **19** | **38** | **32** | **6** |
+| **All** | **140** | **26** | **17** | **19** | **40** | **32** | **6** |
 
 Before this check the course table had 24 topics built or checked. After it, 54. 78 of 138 statuses changed.
 
@@ -68,7 +68,6 @@ Before this check the course table had 24 topics built or checked. After it, 54.
 - D-11 Event-carried state transfer vs notification: designed. ADR-016 (events carry what the listener needs); ADR-012 (compacted access facts)
 - D-27 Command for a person's decision on an unknown payment past the key window: partly built. Alert and runbook exist; the runbook says to change the database by hand.
 - D2-01 Static vs dynamic coupling; coupling-point map: partly built. No explicit static vs dynamic coupling map for tax and payment.
-- D2-03 Invoice state machine with tax: not started. Tax is not built.
 - E-04 Holistic and continual fitness functions: partly built. Not yet 1,000,000 (needs staging). No continual check in production.
 - E-05 Expand and contract: partly built. The migration check (E-06) is built; no change has yet been made in two releases, and the N-1 replay does not exist.
 - F-02 Feature flags per account: built (WAR-66, 25 November 2026; ADR-048, ADR-049). `flags` module, `V56__flags.sql`, `FlagCatalogue`/`JdbcFlags`, `FlagsApi`/`FlagsService`, and `PricingService` recording every defined flag in `QuoteReason` (`FlagTest`, `FlagPersistenceIT`, `QuoteFlagsTest`, `QuoteFlagsIT`). Flag report and admin API remain.
@@ -116,7 +115,7 @@ The Design Record lists four items as required before production: settlement rec
 | A-08 | Shared kernel | Checked | Checked | Medium | — | SharedKernelTest (F4); drivers.md R5 | R5 deliberately puts the event marker in the kernel. The review's DomainEvent concern is a decision, not drift. |
 | A-09 | Open host service and published language | Built | Built | Medium | D5 | offers.Pricing, offers.PriceQuote; R4 | — |
 | A-10 | Customer–supplier and conformist | Built | Built | Medium | — | Design Record §6; Account is CF to all contexts | — |
-| A-11 | Anti-corruption layer | Partly built | Partly built | Medium | D11 | payment/adapter/provider/HttpPaymentGateway | Provider translation built. Tax service and telecom partner translators are not built. |
+| A-11 | Anti-corruption layer | Partly built | Partly built | Medium | D11 | payment/adapter/provider/HttpPaymentGateway; invoicing/adapter/tax/AclTaxRates (ADR-050) | Provider translation (`HttpPaymentGateway`) and tax translation (`AclTaxRates`, ADR-050) are built. The telecom partner translator is not built. |
 | A-12 | Aggregate and invariant | Checked ◆ | Built | High | D1, D2 | Subscription.renew(n), Invoice, CollectionRequest; aggregate and exhaustive transition tests (ADR-018) | — |
 | A-13 | Domain event | Built | Built | Medium | D3 | shared.DomainEvent; invoicing.InvoiceIssued and others | — |
 | A-14 | One-active-subscription rule | Checked ◆ | Designed | High | D1 | V37__subscription_end.sql: UNIQUE INDEX subscription_one_live_per_account ON (account_id) WHERE status = 'ACTIVE'; SubscriptionApiIT | One live subscription per account, enforced by the database (Slice 3 PR-2); an account whose subscription ended may sign up again. Before, one subscription per account (V5, a Slice 1 scope limit). It is still a scope limit, not a decision: the Design Record assumes one account can pay for several subscriptions (Step 6, Step 7). D-26 is fixed. ADR-043 puts the billing day on the account, as the Design Record already does, and is decided before the limit is lifted (WAR-64). WAR-64 still needs a sign-up idempotency guard that does not rely on the unique index. |
@@ -184,15 +183,15 @@ The Design Record lists four items as required before production: settlement rec
 |---|---|---|---|---|---|---|---|
 | D2-01 | Static vs dynamic coupling; coupling-point map | Partly built ◆ | Not started | High | — | Design Record §6 message flows; ADR-001 (sync inside billing, async to Access) | No explicit static vs dynamic coupling map for tax and payment. |
 | D2-02 | Eight-saga matrix applied to workflows | Designed | Designed | Medium | — | ADR-005: renew and invoice compensatable, charge the pivot, recording retriable | — |
-| D2-03 | Invoice state machine with tax | Not started | Not started | High | D12 | No tax code; TaxRates port designed (Design Record §10) | Tax is not built. |
-| D2-04 | Tax quote fallback decision | Not started ◆ | Designed | Medium | D12 | — | No decision on behaviour when the tax service is down. |
+| D2-03 | Invoice state machine with tax | Built ◆ | Not started | High | D12 | ADR-050 (WAR-67); `InvoiceStatus` DRAFT, TAX_QUOTED, PAYMENT_PENDING, PAID; `Invoice.draft`, `quoteTax`, `issue`; V57__invoice_tax_states.sql; `InvoiceTest`, `TaxQuoteFlowTest`, `TaxInvoiceIT` | Tax is quoted per line, rounded half up (ADR-017), and appended as one tax line; a zero rate adds no line. Mid-period upgrade adjustments are not taxed yet (ADR-050 scope note). |
+| D2-04 | Tax quote fallback decision | Built ◆ | Designed | Medium | D12 | ADR-050 (WAR-67); `TaxQuoteWorker`, `InvoiceIssuer`, `invoicing.tax_quote_queue` (V58__invoicing_tax_queue.sql); `TaxQuoteFlowTest`, `TaxOutageIT` | Decided: when the tax service is down the invoice waits in DRAFT and is retried on a money queue; it is never issued without tax. Tested with a real queue: DRAFT, retry, then issued with tax and paid once. |
 | D2-05 | State management over compensation | Built ◆ | Designed | High | D2 | AttemptState UNKNOWN; ADR-026; tally.payment.unknown_past_key_window alert; declines start Collections | — |
 | D2-06 | Eventual consistency patterns | Built ◆ | Designed | Medium | D3 | Event-based: InvoiceIssued and PaymentSucceeded listeners | — |
 | D2-07 | Joint ownership: delegate | Built | Built | Low | — | Payment publishes outcomes by reference; Invoicing records them (R1) | — |
 | D2-08 | Distributed data access patterns | Checked | Designed | Medium | D13 | Access holds a replicated copy of the access facts, fed by the event log (ADR-012, ADR-033); AT18AccessSurvivesBillingIT answers from it with billing and its database stopped | — |
 | D2-09 | Contracts and stamp coupling | Built ◆ | Not started | Medium | — | AccessFacts v1 carries only what Access reads: IDs, enums, numbers and times (contracts/access-facts/v1/consumer-access.json; ConsumerAccessFieldsTest; F7AccessFactsContractTest) | Reviewed for the one message that crosses quanta. No test fails if billing sends a field Access does not read; billing's in-process events are not reviewed against their consumers. |
 | D2-10 | Saga participation marked in code | Not started | Not started | Low | — | — | — |
-| D2-11 | Granularity of the tax adapter | Designed | Designed | Low | D12 | FR-016 kept: tax bought behind the TaxRates port in Invoicing | — |
+| D2-11 | Granularity of the tax adapter | Designed | Designed | Low | D12 | FR-016 kept: tax bought behind the TaxRates port in Invoicing; ADR-050: `AclTaxRates` in `invoicing.adapter.tax`, settings under `tally.tax.*` (AE 5%, SA 15%, US 0% EXEMPT) | — |
 
 ## E Evolution and governance
 
