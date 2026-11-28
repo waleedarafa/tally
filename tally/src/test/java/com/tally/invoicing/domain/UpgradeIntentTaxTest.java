@@ -121,4 +121,23 @@ class UpgradeIntentTaxTest {
 
         assertThat(UpgradeIntent.netChargeOf(quote)).isEqualTo(Money.of(1000, "AED"));
     }
+
+    @Test
+    void aCreditCapLimitsTheCreditVat() {
+        PriceQuote quote = goldenQuote(List.of(
+                new PriceLine("Unused Basic", Money.of(-1000, "AED")),
+                new PriceLine("Premium remaining", Money.of(2000, "AED"))));
+        UpgradeIntent intent = intentFor(quote);
+
+        assertThat(intent.creditTax()).isEqualTo(Money.of(50, "AED"));
+        assertThat(intent.charge()).isEqualTo(Money.of(1050, "AED"));
+
+        UpgradeIntent cappedAt1000 = intent.withCreditCap(Money.of(1000, "AED"));
+        assertThat(cappedAt1000.creditTax()).isEqualTo(Money.of(0, "AED"));
+        assertThat(cappedAt1000.charge()).isEqualTo(Money.of(1100, "AED"));
+
+        UpgradeIntent cappedAt1020 = intent.withCreditCap(Money.of(1020, "AED"));
+        assertThat(cappedAt1020.creditTax()).isEqualTo(Money.of(20, "AED"));
+        assertThat(cappedAt1020.charge()).isEqualTo(Money.of(1080, "AED"));
+    }
 }

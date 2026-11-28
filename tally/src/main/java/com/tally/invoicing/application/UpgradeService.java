@@ -126,15 +126,17 @@ class UpgradeService {
                     UpgradeIntent.netChargeOf(quote), effectiveDate));
             UpgradeIntent placed = UpgradeIntent.place(reference, subscription.id(), subscription.accountId(), newPlanId,
                     newVersion, periodInvoice.id(), quote, tax);
-            long creditMinor = quote.lines().stream()
-                    .filter(line -> line.amount().minorUnits() < 0)
-                    .mapToLong(line -> -line.amount().minorUnits())
-                    .sum();
-            Money credit = new Money(creditMinor, quote.lines().get(0).amount().currency());
             Money available = availableToCredit(periodInvoice, sequence);
-            if (credit.minorUnits() > available.minorUnits()) {
+            if (placed.netCredit().minorUnits() > available.minorUnits()) {
                 throw new IllegalStateException("The upgrade of subscription " + subscription.id() + " would credit "
-                        + credit + " but only " + available + " is left to credit; nothing was charged");
+                        + placed.netCredit() + " but only " + available + " is left to credit; nothing was charged");
+            }
+            if (placed.netCredit().plus(placed.creditTax()).minorUnits() > available.minorUnits()) {
+                placed = placed.withCreditCap(available);
+            }
+            if (placed.charge().minorUnits() <= 0) {
+                throw new IllegalArgumentException("The upgrade of subscription " + subscription.id() + " would collect "
+                        + placed.charge() + " after tax: nothing to collect");
             }
             if (intents.place(placed)) {
                 payments.requestCollection(reference, subscription.accountId(), placed.charge(), token);

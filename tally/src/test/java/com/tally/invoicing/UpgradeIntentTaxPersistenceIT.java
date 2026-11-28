@@ -136,4 +136,27 @@ class UpgradeIntentTaxPersistenceIT extends AbstractIntegrationTest {
                 reference))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
+
+    @Test
+    void aCreditCapRoundTrips() {
+        Invoice cappedInvoice = persistInvoice();
+        TaxQuote tax = new TaxQuote(Ratio.of(5, 100), "VAT (5%)");
+        String cappedReference = reference();
+        UpgradeIntent capped = place(cappedInvoice, cappedReference, tax)
+                .withCreditCap(Money.of(1000, "AED"));
+
+        transactions.executeWithoutResult(tx -> intents.place(capped));
+
+        UpgradeIntent loaded = intents.forReference(cappedReference).orElseThrow();
+        assertThat(loaded.creditCapMinor()).isEqualTo(1000L);
+
+        Invoice plainInvoice = persistInvoice();
+        String plainReference = reference();
+        UpgradeIntent plain = place(plainInvoice, plainReference, tax);
+
+        transactions.executeWithoutResult(tx -> intents.place(plain));
+
+        UpgradeIntent loadedPlain = intents.forReference(plainReference).orElseThrow();
+        assertThat(loadedPlain.creditCapMinor()).isNull();
+    }
 }
