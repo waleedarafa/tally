@@ -179,12 +179,20 @@ class UpgradeCommandTest {
                 return false;
             }
             boolean anotherOpen = byReference.values().stream()
-                    .anyMatch(i -> !i.completed() && i.periodInvoiceId().equals(intent.periodInvoiceId()));
+                    .anyMatch(i -> i.open() && i.periodInvoiceId().equals(intent.periodInvoiceId()));
             if (anotherOpen) {
                 return false;
             }
             byReference.put(intent.paymentReference(), intent);
             return true;
+        }
+
+        @Override
+        public void close(String paymentReference, UpgradeIntent.Closure closure, Instant closedAt) {
+            UpgradeIntent intent = byReference.get(paymentReference);
+            if (intent != null && intent.open()) {
+                byReference.put(paymentReference, intent.closed(closure, closedAt));
+            }
         }
 
         @Override
@@ -195,7 +203,7 @@ class UpgradeCommandTest {
         @Override
         public void markCompleted(String paymentReference, Instant completedAt) {
             UpgradeIntent intent = byReference.get(paymentReference);
-            if (intent != null && !intent.completed()) {
+            if (intent != null && intent.open()) {
                 byReference.put(paymentReference, intent.completed(completedAt));
             }
         }
@@ -207,7 +215,7 @@ class UpgradeCommandTest {
                 return Optional.empty();
             }
             return byReference.values().stream()
-                    .filter(i -> !i.completed() && periodInvoiceId.equals(i.periodInvoiceId()))
+                    .filter(i -> i.open() && periodInvoiceId.equals(i.periodInvoiceId()))
                     .findFirst();
         }
     }
@@ -495,5 +503,29 @@ class UpgradeCommandTest {
         UpgradeIntent intent = intents.byReference.get(expectedReference);
         assertThat(intent.periodInvoiceId()).isEqualTo(periodInvoice.id());
         assertThat(intent.newPlanId()).isEqualTo("VIP");
+    }
+
+    @Test
+    void aRetryAfterADeclinedIntentChargesAFreshReference() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = paidPeriodInvoice(accountId, subscriptionId);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        FakePayments payments = new FakePayments();
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        String base = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
+        intents.place(UpgradeIntent.place(base, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
+                goldenQuote(subscriptionId)).closed(UpgradeIntent.Closure.DECLINED, NOW));
+
+        upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))), invoices,
+                accounts(accountId), new FakeOffers(OptionalInt.of(2)),
+                new FakePricing(goldenQuote(subscriptionId)), payments, intents, new FakeCreditNotes(), new FakeEvents())
+                .upgrade(subscriptionId, "PRO");
+
+        assertThat(payments.calls).singleElement().satisfies(call ->
+                assertThat(call.reference()).isEqualTo(base + "-retry-2"));
+        assertThat(intents.byReference.get(base).closed()).isTrue();
+        assertThat(intents.byReference.get(base).closure()).isEqualTo(UpgradeIntent.Closure.DECLINED);
     }
 }

@@ -296,5 +296,37 @@ class UpgradeIT extends AbstractProviderIntegrationTest {
         assertThat(jdbc.queryForObject(
                 "SELECT completed_at IS NOT NULL FROM invoicing.upgrade_intent WHERE payment_reference = ?",
                 Boolean.class, reference)).isFalse();
+
+        await().atMost(Duration.ofSeconds(15)).until(() -> jdbc.queryForObject(
+                "SELECT closed_reason FROM invoicing.upgrade_intent WHERE payment_reference = ?",
+                String.class, reference).equals("DECLINED"));
+    }
+
+    @Test
+    void aDeclinedUpgradeCanBeRetriedWithAFreshReference() {
+        UUID account = account(FakeProvider.token());
+        SubscriptionView subscription = subscriptions.subscribe(account, GOLDEN_BASIC);
+        InvoiceView period = awaitPeriodInvoice(account, InvoiceStatus.PAID);
+
+        clock.set(DAY_16);
+        FakeProvider.mode("DECLINE_HARD(100)");
+        invoicing.upgrade(subscription.id(), GOLDEN_PREMIUM);
+
+        String baseReference = "INV-" + Invoice.idOfAdjustment(period.id(), 1);
+        await().atMost(Duration.ofSeconds(15)).until(() -> jdbc.queryForObject(
+                "SELECT closed_reason FROM invoicing.upgrade_intent WHERE payment_reference = ?",
+                String.class, baseReference).equals("DECLINED"));
+
+        FakeProvider.mode("NORMAL");
+        invoicing.upgrade(subscription.id(), GOLDEN_PREMIUM);
+
+        String retryReference = baseReference + "-retry-2";
+        await().atMost(Duration.ofSeconds(15)).until(() ->
+                subscriptions.get(subscription.id()).map(s -> s.planId().equals(GOLDEN_PREMIUM)).orElse(false));
+        await().atMost(Duration.ofSeconds(15)).until(() ->
+                invoices.find(Invoice.idOfAdjustment(period.id(), 1)).isPresent());
+        await().atMost(Duration.ofSeconds(15)).until(() -> jdbc.queryForObject(
+                "SELECT completed_at IS NOT NULL FROM invoicing.upgrade_intent WHERE payment_reference = ?",
+                Boolean.class, retryReference));
     }
 }

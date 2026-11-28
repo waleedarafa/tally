@@ -62,7 +62,7 @@ class JdbcUpgradeIntents implements UpgradeIntents {
     public Optional<UpgradeIntent> forReference(String paymentReference) {
         var found = jdbc.query("""
                 SELECT payment_reference, subscription_id, account_id, new_plan_id, new_offer_version,
-                       period_invoice_id, quote::text, completed_at
+                       period_invoice_id, quote::text, completed_at, closed_at, closed_reason
                 FROM invoicing.upgrade_intent
                 WHERE payment_reference = ?
                 """, this::mapRow, paymentReference);
@@ -73,12 +73,20 @@ class JdbcUpgradeIntents implements UpgradeIntents {
     public Optional<UpgradeIntent> openFor(UUID periodInvoiceId) {
         var found = jdbc.query("""
                 SELECT payment_reference, subscription_id, account_id, new_plan_id, new_offer_version,
-                       period_invoice_id, quote::text, completed_at
+                       period_invoice_id, quote::text, completed_at, closed_at, closed_reason
                 FROM invoicing.upgrade_intent
                 WHERE period_invoice_id = ? AND completed_at IS NULL AND closed_at IS NULL
                 ORDER BY payment_reference
                 """, this::mapRow, periodInvoiceId);
         return found.stream().findFirst();
+    }
+
+    @Override
+    public void close(String paymentReference, UpgradeIntent.Closure closure, Instant closedAt) {
+        jdbc.update("""
+                UPDATE invoicing.upgrade_intent SET closed_at = ?, closed_reason = ?
+                WHERE payment_reference = ? AND completed_at IS NULL AND closed_at IS NULL
+                """, closedAt.atOffset(ZoneOffset.UTC), closure.name(), paymentReference);
     }
 
     @Override
@@ -95,6 +103,12 @@ class JdbcUpgradeIntents implements UpgradeIntents {
                 rs.getString("new_plan_id"), rs.getInt("new_offer_version"),
                 rs.getObject("period_invoice_id", UUID.class), UpgradeQuoteJson.fromJson(rs.getString("quote")));
         OffsetDateTime completed = rs.getObject("completed_at", OffsetDateTime.class);
-        return completed == null ? intent : intent.completed(completed.toInstant());
+        intent = completed == null ? intent : intent.completed(completed.toInstant());
+        OffsetDateTime closed = rs.getObject("closed_at", OffsetDateTime.class);
+        String closure = rs.getString("closed_reason");
+        if (closed != null && closure != null) {
+            intent = intent.closed(UpgradeIntent.Closure.valueOf(closure), closed.toInstant());
+        }
+        return intent;
     }
 }

@@ -109,7 +109,13 @@ class UpgradeService {
         Optional<UpgradeIntent> open = intents.openFor(periodInvoice.id());
         if (open.isEmpty()) {
             int sequence = invoices.adjustmentsOf(periodInvoice.id()).size() + 1;
-            String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), sequence);
+            String base = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), sequence);
+            String reference = base;
+            int attempt = 1;
+            while (intents.forReference(reference).isPresent()) {
+                attempt++;
+                reference = base + "-retry-" + attempt;
+            }
             UpgradeIntent placed = UpgradeIntent.place(reference, subscription.id(), subscription.accountId(), newPlanId, newVersion, periodInvoice.id(), quote);
             if (intents.place(placed)) {
                 payments.requestCollection(reference, subscription.accountId(), placed.quote().total(), token);
@@ -130,6 +136,22 @@ class UpgradeService {
     }
 
     /**
+     * Closes an intent after a decline, so a retry can charge a fresh reference (ADR-057).
+     */
+    @Transactional
+    boolean closeAfterDecline(String paymentReference) {
+        Optional<UpgradeIntent> found = intents.forReference(paymentReference);
+        if (found.isEmpty()) {
+            return false;
+        }
+        UpgradeIntent intent = found.get();
+        if (intent.open()) {
+            intents.close(paymentReference, UpgradeIntent.Closure.DECLINED, clock.instant());
+        }
+        return true;
+    }
+
+    /**
      * Finishes an upgrade after its charge has succeeded: issues the credit note and the already-paid
      * adjustment, changes the plan, and marks the intent completed. A second call with the same
      * reference changes nothing twice.
@@ -144,17 +166,22 @@ class UpgradeService {
             return false;
         }
         UpgradeIntent intent = found.get();
-        if (intent.completed()) {
+        if (intent.completed() || intent.closed()) {
             return true;
         }
         Instant now = clock.instant();
         Invoice periodInvoice = invoices.find(intent.periodInvoiceId()).orElseThrow(() ->
                 new IllegalStateException("Period invoice " + intent.periodInvoiceId() + " is missing for upgrade "
                         + paymentReference));
+        if (!subscriptions.changePlan(intent.subscriptionId(), intent.newPlanId(), intent.newOfferVersion())) {
+            intents.close(paymentReference, UpgradeIntent.Closure.REFUND_DUE, now);
+            log.error("Upgrade {} was charged but subscription {} did not move to plan {}; no documents issued, the charge is due for a refund",
+                    paymentReference, intent.subscriptionId(), intent.newPlanId());
+            return true;
+        }
         int sequence = sequenceOf(periodInvoice, paymentReference);
         Invoice adjustment = issuePaidAdjustment(intent, periodInvoice, sequence, now);
         issueCreditNote(intent, periodInvoice, sequence, adjustment.id(), now);
-        subscriptions.changePlan(intent.subscriptionId(), intent.newPlanId(), intent.newOfferVersion());
         intents.markCompleted(paymentReference, now);
         return true;
     }
@@ -167,7 +194,8 @@ class UpgradeService {
     private int sequenceOf(Invoice periodInvoice, String paymentReference) {
         int bound = invoices.adjustmentsOf(periodInvoice.id()).size() + 1;
         for (int sequence = 1; sequence <= bound; sequence++) {
-            if (("INV-" + Invoice.idOfAdjustment(periodInvoice.id(), sequence)).equals(paymentReference)) {
+            String base = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), sequence);
+            if (paymentReference.equals(base) || paymentReference.startsWith(base + "-retry-")) {
                 return sequence;
             }
         }

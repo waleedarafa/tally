@@ -19,6 +19,11 @@ public interface UpgradeIntents {
     /** Marks the intent completed. A second call for an already-completed intent changes nothing. */
     void markCompleted(String paymentReference, Instant completedAt);
 
-    /** The intent for {@code periodInvoiceId} that is not completed, if any. */
+    /**
+     * Closes an open intent that will not complete. Changes nothing if it is already completed or closed.
+     */
+    void close(String paymentReference, UpgradeIntent.Closure closure, Instant closedAt);
+
+    /** The intent for {@code periodInvoiceId} that is not completed and not closed, if any. */
     Optional<UpgradeIntent> openFor(UUID periodInvoiceId);
 }
