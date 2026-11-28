@@ -235,8 +235,8 @@ public class Invoice {
      * I2, as amended by ADR-040: an adjustment invoice is a separate document, tied to the period
      * invoice it bills for. Its ID is a pure function of the period invoice and the sequence for the
      * period, so a retry of the same adjustment derives the same ID and issues the same document (D1).
-     * The prefix keeps it distinct from the period invoice's ID. The string is stored data and must
-     * never change.
+     * The prefix keeps it distinct from the period invoice's ID. This scheme is decided in ADR-054
+     * (closing ADR-040's open question 1): the string is stored data and must never change.
      */
     public static UUID idOfAdjustment(UUID periodInvoiceId, int sequence) {
         return UUID.nameUUIDFromBytes(("adjustment-invoice:" + periodInvoiceId + ":" + sequence)
@@ -302,6 +302,63 @@ public class Invoice {
             i.paidAt = now;
             i.version = ISSUED_VERSION + 1;
         }
+        return i;
+    }
+
+    /**
+     * Drafts an adjustment invoice tied to {@code periodInvoice}: the same account, subscription,
+     * period number and period dates, a different ID, the same rules as {@link #issueAdjustment} (an
+     * ID derived from the period invoice and the sequence, a non-negative total: owing the customer
+     * money is a credit note's job, I1, never an invoice's). The invoice is unissued: status DRAFT, no
+     * issuedAt, version 0, and it is persisted only after it goes through quoteTax and issue. The
+     * amount is the sum of the lines, never rounded again (ADR-017).
+     *
+     * @param sequence which adjustment of the period this is, numbered from 1; a period and sequence
+     *            always spell the same document, so a retry issues the same document (D1)
+     * @param planId the plan the adjustment bills at (for an upgrade, the new plan)
+     * @param billedFor when the invoice was due to be billed (D6), usually the change date
+     */
+    public static Invoice draftAdjustment(Invoice periodInvoice, int sequence, String planId,
+            List<InvoiceLine> lines, PricingReason quoteReason, Instant billedFor) {
+        Objects.requireNonNull(periodInvoice, "periodInvoice");
+        Objects.requireNonNull(planId, "planId");
+        Objects.requireNonNull(quoteReason, "quoteReason");
+        Objects.requireNonNull(lines, "lines");
+        if (sequence < 1) {
+            throw new IllegalArgumentException("An adjustment's sequence starts at 1: " + sequence);
+        }
+        if (lines.isEmpty()) {
+            throw new IllegalArgumentException("An invoice has at least one line");
+        }
+        Money amount = lines.stream().map(InvoiceLine::amount).reduce(Money::plus).orElseThrow();
+        if (amount.minorUnits() < 0) {
+            // Owing the customer money is a credit note's job (I1), never an invoice's (FR-024).
+            throw new IllegalArgumentException("An invoice cannot total less than zero: " + amount
+                    + " for period " + periodInvoice.periodNumber() + " of subscription "
+                    + periodInvoice.subscriptionId());
+        }
+        Invoice i = new Invoice();
+        i.status = InvoiceStatus.DRAFT;
+        i.issuedAt = null;
+        i.version = 0L;
+        i.persisted = false;
+        i.lines = new ArrayList<>(lines);
+        i.offerVersion = quoteReason.offerVersion();
+        i.quoteReason = quoteReason;
+        i.id = idOfAdjustment(periodInvoice.id(), sequence);
+        i.invoiceType = InvoiceKind.ADJUSTMENT;
+        i.periodInvoiceId = periodInvoice.id();
+        i.periodNumber = periodInvoice.periodNumber();
+        i.accountId = periodInvoice.accountId();
+        i.subscriptionId = periodInvoice.subscriptionId();
+        i.planId = planId;
+        i.amountMinor = amount.minorUnits();
+        i.currency = amount.currency().getCurrencyCode();
+        i.periodStart = periodInvoice.periodStart();
+        i.periodEnd = periodInvoice.periodEnd();
+        // The opaque reference Payment reports results by (FR-014).
+        i.paymentReference = "INV-" + i.id;
+        i.billedFor = billedFor;
         return i;
     }
 

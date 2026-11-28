@@ -31,12 +31,14 @@ public class AccessCopy {
     }
 
     private final FactsStore store;
+    private final BundleStore bundles;
     private final Clock clock;
     private final MeterRegistry meters;
     private final Counter unreadable;
 
-    AccessCopy(FactsStore store, Clock clock, MeterRegistry meters) {
+    AccessCopy(FactsStore store, BundleStore bundles, Clock clock, MeterRegistry meters) {
         this.store = store;
+        this.bundles = bundles;
         this.clock = clock;
         this.meters = meters;
         this.unreadable = Counter.builder("tally.access.unreadable").register(meters);
@@ -49,7 +51,13 @@ public class AccessCopy {
     }
 
     public AccessAnswer answer(UUID subscriberId) {
-        return AccessRules.answer(subscriberId, store.find(subscriberId));
+        return AccessRules.answer(subscriberId, store.find(subscriberId), bundles.findBySubscriber(subscriberId));
+    }
+
+    /** Stores a partner bundle if it is newer than the one held (ADR-056). */
+    @Transactional
+    public boolean applyBundle(BundleFact fact) {
+        return bundles.applyIfNewer(fact, clock.instant());
     }
 
     /**

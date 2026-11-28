@@ -8,7 +8,7 @@ info:
     path; changes are additive; a break is /v2. Every request that changes state requires an Idempotency-Key
     (CLAUDE.md rule 13), handled by the platform's shared mechanism. Every request carries a bearer token from the
     identity provider (ADR-032, Slice 4); Tally checks its signature, issuer, audience and expiry, and answers 401
-    when any check fails. The token's subject is the user; a user has one account (WAR-84).
+    when any check fails. The token's subject is the user; a user has one account (WAR-84). The /v1/admin/ paths are for staff: they need the scope billing:admin (ADR-053) and answer 403 without it.
 security:
   - bearer: []
 paths:
@@ -219,6 +219,295 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /v1/admin/flags:
+    get:
+      operationId: getFlagReport
+      summary: The flags report.
+      description: >
+        The flags report (ADR-010; ADR-053): every flag with its default, assignments, release date, the date by
+        which it must be removed, and the list of overdue flags. Staff only.
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "200":
+          description: The report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlagReport"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: defineFlag
+      summary: "Defines a new flag: off by default, not yet released."
+      description: >
+        Defines the flag: off by default and not yet released. The body is
+        checked first. The Idempotency-Key is claimed before acting.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DefineFlagRequest"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "201":
+          description: The flag was defined.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlagSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: >
+            `already-defined`: the flag is already defined (about:blank, "The flags rules refuse this change").
+            `request-in-progress`: a request with this Idempotency-Key is still being handled; see Retry-After.
+          headers:
+            Retry-After:
+              description: With request-in-progress, the seconds until the first request's timeout ends.
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          $ref: "#/components/responses/KeyReused"
+  /v1/admin/flags/{name}:
+    get:
+      operationId: getFlag
+      summary: One flag with its full change log.
+      description: One flag with its full change log.
+      parameters:
+        - $ref: "#/components/parameters/FlagName"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "200":
+          description: The flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlagDetail"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/FlagNotFound"
+    delete:
+      operationId: removeFlag
+      summary: Removes a flag.
+      description: >
+        Removes the flag. The Idempotency-Key is claimed before acting.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/FlagName"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "204":
+          description: The flag was removed. No body.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/FlagNotFound"
+        "422":
+          $ref: "#/components/responses/KeyReused"
+  /v1/admin/flags/{name}/default:
+    put:
+      operationId: setFlagDefault
+      summary: Sets the default for everyone without an assignment.
+      description: >
+        Sets the default for everyone without an assignment. The Idempotency-Key is claimed before acting.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/FlagName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FlagOnRequest"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "200":
+          description: The flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlagSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/FlagNotFound"
+        "409":
+          $ref: "#/components/responses/FlagConflict"
+        "422":
+          $ref: "#/components/responses/KeyReused"
+  /v1/admin/flags/{name}/accounts/{accountId}:
+    put:
+      operationId: assignFlagToAccount
+      summary: Assigns the flag for one account.
+      description: >
+        Assigns the flag for one account. The Idempotency-Key is claimed before acting.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/FlagName"
+        - $ref: "#/components/parameters/FlagAccountId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FlagOnRequest"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "200":
+          description: The flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlagSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/FlagNotFound"
+        "409":
+          $ref: "#/components/responses/FlagConflict"
+        "422":
+          $ref: "#/components/responses/KeyReused"
+    delete:
+      operationId: clearFlagForAccount
+      summary: Clears the account assignment.
+      description: >
+        Clears the account assignment. The Idempotency-Key is claimed before acting.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/FlagName"
+        - $ref: "#/components/parameters/FlagAccountId"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "200":
+          description: The flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlagSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/FlagNotFound"
+        "409":
+          $ref: "#/components/responses/FlagConflict"
+        "422":
+          $ref: "#/components/responses/KeyReused"
+  /v1/admin/flags/{name}/countries/{country}:
+    put:
+      operationId: assignFlagToCountry
+      summary: Assigns the flag for one country.
+      description: >
+        Assigns the flag for one country. The Idempotency-Key is claimed before acting.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/FlagName"
+        - $ref: "#/components/parameters/FlagCountry"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FlagOnRequest"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "200":
+          description: The flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlagSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/FlagNotFound"
+        "409":
+          $ref: "#/components/responses/FlagConflict"
+        "422":
+          $ref: "#/components/responses/KeyReused"
+    delete:
+      operationId: clearFlagForCountry
+      summary: Clears the country assignment.
+      description: >
+        Clears the country assignment. The Idempotency-Key is claimed before acting.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/FlagName"
+        - $ref: "#/components/parameters/FlagCountry"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "200":
+          description: The flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlagSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/FlagNotFound"
+        "409":
+          $ref: "#/components/responses/FlagConflict"
+        "422":
+          $ref: "#/components/responses/KeyReused"
+  /v1/admin/flags/{name}/release:
+    post:
+      operationId: releaseFlag
+      summary: Fully releases the flag.
+      description: >
+        Fully releases the flag. The Idempotency-Key is claimed before acting.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/FlagName"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "200":
+          description: The flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlagSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/FlagNotFound"
+        "409":
+          $ref: "#/components/responses/FlagConflict"
+        "422":
+          $ref: "#/components/responses/KeyReused"
 components:
   parameters:
     IdempotencyKey:
@@ -241,6 +530,27 @@ components:
       schema:
         type: string
         format: uuid
+    FlagName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[a-z][a-z0-9-]*$
+    FlagAccountId:
+      name: accountId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FlagCountry:
+      name: country
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[A-Za-z]{2}$
   securitySchemes:
     bearer:
       type: http
@@ -249,6 +559,8 @@ components:
       description: >
         A JWT signed by the identity provider (ADR-032). Its subject is the user; its audience is tally-billing.
   responses:
+    Forbidden:
+      description: "The token is valid but lacks the scope billing:admin; nothing was changed. No body."
     Unauthenticated:
       description: >
         No token, or one that fails a check: the signature, the issuer, the audience or the expiry. Nothing was
@@ -276,6 +588,29 @@ components:
             seconds to wait before the same request is sent again.
           schema:
             type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    FlagConflict:
+      description: >
+        `request-in-progress`: a request with this Idempotency-Key is still being handled; `concurrent-change`: the
+        request met a change made at the same time, send it again with the same key; otherwise (type about:blank,
+        title "The flags rules refuse this change") the flags rules refuse the change: already defined, already
+        released, or release with the default off or an off assignment. Nothing was changed.
+      headers:
+        Retry-After:
+          description: >
+            With request-in-progress, the seconds until the first request's timeout ends. With concurrent-change, the
+            seconds to wait before the same request is sent again.
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    FlagNotFound:
+      description: No such flag.
       content:
         application/problem+json:
           schema:
@@ -381,6 +716,105 @@ components:
           type: integer
           description: How soon access is granted (ADR-014). Always 5 in v1.
           examples: [5]
+    DefineFlagRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: The flag's name, for example new-checkout.
+    FlagOnRequest:
+      type: object
+      required: ['on']
+      properties:
+        'on':
+          type: boolean
+    FlagSummary:
+      type: object
+      required: [name, defaultOn, accounts, countries, releasedAt, removeBy, overdue, changeCount, lastChangeAt]
+      properties:
+        name:
+          type: string
+        defaultOn:
+          type: boolean
+        accounts:
+          type: object
+          additionalProperties:
+            type: boolean
+        countries:
+          type: object
+          additionalProperties:
+            type: boolean
+        releasedAt:
+          type: [string, "null"]
+          format: date-time
+        removeBy:
+          type: [string, "null"]
+          format: date-time
+        overdue:
+          type: boolean
+        changeCount:
+          type: integer
+        lastChangeAt:
+          type: [string, "null"]
+          format: date-time
+    FlagChange:
+      type: object
+      required: [at, description]
+      properties:
+        at:
+          type: string
+          format: date-time
+        description:
+          type: string
+    FlagDetail:
+      type: object
+      required: [name, defaultOn, accounts, countries, releasedAt, removeBy, overdue, changeCount, lastChangeAt, changes]
+      properties:
+        name:
+          type: string
+        defaultOn:
+          type: boolean
+        accounts:
+          type: object
+          additionalProperties:
+            type: boolean
+        countries:
+          type: object
+          additionalProperties:
+            type: boolean
+        releasedAt:
+          type: [string, "null"]
+          format: date-time
+        removeBy:
+          type: [string, "null"]
+          format: date-time
+        overdue:
+          type: boolean
+        changeCount:
+          type: integer
+        lastChangeAt:
+          type: [string, "null"]
+          format: date-time
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FlagChange"
+    FlagReport:
+      type: object
+      required: [asOf, flags, overdue]
+      properties:
+        asOf:
+          type: string
+          format: date-time
+        flags:
+          type: array
+          items:
+            $ref: "#/components/schemas/FlagSummary"
+        overdue:
+          type: array
+          items:
+            type: string
     Problem:
       type: object
       description: RFC 9457 problem details.

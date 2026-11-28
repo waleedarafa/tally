@@ -6,9 +6,11 @@ info:
     Access, the second deployable (ADR-001): "Can I watch?", answered from Access's own copy of the access facts,
     which it reads from the event log (ADR-012, ADR-033, ADR-035; design.md §8). Written before the code and checked
     against it (com.tallyaccess's contract test). Versions live in the path; changes are additive; a break is /v2.
-    Read only: nothing here changes state, so no Idempotency-Key. Access answers only the streaming platform, which
-    calls with a service token from the identity provider: audience tally-access, scope access:read (ADR-032; Slice 4,
-    decision 1, option A). Access checks it itself, with the provider's keys kept in its own database (ADR-039).
+    The one write is the partner notice (ADR-056): it is idempotent by the partner's own sequence, so no
+    Idempotency-Key. Telecom partners send notices with a service token: audience tally-access, scope access:partner,
+    subject equal to the partner ID in the path. Access answers only the streaming platform, which calls with a
+    service token from the identity provider: audience tally-access, scope access:read (ADR-032; Slice 4, decision 1,
+    option A). Access checks it itself, with the provider's keys kept in its own database (ADR-039).
 security:
   - bearer: []
 paths:
@@ -54,13 +56,64 @@ paths:
           description: >
             This instance has not caught up with the log yet, or it cannot check the token now: the identity provider is
             down and no key set is kept (then with Retry-After). No body; another instance may answer.
+  /v1/partners/{partnerId}/notices:
+    post:
+      operationId: postPartnerNotice
+      summary: "A telecom partner's bundle notice."
+      description: >
+        Notice v1 (ADR-056). A notice is applied only if its partnerSequence is higher than the one stored for the same
+        partner and bundle; a repeat or an older notice changes nothing and also answers 202. Access never calls the
+        partner.
+      parameters:
+        - name: partnerId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z][a-z0-9-]*$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerNotice"
+      responses:
+        "202":
+          description: Stored, or ignored as older or repeated. No body.
+        "400":
+          description: >
+            The notice is refused: the translator's reason, or partnerId in the body differs from the path, or the
+            body is not valid JSON. The body is NoticeRefused, except Spring's own 400 for broken JSON may have another
+            body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoticeRefused"
+        "401":
+          description: >
+            No token, or one that fails a check: the signature, the issuer, the audience (tally-access or tally-billing)
+            or the expiry. No body.
+          headers:
+            WWW-Authenticate:
+              description: The bearer challenge (RFC 6750).
+              schema:
+                type: string
+        "403":
+          description: >
+            A valid token that is not this partner's: the streaming platform's token, a household's, or a partner's
+            token whose subject is another partner. No body.
+        "503":
+          description: >
+            The token cannot be checked now (identity provider down, no key set kept), then with Retry-After. No body.
 components:
   securitySchemes:
     bearer:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: The streaming platform's service token (audience tally-access, scope access:read).
+      description: >-
+        The caller's service token: the streaming platform's (audience tally-access, scope access:read) for GET,
+        a partner's (audience tally-access, scope access:partner) for the notice.
   schemas:
     Access:
       type: object
@@ -84,3 +137,36 @@ components:
           type: [integer, "null"]
           minimum: 1
           description: The sequence of the facts behind the answer; null for NOT_KNOWN.
+    PartnerNotice:
+      type: object
+      additionalProperties: true
+      required: [partnerId, bundleId, subscriberId, event, partnerSequence, occurredAt]
+      properties:
+        partnerId:
+          type: string
+          pattern: "^[a-z][a-z0-9-]*$"
+        bundleId:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The partner's own reference.
+        subscriberId:
+          type: string
+          format: uuid
+        event:
+          type: string
+          enum: [ACTIVATED, ENDED]
+        partnerSequence:
+          type: integer
+          minimum: 1
+          description: Rising per bundle.
+        occurredAt:
+          type: string
+          format: date-time
+    NoticeRefused:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string

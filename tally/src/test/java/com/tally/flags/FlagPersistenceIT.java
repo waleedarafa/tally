@@ -10,10 +10,17 @@ import com.tally.flags.domain.Flags;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * ADR-049 (WAR-66): the flags catalogue saves and loads as a snapshot. The change log round-trips,
@@ -31,6 +38,9 @@ class FlagPersistenceIT extends AbstractIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    TransactionTemplate tx;
 
     @BeforeEach
     void clean() {
@@ -137,5 +147,65 @@ class FlagPersistenceIT extends AbstractIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flags.account_assignment", Long.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flags.country_assignment", Long.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flags.flag_change", Long.class)).isZero();
+    }
+
+    @Test
+    void loadForUpdateOutsideATransactionIsRefused() {
+        assertThatThrownBy(() -> catalogue.loadForUpdate())
+                .isInstanceOf(org.springframework.transaction.IllegalTransactionStateException.class);
+    }
+
+    @Test
+    void loadForUpdateReturnsWhatLoadReturns() {
+        Flags flags = new Flags();
+        flags.define(NAME, NOW);
+
+        catalogue.save(flags);
+
+        Flags loaded = tx.execute(status -> catalogue.loadForUpdate());
+
+        assertThat(loaded.names()).containsExactly(NAME);
+        assertThat(loaded.changes(NAME)).isEqualTo(catalogue.load().changes(NAME));
+    }
+
+    @Test
+    void aSecondLoadForUpdateWaitsForTheFirstTransactionToEnd() throws Exception {
+        Flags flags = new Flags();
+        flags.define(NAME, NOW);
+        catalogue.save(flags);
+
+        CountDownLatch held = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+
+        ExecutorService service = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> first = service.submit(() -> tx.execute(status -> {
+                catalogue.loadForUpdate();
+                held.countDown();
+                try {
+                    release.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(interrupted);
+                }
+                return null;
+            }));
+            assertThat(held.await(5, TimeUnit.SECONDS)).isTrue();
+
+            Future<Boolean> second = service.submit(() -> tx.execute(status -> {
+                catalogue.loadForUpdate();
+                return true;
+            }));
+
+            assertThatThrownBy(() -> second.get(1, TimeUnit.SECONDS))
+                    .isInstanceOf(TimeoutException.class);
+
+            release.countDown();
+
+            assertThat(second.get(5, TimeUnit.SECONDS)).isTrue();
+            first.get(5, TimeUnit.SECONDS);
+        } finally {
+            service.shutdown();
+        }
     }
 }

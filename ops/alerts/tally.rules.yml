@@ -62,6 +62,17 @@ groups:
           summary: "Money queue {{ $labels.queue }} is over 4 hours behind: its oldest due item is older than D6 allows."
           runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
 
+      # ADR-052: a retry moves due_at and finished_at forward, so BillingBehind and BillingStalled cannot see a tax-quote
+      # item that keeps retrying; this reads the age since creation of the oldest item that has been tried and is not finished.
+      - alert: TaxQuoteStuck
+        expr: tally_queue_oldest_retrying_age_seconds{queue="tax-quote"} > 3600
+        labels:
+          severity: page
+          driver: D6
+        annotations:
+          summary: "Invoices are waiting for tax: the oldest tax-quote item has been retrying for over 1 hour."
+          runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/tax-quote-stuck.md
+
       - alert: JobOverdue
         expr: tally_job_overdue == 1
         for: 5m

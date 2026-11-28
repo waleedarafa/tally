@@ -200,6 +200,18 @@ final class JdbcDurableQueue implements DurableQueue {
     }
 
     /**
+     * Seconds since the oldest unfinished item that has been attempted at least once was created; zero when there is none.
+     * Unlike oldestDueAgeSeconds this does not restart when a retry moves due_at forward.
+     * It counts from creation, not from the first attempt, so it is meaningful only for a queue whose items retry until done, such as tax-quote (ADR-052); for periodic jobs and other queues it grows without limit and no alert reads it.
+     */
+    double oldestRetryingAgeSeconds() {
+        Instant now = clock.instant();
+        OffsetDateTime oldest = jdbc.queryForObject("SELECT min(created_at) FROM " + table
+                + " WHERE status IN ('READY', 'IN_PROCESSING') AND attempts > 0", OffsetDateTime.class);
+        return oldest == null ? 0 : Duration.between(oldest.toInstant(), now).toMillis() / 1000.0;
+    }
+
+    /**
      * Seconds since an item's processing last ended, whatever the outcome (done, failed, or returned to the
      * queue); an item a worker holds is not progress. Counts from this queue's registration on this instance
      * when no finished row is left, for example after retention deleted them (FR-037). D9: work waiting with

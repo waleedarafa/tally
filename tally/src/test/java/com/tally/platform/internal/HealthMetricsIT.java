@@ -146,6 +146,30 @@ class HealthMetricsIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void anItemThatKeepsRetryingKeepsAgeingInTheRetryingGauge() {
+        healthQueue.enqueue("a", clock.instant(), "p");
+        healthQueue.processDue();
+        assertThat(gauge("tally.queue.oldest_retrying_age_seconds", "queue", "test-health")).isZero();
+
+        healthQueue.enqueue("later-1", clock.instant(), "p");
+        assertThat(gauge("tally.queue.oldest_retrying_age_seconds", "queue", "test-health")).isZero();
+
+        healthQueue.processDue();
+        assertThat(gauge("tally.queue.oldest_retrying_age_seconds", "queue", "test-health")).isZero();
+
+        clock.advance(Duration.ofMinutes(30));
+        assertThat(gauge("tally.queue.oldest_retrying_age_seconds", "queue", "test-health")).isEqualTo(1800);
+        assertThat(gauge("tally.queue.oldest_due_age_seconds", "queue", "test-health")).isZero();
+
+        clock.advance(Duration.ofMinutes(90));
+        healthQueue.processDue();
+        assertThat(gauge("tally.queue.oldest_retrying_age_seconds", "queue", "test-health")).isEqualTo(7200);
+        assertThat(gauge("tally.queue.oldest_due_age_seconds", "queue", "test-health")).isZero();
+        assertThat(meters.get("tally.queue.oldest_retrying_age_seconds")
+                .tags("queue", "test-health", "money", "false").gauge()).isNotNull();
+    }
+
+    @Test
     void jobMetricsShowTheAgeOfTheLastSuccessAndWaitingWork() {
         JdbcDurableQueue jobs = queues.queues().stream()
                 .filter(q -> q.name().equals(PeriodicJobs.queueName("platform_test.health_jobs"))).findFirst().orElseThrow();

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
  *   <li>{@code tally.queue.failed{queue}}: items that failed and wait for a person</li>
  *   <li>{@code tally.queue.last_progress_age_seconds{queue}}: since an item's processing last ended, whatever
  *       the outcome. Work waiting with no progress is a stalled billing run (D9); a busy queue keeps it near 0</li>
+ *   <li>{@code tally.queue.oldest_retrying_age_seconds{queue}}: age since creation of the oldest unfinished item that has been tried at least once. A retry moves the due time forward, so only this gauge sees an item that retries for hours (ADR-052). Read only for queue="tax-quote" (TaxQuoteStuck); other queues' values are not meaningful.</li>
  *   <li>{@code tally.job.last_success_age_seconds{job}}: since the last success, or since
  *       registration if the job has never succeeded</li>
  *   <li>{@code tally.job.waiting{job}}: work waiting for the job</li>
@@ -54,6 +55,8 @@ class HealthMetrics {
         Gauge.builder("tally.queue.overdue", queue, q -> q.oldestDueAgeSeconds() >= QUEUE_OVERDUE_SECONDS ? 1 : 0)
                 .tags(tags).strongReference(true).register(meters);
         Gauge.builder("tally.queue.last_progress_age_seconds", queue, JdbcDurableQueue::lastProgressAgeSeconds)
+                .tags(tags).baseUnit("seconds").strongReference(true).register(meters);
+        Gauge.builder("tally.queue.oldest_retrying_age_seconds", queue, JdbcDurableQueue::oldestRetryingAgeSeconds)
                 .tags(tags).baseUnit("seconds").strongReference(true).register(meters);
     }
 

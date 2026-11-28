@@ -41,6 +41,7 @@ Rel(TallyApplication.TallyApplication.Collections, TallyApplication.TallyApplica
 Rel(TallyApplication.TallyApplication.Collections, TallyApplication.TallyApplication.Invoicing, "uses", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Collections, TallyApplication.TallyApplication.Platform, "uses", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Collections, TallyApplication.TallyApplication.Subscription, "uses", $techn="", $tags="", $link="")
+Rel(TallyApplication.TallyApplication.Flags, TallyApplication.TallyApplication.Platform, "uses", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Account, "uses", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.OffersandPricing, "uses", $techn="", $tags="", $link="")
 Rel(TallyApplication.TallyApplication.Invoicing, TallyApplication.TallyApplication.Payment, "listens to", $techn="", $tags="", $link="")

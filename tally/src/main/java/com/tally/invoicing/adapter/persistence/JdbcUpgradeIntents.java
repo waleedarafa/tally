@@ -1,7 +1,10 @@
 package com.tally.invoicing.adapter.persistence;
 
+import com.tally.invoicing.domain.TaxQuote;
 import com.tally.invoicing.domain.UpgradeIntent;
 import com.tally.invoicing.domain.UpgradeIntents;
+import com.tally.shared.Money;
+import com.tally.shared.Ratio;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -25,14 +28,19 @@ class JdbcUpgradeIntents implements UpgradeIntents {
 
     @Override
     public boolean place(UpgradeIntent intent) {
+        TaxQuote tax = intent.tax();
+        boolean zero = tax.equals(TaxQuote.zero());
         try {
             jdbc.update("""
                     INSERT INTO invoicing.upgrade_intent (payment_reference, subscription_id, account_id, new_plan_id,
-                        new_offer_version, period_invoice_id, quote, completed_at)
-                    VALUES (?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?)
+                        new_offer_version, period_invoice_id, quote, completed_at,
+                        tax_rate_numerator, tax_rate_denominator, tax_description, credit_cap_minor)
+                    VALUES (?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?, ?, ?, ?, ?)
                     """, intent.paymentReference(), intent.subscriptionId(), intent.accountId(), intent.newPlanId(),
                     intent.newOfferVersion(), intent.periodInvoiceId(), UpgradeQuoteJson.toJson(intent.quote()),
-                    intent.completedAt() == null ? null : intent.completedAt().atOffset(ZoneOffset.UTC));
+                    intent.completedAt() == null ? null : intent.completedAt().atOffset(ZoneOffset.UTC),
+                    zero ? null : tax.rate().numerator(), zero ? null : tax.rate().denominator(),
+                    zero ? null : tax.description(), intent.creditCapMinor());
             return true;
         } catch (DuplicateKeyException e) {
             String constraint = null;
@@ -62,7 +70,8 @@ class JdbcUpgradeIntents implements UpgradeIntents {
     public Optional<UpgradeIntent> forReference(String paymentReference) {
         var found = jdbc.query("""
                 SELECT payment_reference, subscription_id, account_id, new_plan_id, new_offer_version,
-                       period_invoice_id, quote::text, completed_at, closed_at, closed_reason
+                       period_invoice_id, quote::text, completed_at, closed_at, closed_reason,
+                       tax_rate_numerator, tax_rate_denominator, tax_description, credit_cap_minor
                 FROM invoicing.upgrade_intent
                 WHERE payment_reference = ?
                 """, this::mapRow, paymentReference);
@@ -73,7 +82,8 @@ class JdbcUpgradeIntents implements UpgradeIntents {
     public Optional<UpgradeIntent> openFor(UUID periodInvoiceId) {
         var found = jdbc.query("""
                 SELECT payment_reference, subscription_id, account_id, new_plan_id, new_offer_version,
-                       period_invoice_id, quote::text, completed_at, closed_at, closed_reason
+                       period_invoice_id, quote::text, completed_at, closed_at, closed_reason,
+                       tax_rate_numerator, tax_rate_denominator, tax_description, credit_cap_minor
                 FROM invoicing.upgrade_intent
                 WHERE period_invoice_id = ? AND completed_at IS NULL AND closed_at IS NULL
                 ORDER BY payment_reference
@@ -98,10 +108,21 @@ class JdbcUpgradeIntents implements UpgradeIntents {
     }
 
     private UpgradeIntent mapRow(ResultSet rs, int rowNum) throws SQLException {
+        Long taxNumerator = rs.getObject("tax_rate_numerator", Long.class);
+        Long taxDenominator = rs.getObject("tax_rate_denominator", Long.class);
+        String taxDescription = rs.getString("tax_description");
+        TaxQuote tax = taxDescription == null
+                ? TaxQuote.zero()
+                : new TaxQuote(Ratio.of(taxNumerator, taxDenominator), taxDescription);
         UpgradeIntent intent = UpgradeIntent.place(rs.getString("payment_reference"),
                 rs.getObject("subscription_id", UUID.class), rs.getObject("account_id", UUID.class),
                 rs.getString("new_plan_id"), rs.getInt("new_offer_version"),
-                rs.getObject("period_invoice_id", UUID.class), UpgradeQuoteJson.fromJson(rs.getString("quote")));
+                rs.getObject("period_invoice_id", UUID.class), UpgradeQuoteJson.fromJson(rs.getString("quote")),
+                tax);
+        Long creditCapMinor = rs.getObject("credit_cap_minor", Long.class);
+        if (creditCapMinor != null) {
+            intent = intent.withCreditCap(new Money(creditCapMinor, intent.quote().total().currency()));
+        }
         OffsetDateTime completed = rs.getObject("completed_at", OffsetDateTime.class);
         intent = completed == null ? intent : intent.completed(completed.toInstant());
         OffsetDateTime closed = rs.getObject("closed_at", OffsetDateTime.class);

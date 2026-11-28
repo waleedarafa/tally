@@ -8,6 +8,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.security.oauth2.server.resource.autoconfigure.JwkSetUriJwtDecoderBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -47,6 +49,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *       fetch has short timeouts, so a provider that hangs cannot hold requests for 30 seconds (spike S-2); after any
  *       fetch, the kept set is used for a fixed time before the next, so tokens with unknown key IDs cannot hold the
  *       decoder's lock behind a provider that hangs (review of #92, finding 1).</li>
+ *   <li>A partner's token (audience {@code tally-access}, scope {@code access:partner}, subject equal to the
+ *       partner ID in the path) may POST notices and nothing else; the streaming platform's token cannot post
+ *       notices; ADR-056.</li>
  * </ul>
  * The health and metrics endpoints are not under {@code /v1/} and stay open to the platform that runs Access.
  */
@@ -55,12 +60,20 @@ class AccessSecurity {
 
     static final String AUDIENCE = "tally-access";
     static final String SCOPE = "SCOPE_access:read";
+    static final String PARTNER_SCOPE = "SCOPE_access:partner";
+    private static final Pattern PARTNER_NOTICE_PATH = Pattern.compile("^/v1/partners/([^/]+)/notices$");
 
     @Bean
     SecurityFilterChain access(HttpSecurity http) throws Exception {
         http.securityMatcher("/v1/**")
-                .authorizeHttpRequests(requests -> requests.anyRequest().access((authentication, context) ->
-                        new AuthorizationDecision(isTheStreamingPlatform(authentication.get()))))
+                .authorizeHttpRequests(requests -> requests.anyRequest().access((authentication, context) -> {
+                    Matcher matcher = PARTNER_NOTICE_PATH
+                            .matcher(context.getRequest().getRequestURI());
+                    if (matcher.matches()) {
+                        return new AuthorizationDecision(isThePartner(authentication.get(), matcher.group(1)));
+                    }
+                    return new AuthorizationDecision(isTheStreamingPlatform(authentication.get()));
+                }))
                 .oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))
                 .addFilterBefore(new KeysUnavailable(), BearerTokenAuthenticationFilter.class)
                 .sessionManagement(sessions -> sessions.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -91,6 +104,13 @@ class AccessSecurity {
         return authentication instanceof JwtAuthenticationToken token
                 && token.getToken().getAudience().contains(AUDIENCE)
                 && token.getAuthorities().stream().anyMatch(authority -> SCOPE.equals(authority.getAuthority()));
+    }
+
+    static boolean isThePartner(Authentication authentication, String partnerId) {
+        return authentication instanceof JwtAuthenticationToken token
+                && token.getToken().getAudience().contains(AUDIENCE)
+                && token.getAuthorities().stream().anyMatch(authority -> PARTNER_SCOPE.equals(authority.getAuthority()))
+                && partnerId.equals(token.getToken().getSubject());
     }
 
     /** The expiry, on the injected clock; Spring Boot then adds no system-clock check of its own (spike S-1). */

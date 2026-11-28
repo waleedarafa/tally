@@ -3,6 +3,7 @@ package com.tallyaccess.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.atlassian.oai.validator.OpenApiInteractionValidator;
 import com.atlassian.oai.validator.mockmvc.MockMvcRequest;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -43,7 +45,7 @@ class AccessContractIT {
     static final Path SPECIFICATION = Path.of("..", "docs", "api", "access-openapi.yaml").toAbsolutePath().normalize();
     static final OpenApiInteractionValidator VALIDATOR = OpenApiInteractionValidator
             .createForSpecificationUrl(SPECIFICATION.toUri().toString()).build();
-    static final Set<String> TESTED = Set.of("GET /v1/access/{subscriberId}");
+    static final Set<String> TESTED = Set.of("GET /v1/access/{subscriberId}", "POST /v1/partners/{partnerId}/notices");
 
     static String topic;
     static final KafkaProducer<String, String> PRODUCER = AccessTestSupport.producer();
@@ -85,6 +87,11 @@ class AccessContractIT {
         assertConforms(VALIDATOR.validate(MockMvcRequest.of(result.getRequest()),
                 MockMvcResponse.of(result.getResponse())));
         return result;
+    }
+
+    static String notice(String partnerId, String event) {
+        return "{\"partnerId\":\"" + partnerId + "\",\"bundleId\":\"B-1\",\"subscriberId\":\"" + UUID.randomUUID()
+                + "\",\"event\":\"" + event + "\",\"partnerSequence\":1,\"occurredAt\":\"2026-11-27T08:00:00Z\"}";
     }
 
     static void assertConforms(ValidationReport report) {
@@ -146,6 +153,41 @@ class AccessContractIT {
         MvcResult result = mvc.perform(get("/v1/access/not-a-uuid")).andReturn();
         assertThat(result.getResponse().getStatus()).isEqualTo(400);
         assertConforms(VALIDATOR.validateResponse("/v1/access/not-a-uuid", Method.GET,
+                MockMvcResponse.of(result.getResponse())));
+    }
+
+    @Test
+    void aPartnerNoticeIsAccepted() throws Exception {
+        MvcResult result = mvc.perform(post("/v1/partners/etisalat/notices")
+                .header("Authorization", TestTokens.partner("etisalat").bearer())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(notice("etisalat", "ACTIVATED"))).andReturn();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(202);
+        assertConforms(VALIDATOR.validate(MockMvcRequest.of(result.getRequest()),
+                MockMvcResponse.of(result.getResponse())));
+    }
+
+    @Test
+    void aNoticeTheTranslatorRefusesConformsToTheSpecification() throws Exception {
+        MvcResult result = mvc.perform(post("/v1/partners/etisalat/notices")
+                .header("Authorization", TestTokens.partner("etisalat").bearer())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(notice("etisalat", "PAUSED"))).andReturn();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(400);
+        assertConforms(VALIDATOR.validateResponse("/v1/partners/etisalat/notices", Method.POST,
+                MockMvcResponse.of(result.getResponse())));
+    }
+
+    @Test
+    void aPartnerNoticeWithTheWrongTokenIsRefusedAsSpecified() throws Exception {
+        MvcResult result = mvc.perform(post("/v1/partners/etisalat/notices")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(notice("etisalat", "ACTIVATED"))).andReturn();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(403);
+        assertConforms(VALIDATOR.validateResponse("/v1/partners/etisalat/notices", Method.POST,
                 MockMvcResponse.of(result.getResponse())));
     }
 }

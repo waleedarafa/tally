@@ -215,6 +215,53 @@ tests:
       exp_annotations:
         summary: 'Money queue renewals is over 4 hours behind: its oldest due item is older than D6 allows.'
         runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/billing-stalled.md
+- name: 'A tax-quote item retrying for more than 1 hour: TaxQuoteStuck fires'
+  interval: 30s
+  input_series:
+  - series: tally_queue_oldest_retrying_age_seconds{queue="tax-quote", money="true"}
+    values: 3570+30x5
+  alert_rule_test:
+  - eval_time: 30s
+    alertname: TaxQuoteStuck
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: TaxQuoteStuck
+    exp_alerts:
+    - exp_labels:
+        queue: tax-quote
+        money: 'true'
+        severity: page
+        driver: D6
+      exp_annotations:
+        summary: 'Invoices are waiting for tax: the oldest tax-quote item has been retrying for over 1 hour.'
+        runbook_url: https://github.com/waleedarafa/tally/blob/main/docs/runbooks/tax-quote-stuck.md
+- name: 'A tax-quote item retrying for 40 minutes: TaxQuoteStuck stays quiet'
+  interval: 30s
+  input_series:
+  - series: tally_queue_oldest_retrying_age_seconds{queue="tax-quote", money="true"}
+    values: 2400+0x20
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: TaxQuoteStuck
+    exp_alerts: []
+- name: 'The tax-quote queue recovers: TaxQuoteStuck stops'
+  interval: 30s
+  input_series:
+  - series: tally_queue_oldest_retrying_age_seconds{queue="tax-quote", money="true"}
+    values: 3700 0x10
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: TaxQuoteStuck
+    exp_alerts: []
+- name: 'Another queue with an old retrying item does not fire TaxQuoteStuck'
+  interval: 30s
+  input_series:
+  - series: tally_queue_oldest_retrying_age_seconds{queue="renewals", money="true"}
+    values: 90000+0x20
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: TaxQuoteStuck
+    exp_alerts: []
 - name: JobOverdue fires after a job is overdue for 5 minutes
   interval: 30s
   input_series:

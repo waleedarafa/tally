@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** {@link FlagCatalogue} over the {@code flags} schema (V56, ADR-049). */
@@ -20,6 +21,9 @@ class JdbcFlags implements FlagCatalogue {
     /** One row of the {@code flags.flag} table. */
     private record Row(String name, boolean defaultOn, Instant releasedAt) {
     }
+
+    // advisory lock key of the flags catalogue (ADR-053)
+    private static final long LOCK_KEY = 7_605_001_001L;
 
     private final JdbcTemplate jdbc;
 
@@ -49,6 +53,13 @@ class JdbcFlags implements FlagCatalogue {
             flags.loadDefined(row.name(), row.defaultOn(), row.releasedAt(), accounts, countries, changes);
         }
         return flags;
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Flags loadForUpdate() {
+        jdbc.query("SELECT pg_advisory_xact_lock(?)", rs -> { }, LOCK_KEY);
+        return load();
     }
 
     @Override

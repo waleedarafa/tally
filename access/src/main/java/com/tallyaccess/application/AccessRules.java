@@ -1,13 +1,16 @@
 package com.tallyaccess.application;
 
 import com.tallyaccess.application.AccessAnswer.Reason;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 /**
  * Who may watch (design.md §8; Access rules 2 and 4). A value Access does not know never takes access away (ADR-033;
- * D13, trade-off T3): an unknown standing is not BLOCKED, and a source in an unknown state counts as active.
+ * D13, trade-off T3): an unknown standing is not BLOCKED, and a source in an unknown state counts as active. An active
+ * partner bundle gives access whatever the standing (Access rules 2 and 5, ADR-056).
  */
 public final class AccessRules {
 
@@ -20,6 +23,22 @@ public final class AccessRules {
     }
 
     public static AccessAnswer answer(UUID subscriberId, Optional<StoredFacts> stored) {
+        return answer(subscriberId, stored, List.of());
+    }
+
+    public static AccessAnswer answer(UUID subscriberId, Optional<StoredFacts> stored, List<BundleFact> bundles) {
+        List<BundleFact> active = bundles.stream().filter(b -> b.state() == BundleFact.State.ACTIVE).toList();
+        if (!active.isEmpty()) {
+            if (stored.isPresent()) {
+                return answer(subscriberId, true, Reason.ACTIVE_SOURCE, stored.get());
+            }
+            return new AccessAnswer(subscriberId, true, Reason.ACTIVE_SOURCE,
+                    active.stream().map(BundleFact::occurredAt).max(Instant::compareTo).orElse(null), null);
+        }
+        if (stored.isEmpty() && !bundles.isEmpty()) {
+            return new AccessAnswer(subscriberId, false, Reason.NO_ACTIVE_SOURCE,
+                    bundles.stream().map(BundleFact::occurredAt).max(Instant::compareTo).orElse(null), null);
+        }
         if (stored.isEmpty()) {
             return new AccessAnswer(subscriberId, false, Reason.NOT_KNOWN, null, null);
         }

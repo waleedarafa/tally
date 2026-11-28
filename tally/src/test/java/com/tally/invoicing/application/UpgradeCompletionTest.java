@@ -19,6 +19,7 @@ import com.tally.invoicing.domain.CreditNote;
 import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.InvoiceKind;
 import com.tally.invoicing.domain.InvoiceLine;
+import com.tally.invoicing.domain.TaxQuote;
 import com.tally.invoicing.domain.UpgradeIntent;
 import com.tally.offers.Period;
 import com.tally.offers.PriceLine;
@@ -26,6 +27,7 @@ import com.tally.offers.PriceQuote;
 import com.tally.offers.QuoteReason;
 import com.tally.payment.PaymentSucceeded;
 import com.tally.shared.Money;
+import com.tally.shared.Ratio;
 import com.tally.subscription.EndReason;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionSnapshot;
@@ -168,6 +170,56 @@ class UpgradeCompletionTest {
         CreditNoteIssued creditIssued = (CreditNoteIssued) events.published.get(2);
         assertThat(creditIssued.creditNoteId()).isEqualTo(creditNoteId);
         assertThat(creditIssued.amount()).isEqualTo(CREDIT);
+    }
+
+    @Test
+    void completionWithVatIssuesTaxedAdjustmentAndTaxInclusiveCredit() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = paidPeriodInvoice(accountId, subscriptionId);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        FakeCreditNotes credits = new FakeCreditNotes();
+        FakeEvents events = new FakeEvents();
+        RecordingSubscriptions subscriptions = new RecordingSubscriptions(
+                UpgradeCommandTest.snapshot(subscriptionId, accountId, true));
+        PriceQuote quote = goldenQuote(subscriptionId);
+        TaxQuote tax = new TaxQuote(Ratio.of(5, 100), "VAT (5%)");
+        String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
+        intents.place(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
+                quote, tax));
+
+        UpgradeCommandTest.upgradeService(subscriptions, invoices, new FakeAccounts(accountId, Optional.of("tok_123")),
+                new FakeOffers(OptionalInt.of(2)), new FakePricing(quote), new FakePayments(), intents, credits, events)
+                .completeAfterCharge(reference);
+
+        UUID adjustmentId = Invoice.idOfAdjustment(periodInvoice.id(), 1);
+        Invoice adjustment = invoices.find(adjustmentId).orElseThrow();
+        assertThat(adjustment.invoiceType()).isEqualTo(InvoiceKind.ADJUSTMENT);
+        assertThat(adjustment.status()).isEqualTo(InvoiceStatus.PAID);
+        assertThat(adjustment.amount()).isEqualTo(Money.of(1050, "AED"));
+        assertThat(adjustment.lines()).hasSize(2);
+        assertThat(adjustment.lines().get(0).description()).isEqualTo("Premium remaining");
+        assertThat(adjustment.lines().get(0).amount()).isEqualTo(Money.of(1000, "AED"));
+        assertThat(adjustment.lines().get(1).description()).isEqualTo("VAT (5%)");
+        assertThat(adjustment.lines().get(1).amount()).isEqualTo(Money.of(50, "AED"));
+        assertThat(adjustment.planId()).isEqualTo("PRO");
+
+        UUID creditNoteId = CreditNote.idOfUpgradeCredit(periodInvoice.id(), 1);
+        CreditNote creditNote = credits.find(creditNoteId).orElseThrow();
+        assertThat(creditNote.amount()).isEqualTo(Money.of(630, "AED"));
+        assertThat(creditNote.lines()).hasSize(2);
+        assertThat(creditNote.lines().get(0).description()).isEqualTo("Unused Basic");
+        assertThat(creditNote.lines().get(0).amount()).isEqualTo(Money.of(600, "AED"));
+        assertThat(creditNote.lines().get(1).description()).isEqualTo("VAT (5%)");
+        assertThat(creditNote.lines().get(1).amount()).isEqualTo(Money.of(30, "AED"));
+        assertThat(creditNote.invoiceId()).isEqualTo(periodInvoice.id());
+        assertThat(creditNote.appliedToInvoiceId()).isEqualTo(adjustment.id());
+
+        UpgradeIntent intent = intents.byReference.get(reference);
+        assertThat(adjustment.amount().minus(creditNote.amount())).isEqualTo(Money.of(420, "AED"));
+        assertThat(intent.charge()).isEqualTo(Money.of(420, "AED"));
     }
 
     @Test

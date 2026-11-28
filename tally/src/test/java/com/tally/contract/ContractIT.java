@@ -2,8 +2,10 @@ package com.tally.contract;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 import com.atlassian.oai.validator.OpenApiInteractionValidator;
 import com.atlassian.oai.validator.mockmvc.MockMvcRequest;
@@ -65,10 +67,17 @@ class ContractIT extends AbstractIntegrationTest {
     static final Path SPECIFICATION = Path.of("..", "docs", "api", "openapi.yaml").toAbsolutePath().normalize();
 
     /** Every operation this class tests; it must be exactly the operations in the specification. */
-    static final Set<String> TESTED = Set.of(
+    static final Set<String> TESTED = new TreeSet<>(List.of(
             "POST /v1/accounts", "GET /v1/accounts/{id}", "GET /v1/me/account",
             "GET /v1/payments/{reference}/status", "POST /v1/subscriptions",
-            "POST /v1/accounts/{accountId}/collections/payment-requests");
+            "POST /v1/accounts/{accountId}/collections/payment-requests",
+            "GET /v1/admin/flags", "POST /v1/admin/flags", "GET /v1/admin/flags/{name}",
+            "DELETE /v1/admin/flags/{name}", "PUT /v1/admin/flags/{name}/default",
+            "PUT /v1/admin/flags/{name}/accounts/{accountId}",
+            "DELETE /v1/admin/flags/{name}/accounts/{accountId}",
+            "PUT /v1/admin/flags/{name}/countries/{country}",
+            "DELETE /v1/admin/flags/{name}/countries/{country}",
+            "POST /v1/admin/flags/{name}/release"));
 
     static final OpenApiInteractionValidator VALIDATOR = OpenApiInteractionValidator
             .createForSpecificationUrl(SPECIFICATION.toUri().toString()).build();
@@ -373,5 +382,57 @@ class ContractIT extends AbstractIntegrationTest {
         MvcResult inProgress = valid(by(account, post(path, account).header("Idempotency-Key", key)), 409);
         assertThat(inProgress.getResponse().getHeader("Retry-After")).isNotBlank();
         validResponse(by(account, post(path, account)), Method.POST, 400);
+    }
+
+    /** The flags admin caller: a staff token (ADR-053). */
+    MockHttpServletRequestBuilder staff(MockHttpServletRequestBuilder request) {
+        return request.header("Authorization", "Bearer " + TestTokens.token().subject("staff-1")
+                .scope("billing:admin").sign());
+    }
+
+    /** The ten flags admin operations (ADR-053): the report, define, default, account/country
+     * assignments, release and remove. */
+    @Test
+    void flagsAdmin() throws Exception {
+        jdbc.update("DELETE FROM flags.flag");
+        String name = "contract-flag";
+
+        valid(staff(get("/v1/admin/flags")), 200);
+
+        String key = key();
+        valid(staff(json(post("/v1/admin/flags").header("Idempotency-Key", key),
+                "{\"name\":\"contract-flag\"}")), 201);
+        // The same key replays the stored answer.
+        valid(staff(json(post("/v1/admin/flags").header("Idempotency-Key", key),
+                "{\"name\":\"contract-flag\"}")), 201);
+        // A new key defining the same flag is refused.
+        valid(staff(json(post("/v1/admin/flags").header("Idempotency-Key", key()),
+                "{\"name\":\"contract-flag\"}")), 409);
+        // The same key with another body is refused.
+        valid(staff(json(post("/v1/admin/flags").header("Idempotency-Key", key),
+                "{\"name\":\"other-flag\"}")), 422);
+
+        valid(staff(get("/v1/admin/flags/{name}", name)), 200);
+        valid(staff(get("/v1/admin/flags/{name}", "nope")), 404);
+
+        valid(staff(json(put("/v1/admin/flags/{name}/default", name).header("Idempotency-Key", key()),
+                "{\"on\":true}")), 200);
+        valid(staff(json(put("/v1/admin/flags/{name}/countries/{country}", name, "AE")
+                .header("Idempotency-Key", key()), "{\"on\":true}")), 200);
+        valid(staff(delete("/v1/admin/flags/{name}/countries/{country}", name, "AE")
+                .header("Idempotency-Key", key())), 200);
+
+        UUID accountId = UUID.randomUUID();
+        valid(staff(json(put("/v1/admin/flags/{name}/accounts/{accountId}", name, accountId)
+                .header("Idempotency-Key", key()), "{\"on\":true}")), 200);
+        valid(staff(delete("/v1/admin/flags/{name}/accounts/{accountId}", name, accountId)
+                .header("Idempotency-Key", key())), 200);
+
+        valid(staff(post("/v1/admin/flags/{name}/release", name).header("Idempotency-Key", key())), 200);
+        valid(staff(post("/v1/admin/flags/{name}/release", name).header("Idempotency-Key", key())), 409);
+
+        valid(staff(delete("/v1/admin/flags/{name}", name).header("Idempotency-Key", key())), 204);
+
+        validResponse(get("/v1/admin/flags"), Method.GET, 403);
     }
 }

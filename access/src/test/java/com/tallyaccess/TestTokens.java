@@ -38,6 +38,7 @@ public final class TestTokens {
     public static final String ACCESS = "tally-access";
     public static final String BILLING = "tally-billing";
     public static final String ACCESS_SCOPE = "access:read";
+    public static final String PARTNER_SCOPE = "access:partner";
     public static final String STREAMING_PLATFORM = "streaming-platform";
 
     private static final Instant NOT_BEFORE = Instant.parse("2026-01-14T10:00:00Z");
@@ -54,6 +55,11 @@ public final class TestTokens {
     /** The streaming platform's service token, as the value of the {@code Authorization} header. */
     public static String streamingPlatformBearer() {
         return "Bearer " + token().sign();
+    }
+
+    /** A partner's token: its subject is the partner ID, its scope {@code access:partner}. */
+    public static Token partner(String partnerId) {
+        return new Token().subject(partnerId).scope(PARTNER_SCOPE);
     }
 
     /** A token to shape: by default the streaming platform's service token, valid for ten years. */
