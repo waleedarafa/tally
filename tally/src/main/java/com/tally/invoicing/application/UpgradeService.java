@@ -106,21 +106,27 @@ class UpgradeService {
         }
         String token = account.paymentToken().orElseThrow(() ->
                 new IllegalStateException("Account " + subscription.accountId() + " has no payment token"));
-        Optional<UpgradeIntent> openIntent = intents.findOpenForPeriodInvoice(periodInvoice.id());
-        if (openIntent.isPresent()) {
-            UpgradeIntent inFlight = openIntent.get();
-            if (!inFlight.newPlanId().equals(newPlanId)) {
-                throw new UpgradeAlreadyInProgressException(subscription.id(), inFlight.newPlanId());
+        Optional<UpgradeIntent> open = intents.openFor(periodInvoice.id());
+        if (open.isEmpty()) {
+            int sequence = invoices.adjustmentsOf(periodInvoice.id()).size() + 1;
+            String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), sequence);
+            UpgradeIntent placed = UpgradeIntent.place(reference, subscription.id(), subscription.accountId(), newPlanId, newVersion, periodInvoice.id(), quote);
+            if (intents.place(placed)) {
+                payments.requestCollection(reference, subscription.accountId(), placed.quote().total(), token);
+                return;
             }
-            // A retry of the same upgrade charges the same reference (D1).
-            payments.requestCollection(inFlight.paymentReference(), subscription.accountId(), quote.total(), token);
-            return;
+            // Another caller placed the open intent first (index upgrade_intent_one_open_per_period_invoice).
+            open = intents.openFor(periodInvoice.id());
+            if (open.isEmpty()) {
+                throw new IllegalStateException("Upgrade intent " + reference + " was not placed and period invoice " + periodInvoice.id() + " has no open intent");
+            }
         }
-        int sequence = invoices.adjustmentsOf(periodInvoice.id()).size() + 1;
-        String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), sequence);
-        intents.save(UpgradeIntent.place(reference, subscription.id(), subscription.accountId(), newPlanId,
-                newVersion, periodInvoice.id(), quote));
-        payments.requestCollection(reference, subscription.accountId(), quote.total(), token);
+        UpgradeIntent inFlight = open.get();
+        if (!inFlight.newPlanId().equals(newPlanId)) {
+            throw new UpgradeAlreadyInProgressException(subscription.id(), inFlight.newPlanId());
+        }
+        // A retry, or a caller that lost the race, charges the stored intent: its reference and its amount (D1).
+        payments.requestCollection(inFlight.paymentReference(), subscription.accountId(), inFlight.quote().total(), token);
     }
 
     /**
@@ -132,7 +138,7 @@ class UpgradeService {
      */
     @Transactional
     boolean completeAfterCharge(String paymentReference) {
-        Optional<UpgradeIntent> found = intents.findByReference(paymentReference);
+        Optional<UpgradeIntent> found = intents.forReference(paymentReference);
         if (found.isEmpty()) {
             log.warn("Payment result for unknown reference {} ignored", paymentReference);
             return false;

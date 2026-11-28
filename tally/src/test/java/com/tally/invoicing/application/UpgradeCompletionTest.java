@@ -122,7 +122,7 @@ class UpgradeCompletionTest {
                 UpgradeCommandTest.snapshot(subscriptionId, accountId, true));
         PriceQuote quote = goldenQuote(subscriptionId);
         String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
-        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
+        intents.place(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
 
         UpgradeCommandTest.upgradeService(subscriptions, invoices, new FakeAccounts(accountId, Optional.of("tok_123")),
                 new FakeOffers(OptionalInt.of(2)), new FakePricing(quote), payments, intents, credits, events)
@@ -184,7 +184,7 @@ class UpgradeCompletionTest {
                 UpgradeCommandTest.snapshot(subscriptionId, accountId, true));
         PriceQuote quote = goldenQuote(subscriptionId);
         String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
-        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
+        intents.place(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
         var service = UpgradeCommandTest.upgradeService(subscriptions, invoices,
                 new FakeAccounts(accountId, Optional.of("tok_123")), new FakeOffers(OptionalInt.of(2)),
                 new FakePricing(quote), new FakePayments(), intents, credits, events);
@@ -269,7 +269,7 @@ class UpgradeCompletionTest {
                 UpgradeCommandTest.snapshot(subscriptionId, accountId, true));
         PriceQuote quote = goldenQuote(subscriptionId);
         String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
-        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
+        intents.place(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(), quote));
         var upgrades = UpgradeCommandTest.upgradeService(subscriptions, invoices,
                 new FakeAccounts(accountId, Optional.of("tok_123")), new FakeOffers(OptionalInt.of(2)),
                 new FakePricing(quote), payments, intents, credits, events);

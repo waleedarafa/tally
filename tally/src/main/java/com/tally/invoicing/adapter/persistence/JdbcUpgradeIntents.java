@@ -9,6 +9,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -23,19 +24,42 @@ class JdbcUpgradeIntents implements UpgradeIntents {
     }
 
     @Override
-    public void save(UpgradeIntent intent) {
-        jdbc.update("""
-                INSERT INTO invoicing.upgrade_intent (payment_reference, subscription_id, account_id, new_plan_id,
-                    new_offer_version, period_invoice_id, quote, completed_at)
-                VALUES (?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?)
-                ON CONFLICT (payment_reference) DO NOTHING
-                """, intent.paymentReference(), intent.subscriptionId(), intent.accountId(), intent.newPlanId(),
-                intent.newOfferVersion(), intent.periodInvoiceId(), UpgradeQuoteJson.toJson(intent.quote()),
-                intent.completedAt() == null ? null : intent.completedAt().atOffset(ZoneOffset.UTC));
+    public boolean place(UpgradeIntent intent) {
+        try {
+            jdbc.update("""
+                    INSERT INTO invoicing.upgrade_intent (payment_reference, subscription_id, account_id, new_plan_id,
+                        new_offer_version, period_invoice_id, quote, completed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?)
+                    """, intent.paymentReference(), intent.subscriptionId(), intent.accountId(), intent.newPlanId(),
+                    intent.newOfferVersion(), intent.periodInvoiceId(), UpgradeQuoteJson.toJson(intent.quote()),
+                    intent.completedAt() == null ? null : intent.completedAt().atOffset(ZoneOffset.UTC));
+            return true;
+        } catch (DuplicateKeyException e) {
+            String constraint = null;
+            for (Throwable t = e; t != null; t = t.getCause()) {
+                if (!"org.postgresql.util.PSQLException".equals(t.getClass().getName())) {
+                    continue;
+                }
+                try {
+                    Object serverError = t.getClass().getMethod("getServerErrorMessage").invoke(t);
+                    if (serverError == null) {
+                        break;
+                    }
+                    constraint = (String) serverError.getClass().getMethod("getConstraint").invoke(serverError);
+                    break;
+                } catch (ReflectiveOperationException ignored) {
+                    break;
+                }
+            }
+            if ("upgrade_intent_pkey".equals(constraint) || "upgrade_intent_one_open_per_period_invoice".equals(constraint)) {
+                return false;
+            }
+            throw e;
+        }
     }
 
     @Override
-    public Optional<UpgradeIntent> findByReference(String paymentReference) {
+    public Optional<UpgradeIntent> forReference(String paymentReference) {
         var found = jdbc.query("""
                 SELECT payment_reference, subscription_id, account_id, new_plan_id, new_offer_version,
                        period_invoice_id, quote::text, completed_at
@@ -46,12 +70,12 @@ class JdbcUpgradeIntents implements UpgradeIntents {
     }
 
     @Override
-    public Optional<UpgradeIntent> findOpenForPeriodInvoice(UUID periodInvoiceId) {
+    public Optional<UpgradeIntent> openFor(UUID periodInvoiceId) {
         var found = jdbc.query("""
                 SELECT payment_reference, subscription_id, account_id, new_plan_id, new_offer_version,
                        period_invoice_id, quote::text, completed_at
                 FROM invoicing.upgrade_intent
-                WHERE period_invoice_id = ? AND completed_at IS NULL
+                WHERE period_invoice_id = ? AND completed_at IS NULL AND closed_at IS NULL
                 ORDER BY payment_reference
                 """, this::mapRow, periodInvoiceId);
         return found.stream().findFirst();
