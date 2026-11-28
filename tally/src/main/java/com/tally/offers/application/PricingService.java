@@ -58,8 +58,8 @@ class PricingService implements Pricing, Offers {
                 .orElseThrow(() -> new UnknownPlanException(request.offerId(), currency));
         Money price = version.terms().priceIn(account.currency())
                 .orElseThrow(() -> new UnknownPlanException(request.offerId(), currency));
-        if (account.billingDay().isPresent()) {
-            // A short first period is priced by days (ADR-043, O4). A regular period is the full price.
+        if (request.period().number() == 1 && account.billingDay().isPresent()) {
+            // Only a first period can be short (ADR-043). A later period runs from one billing date to the next on the subscription's own calendar, so it is the full price whatever the account's billing day (review of #95, finding 5).
             price = PeriodPrice.of(price, request.period(), account.billingDay().getAsInt());
         }
         return PriceQuote.of(request, version.number(),
@@ -78,7 +78,10 @@ class PricingService implements Pricing, Offers {
                 .orElseThrow(() -> new UnknownPlanException(request.oldOfferId(), currency));
         Money newPrice = newVersion.terms().priceIn(account.currency())
                 .orElseThrow(() -> new UnknownPlanException(request.newOfferId(), currency));
-        List<PriceLine> lines = ProrationPolicy.lines(oldPrice, newPrice, request.period(), request.effectiveDate());
+        long regularDays = (request.period().number() == 1 && account.billingDay().isPresent())
+                ? PeriodPrice.regularDays(request.period(), account.billingDay().getAsInt())
+                : (request.period().end().toEpochDay() - request.period().start().toEpochDay());
+        List<PriceLine> lines = ProrationPolicy.lines(oldPrice, newPrice, request.period(), request.effectiveDate(), regularDays);
         Money total = lines.stream().map(PriceLine::amount).reduce(Money::plus)
                 .orElseThrow(() -> new IllegalArgumentException("A change quote has at least one line"));
         return new PriceQuote(request.subscriptionId(), request.newOfferId(), newVersion.number(), request.period(),

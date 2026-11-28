@@ -172,4 +172,20 @@ class ProrationQuoteTest {
                 .isInstanceOf(UnknownPlanException.class)
                 .hasMessageContaining("USD-ONLY");
     }
+
+    @Test
+    void aChangeOnTheFirstDayOfAShortFirstPeriodCreditsWhatWasBilled() {
+        UUID account = ports.open(Currency.getInstance("AED"), ZoneId.of("UTC")).id();
+        ports.setBillingDayFrom(account, Instant.parse("2026-01-01T10:00:00Z"));
+        put("OLD-31", "fixed-price-phase", Money.of(3100, "AED"));
+        put("NEW-62", "fixed-price-phase", Money.of(6200, "AED"));
+        Period shortPeriod = new Period(1, LocalDate.parse("2026-01-22"), LocalDate.parse("2026-02-01"));
+
+        PriceQuote quote = quoteChange("OLD-31", "NEW-62", account, shortPeriod, LocalDate.parse("2026-01-22"));
+
+        assertThat(quote.lines()).containsExactly(
+                new PriceLine("Credit, 10 of 31 days at the old price (31.00)", Money.of(-1000, "AED")),
+                new PriceLine("Charge, 10 of 31 days at the new price (62.00)", Money.of(2000, "AED")));
+        assertThat(quote.total()).isEqualTo(Money.of(1000, "AED"));
+    }
 }

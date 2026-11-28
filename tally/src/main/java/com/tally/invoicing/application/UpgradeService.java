@@ -116,6 +116,16 @@ class UpgradeService {
                 attempt++;
                 reference = base + "-retry-" + attempt;
             }
+            long creditMinor = quote.lines().stream()
+                    .filter(line -> line.amount().minorUnits() < 0)
+                    .mapToLong(line -> -line.amount().minorUnits())
+                    .sum();
+            Money credit = new Money(creditMinor, quote.lines().get(0).amount().currency());
+            Money available = availableToCredit(periodInvoice, sequence);
+            if (credit.minorUnits() > available.minorUnits()) {
+                throw new IllegalStateException("The upgrade of subscription " + subscription.id() + " would credit "
+                        + credit + " but only " + available + " is left to credit; nothing was charged");
+            }
             UpgradeIntent placed = UpgradeIntent.place(reference, subscription.id(), subscription.accountId(), newPlanId, newVersion, periodInvoice.id(), quote);
             if (intents.place(placed)) {
                 payments.requestCollection(reference, subscription.accountId(), placed.quote().total(), token);
@@ -223,15 +233,25 @@ class UpgradeService {
         if (credits.find(id).isPresent()) {
             return;
         }
-        Money available = invoiceBeingLeft.amount();
-        for (CreditNote existing : credits.ofInvoice(invoiceBeingLeft.id())) {
-            available = available.minus(existing.amount());
-        }
+        Money available = availableToCredit(periodInvoice, sequence);
         CreditNote creditNote = CreditNote.issueWithId(id, invoiceBeingLeft.id(), invoiceBeingLeft.accountId(),
                 creditLines, available, now, appliedToInvoiceId);
         credits.add(creditNote);
         events.publishEvent(new CreditNoteIssued(UUID.randomUUID(), now, creditNote.accountId(), creditNote.id(),
                 creditNote.invoiceId(), creditNote.amount(), CreditNote.ISSUED_VERSION));
+    }
+
+    /** The invoice being left (the period invoice for the first upgrade of the period) less the credit notes already issued against it. */
+    private Money availableToCredit(Invoice periodInvoice, int sequence) {
+        Invoice invoiceBeingLeft = sequence == 1 ? periodInvoice
+                : invoices.find(Invoice.idOfAdjustment(periodInvoice.id(), sequence - 1)).orElseThrow(() ->
+                        new IllegalStateException("Adjustment " + (sequence - 1) + " is missing for upgrade of "
+                                + periodInvoice.id()));
+        Money available = invoiceBeingLeft.amount();
+        for (CreditNote existing : credits.ofInvoice(invoiceBeingLeft.id())) {
+            available = available.minus(existing.amount());
+        }
+        return available;
     }
 
     private Invoice issuePaidAdjustment(UpgradeIntent intent, Invoice periodInvoice, int sequence, Instant now) {

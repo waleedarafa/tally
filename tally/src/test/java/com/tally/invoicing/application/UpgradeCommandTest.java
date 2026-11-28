@@ -528,4 +528,33 @@ class UpgradeCommandTest {
         assertThat(intents.byReference.get(base).closed()).isTrue();
         assertThat(intents.byReference.get(base).closure()).isEqualTo(UpgradeIntent.Closure.DECLINED);
     }
+
+    @Test
+    void aCreditLargerThanWhatIsLeftToCreditIsRefusedBeforeCharging() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = Invoice.issue(accountId, subscriptionId, "BASIC", PERIOD,
+                List.of(InvoiceLine.of("Price", Money.of(1000, "AED"))),
+                new PricingReason("BASIC", 1, "fixed-price-phase", Map.of()),
+                PERIOD_START, PERIOD_END, NOW, NOW);
+        periodInvoice.paid(NOW);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        FakePayments payments = new FakePayments();
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        PriceQuote quote = new PriceQuote(subscriptionId, "PRO", 2, new Period(PERIOD, PERIOD_START, PERIOD_END),
+                List.of(new PriceLine("Unused BASIC", Money.of(-5000, "AED")),
+                        new PriceLine("PRO remaining", Money.of(6000, "AED"))),
+                Money.of(1000, "AED"), new QuoteReason("PRO", 2, "proration", Map.of()));
+
+        assertThatThrownBy(() -> upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))),
+                invoices, accounts(accountId), new FakeOffers(OptionalInt.of(2)),
+                new FakePricing(quote), payments, intents, new FakeCreditNotes(), new FakeEvents())
+                .upgrade(subscriptionId, "PRO"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("would credit");
+
+        assertThat(payments.calls).isEmpty();
+        assertThat(intents.byReference).isEmpty();
+    }
 }
