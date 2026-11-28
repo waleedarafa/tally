@@ -112,7 +112,7 @@ abstract class AbstractCollectionsAcceptanceTest extends AbstractProviderIntegra
         TestTokens.Household household = TestTokens.household();
         UUID account = UUID.fromString((String) tally(household).post().uri("/v1/accounts")
                 .header("Idempotency-Key", UUID.randomUUID().toString())
-                .body(Map.of("currency", "USD", "timeZone", "UTC"))
+                .body(Map.of("currency", "USD", "timeZone", "UTC", "country", "US"))
                 .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { }).get("id"));
         households.put(account, household);
         return account;

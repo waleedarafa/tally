@@ -37,6 +37,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 @EnableConfigurationProperties(RenewalProperties.class)
 class Renewals implements QueueHandler {
 
+    /** What a renewal did, so a non-ACTIVE state is not mistaken for an existing period (review of #95, finding 6). */
+    private enum Result { RENEWED, ALREADY_RENEWED, ENDED, CANCELLING_ENDED, IN_TRIAL }
+
     private static final Logger log = LoggerFactory.getLogger(Renewals.class);
 
     // The permanent guard (FR-037): one period per subscription and number. Re-running a renewal whose
@@ -89,8 +92,9 @@ class Renewals implements QueueHandler {
             log.info("The account of subscription {} is BLOCKED: period {} waits", subscriptionId, period);
             return Outcome.retryAt(clock.instant().plus(blockedRecheck));
         }
+        Result result;
         try {
-            transactions.executeWithoutResult(tx -> renew(subscriptionId, period));
+            result = transactions.execute(tx -> renew(subscriptionId, period));
         } catch (OptimisticLockingFailureException | DataIntegrityViolationException e) {
             // A conflict is a duplicate only if the fact the guard protects holds: period n exists, so
             // another delivery renewed first. Any other failure rolled the renewal back: rethrow, so the
@@ -99,6 +103,13 @@ class Renewals implements QueueHandler {
                 throw e;
             }
             log.info("Period {} of subscription {} was already renewed", period, subscriptionId);
+            result = Result.ALREADY_RENEWED;
+        }
+        if (result == Result.IN_TRIAL) {
+            // A trial subscription is not renewed (design.md §5): the item comes back and looks again
+            // once the trial has ended.
+            log.info("Subscription {} is in TRIAL: period {} waits until the trial ends", subscriptionId, period);
+            return Outcome.retryAt(clock.instant().plus(blockedRecheck));
         }
         return Outcome.done();
     }
@@ -120,18 +131,32 @@ class Renewals implements QueueHandler {
                 .map(s -> s.periods().stream().anyMatch(p -> p.number() == period)).orElse(false)));
     }
 
-    private void renew(UUID subscriptionId, int period) {
+    private Result renew(UUID subscriptionId, int period) {
         Subscription subscription = subscriptions.find(subscriptionId).orElseThrow();
         if (subscription.status() == SubscriptionStatus.ENDED) {
             log.info("Subscription {} has ended; period {} is not renewed", subscriptionId, period);
-            return;
+            return Result.ENDED;
+        }
+        if (subscription.status() == SubscriptionStatus.CANCELLING) {
+            // design.md §5: a cancelling subscription ends when its period ends, and is not renewed.
+            if (subscription.periodEnded(clock.instant())) {
+                subscriptions.update(subscription);
+                changes.record(subscription, SubscriptionChangeType.ENDED);
+                log.info("Subscription {} was cancelling: it ends with period {}", subscriptionId, period);
+            }
+            return Result.CANCELLING_ENDED;
+        }
+        if (subscription.status() == SubscriptionStatus.TRIAL) {
+            // design.md §5: a trial subscription is not renewed; the renewal waits until the trial ends.
+            return Result.IN_TRIAL;
         }
         if (!subscription.renew(period)) {
             log.info("Period {} of subscription {} already exists", period, subscriptionId);
-            return;
+            return Result.ALREADY_RENEWED;
         }
         subscriptions.update(subscription);
         changes.record(subscription, SubscriptionChangeType.PERIOD_RENEWED);
         scheduleNext(subscription, accounts.get(subscription.accountId()).orElseThrow().timeZone());
+        return Result.RENEWED;
     }
 }

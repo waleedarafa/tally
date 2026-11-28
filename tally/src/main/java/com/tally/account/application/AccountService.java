@@ -46,11 +46,17 @@ class AccountService implements AccountApi, AccountStanding, AccountUsers, Calle
     @Override
     @Transactional
     public Opened openFor(String user, Currency currency, ZoneId timeZone) {
+        return openFor(user, currency, timeZone, "US");
+    }
+
+    @Override
+    @Transactional
+    public Opened openFor(String user, Currency currency, ZoneId timeZone, String country) {
         Optional<AccountView> existing = accountOf(user);
         if (existing.isPresent()) {
             return new Opened(existing.get(), false);
         }
-        Account account = accounts.save(new Account(UUID.randomUUID(), currency, timeZone, clock.instant()));
+        Account account = accounts.save(new Account(UUID.randomUUID(), currency, timeZone, country, clock.instant()));
         try {
             users.saveAndFlush(new AccountUser(account.id(), user, clock.instant()));
         } catch (DataIntegrityViolationException failure) {
@@ -125,7 +131,7 @@ class AccountService implements AccountApi, AccountStanding, AccountUsers, Calle
     }
 
     private static AccountView view(Account account) {
-        return new AccountView(account.id(), account.currency(), account.timeZone(), account.paymentToken(),
-                account.standing(), account.billingDay());
+        return new AccountView(account.id(), account.currency(), account.timeZone(), account.country(),
+                account.paymentToken(), account.standing(), account.billingDay());
     }
 }

@@ -31,11 +31,11 @@ Drivers are the D-numbers of [`drivers.md`](drivers.md). The course review used 
 | D Data and reliability | 27 | 3 | 3 | 3 | 4 | 13 | 1 |
 | D2 Distributed coordination | 11 | 3 | 2 | 1 | 4 | 1 |  |
 | E Evolution and governance | 15 | 3 |  | 2 | 4 | 5 | 1 |
-| F Delivery | 17 | 4 | 5 | 5 | 3 |  |  |
+| F Delivery | 17 | 4 | 4 | 5 | 4 |  |  |
 | G Teams | 8 | 3 | 3 |  | 1 |  | 1 |
 | H Runtime infrastructure | 11 | 4 | 3 | 2 | 1 | 1 |  |
 | I Security | 13 | 6 | 2 | 1 | 1 | 1 | 2 |
-| **All** | **140** | **28** | **18** | **19** | **37** | **32** | **6** |
+| **All** | **140** | **28** | **17** | **19** | **38** | **32** | **6** |
 
 Before this check the course table had 24 topics built or checked. After it, 54. 78 of 138 statuses changed.
 
@@ -71,9 +71,9 @@ Before this check the course table had 24 topics built or checked. After it, 54.
 - D2-03 Invoice state machine with tax: not started. Tax is not built.
 - E-04 Holistic and continual fitness functions: partly built. Not yet 1,000,000 (needs staging). No continual check in production.
 - E-05 Expand and contract: partly built. The migration check (E-06) is built; no change has yet been made in two releases, and the N-1 replay does not exist.
-- F-02 Feature flags per account: partly built. The reason has a place for flags. No flag table or switch yet. ADR-010 rejects hosted flags with random percentages; the course review's OpenFeature suggestion must stay within that.
+- F-02 Feature flags per account: built (WAR-66, 25 November 2026; ADR-048, ADR-049). `flags` module, `V56__flags.sql`, `FlagCatalogue`/`JdbcFlags`, `FlagsApi`/`FlagsService`, and `PricingService` recording every defined flag in `QuoteReason` (`FlagTest`, `FlagPersistenceIT`, `QuoteFlagsTest`, `QuoteFlagsIT`). Flag report and admin API remain.
 - F-03 Deployment pipeline: partly built. Staging and production stages from Design Record §14 do not exist.
-- F-07 Cohort canary for billing logic: designed. ADR-010 per-account flags; ADR-009
+- F-07 Cohort canary for billing logic: partly built (WAR-66, 25 November 2026). Per-account and per-country flags are recorded on every quote and invoice reason (`QuoteReason`, `PricingReason`); no canary billing rule yet.
 - F-11 Observability with OpenTelemetry: partly built. No tracing; no trace context in event publications.
 - F-13 SLOs and error budget: designed. No SLO or error budget defined as such.
 - F-14 DORA four keys baseline: designed. Not measured yet.
@@ -219,12 +219,12 @@ The Design Record lists four items as required before production: settlement rec
 | ID | Topic | Status | Was | Priority | Drivers | Evidence | Note |
 |---|---|---|---|---|---|---|---|
 | F-01 | Trunk-based development | Built | Built | High | D5 | ADR-008; main is the trunk | — |
-| F-02 | Feature flags per account | Partly built ◆ | Designed | High | D5, D7 | ADR-010; V19__quote_reason_jsonb.sql: the PriceQuote reason stored on each invoice carries a flags map | The reason has a place for flags. No flag table or switch yet. ADR-010 rejects hosted flags with random percentages; the course review's OpenFeature suggestion must stay within that. |
+| F-02 | Feature flags per account | Built ◆ | Designed | High | D5, D7 | ADR-010; ADR-048; ADR-049; V56__flags.sql; `com.tally.flags` (`Flags`, `FlagCatalogue`, `JdbcFlags`, `FlagsApi`, `FlagsService`); `PricingService` records every defined flag in `QuoteReason`; `V19__quote_reason_jsonb.sql` | Evaluated as account → country → default; tested by `FlagTest`, `FlagPersistenceIT`, `QuoteFlagsTest`, `QuoteFlagsIT`. Flag report and admin API are not built yet. ADR-010 rejects hosted flags with random percentages. |
 | F-03 | Deployment pipeline | Partly built ◆ | Not started | High | D5 | .github/workflows/ci.yml: commit stage and acceptance stage; nightly.yml | Staging and production stages from Design Record §14 do not exist. |
 | F-04 | Build once, promote by digest | Built ◆ | Not started | High | D5 | ci.yml: image per commit tagged by SHA; accepted-<sha> added by manifest, nothing rebuilt | — |
 | F-05 | Test strategy | Built ◆ | Partly built | Medium | D10 | Unit, module, acceptance AT-1–AT-17, ContractIT, fitness tests; ADR-029 database per test class | — |
 | F-06 | Security scans in commit stage | Not started | Not started | Medium | — | ci.yml has no scan steps | — |
-| F-07 | Cohort canary for billing logic | Designed | Designed | High | D5 | ADR-010 per-account flags; ADR-009 | — |
+| F-07 | Cohort canary for billing logic | Partly built | Designed | High | D5 | ADR-010; ADR-048; ADR-049 (WAR-66): per-account and per-country flags live in `flags` and are recorded in every `QuoteReason` and `PricingReason` | No canary billing rule or flag report yet. |
 | F-08 | Rolling deploys | Designed ◆ | Not started | Medium | D5 | ADR-009 rolling deploys with automatic rollback | No deployment environment yet. |
 | F-09 | Ops flag: pause provider calls | Partly built ◆ | Not started | Medium | D2 | ProviderIsolation is the payment queue's ClaimGate: an open breaker stops claiming | Automatic only; no manual switch. |
 | F-10 | Infrastructure as code | Not started | Not started | Medium | — | infra/docker-compose.yml is for local runs; FR-006 kept | — |

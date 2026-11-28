@@ -168,8 +168,8 @@ public class Invoice {
      * I2, as amended by ADR-040: an adjustment invoice is a separate document, tied to the period
      * invoice it bills for. Its ID is a pure function of the period invoice and the sequence for the
      * period, so a retry of the same adjustment derives the same ID and issues the same document (D1).
-     * The prefix keeps it distinct from the period invoice's ID. ADR-040's open question 1 is still
-     * open; this is the scheme this code uses.
+     * The prefix keeps it distinct from the period invoice's ID. The string is stored data and must
+     * never change.
      */
     public static UUID idOfAdjustment(UUID periodInvoiceId, int sequence) {
         return UUID.nameUUIDFromBytes(("adjustment-invoice:" + periodInvoiceId + ":" + sequence)

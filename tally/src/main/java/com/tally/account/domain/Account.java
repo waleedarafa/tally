@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Currency;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
@@ -28,6 +29,9 @@ public class Account {
 
     @Column(name = "time_zone", nullable = false)
     private String timeZone;
+
+    @Column(nullable = false)
+    private String country;
 
     @Column(name = "payment_token")
     private String paymentToken;
@@ -65,7 +69,27 @@ public class Account {
         this.id = id;
         this.currency = currency.getCurrencyCode();
         this.timeZone = timeZone.getId();
+        this.country = requireCountry("US");
         this.createdAt = createdAt;
+    }
+
+    public Account(UUID id, Currency currency, ZoneId timeZone, String country, Instant createdAt) {
+        this.id = id;
+        this.currency = currency.getCurrencyCode();
+        this.timeZone = timeZone.getId();
+        this.country = requireCountry(country);
+        this.createdAt = createdAt;
+    }
+
+    private static String requireCountry(String country) {
+        if (country == null || country.isBlank()) {
+            throw new IllegalArgumentException("Country is required (ISO 3166-1 alpha-2)");
+        }
+        String normalised = country.trim().toUpperCase(Locale.ROOT);
+        if (!normalised.matches("^[A-Z]{2}$")) {
+            throw new IllegalArgumentException("Country must be an ISO 3166-1 alpha-2 code: " + country);
+        }
+        return normalised;
     }
 
     public UUID id() {
@@ -78,6 +102,10 @@ public class Account {
 
     public ZoneId timeZone() {
         return ZoneId.of(timeZone);
+    }
+
+    public String country() {
+        return country;
     }
 
     public Optional<String> paymentToken() {

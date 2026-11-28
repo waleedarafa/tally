@@ -17,6 +17,12 @@ class PeriodPriceTest {
     static final Money FULL = Money.of(1200, "AED");
 
     @Test
+    void regularDaysOfAShortFirstPeriod() {
+        Period period = new Period(1, LocalDate.parse("2026-01-22"), LocalDate.parse("2026-02-01"));
+        assertThat(PeriodPrice.regularDays(period, 1)).isEqualTo(31);
+    }
+
+    @Test
     void aFullPeriodIsTheFullPrice() {
         Period period = new Period(1, LocalDate.parse("2026-04-05"), LocalDate.parse("2026-05-05"));
         assertThat(PeriodPrice.of(FULL, period, 5)).isEqualTo(Money.of(1200, "AED"));

@@ -1,6 +1,7 @@
 package com.tally.account.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -49,5 +50,36 @@ class AccountTest {
         Account account = account(ZoneId.of("UTC"));
         assertThat(account.setBillingDayFrom(Instant.parse("2026-01-31T10:00:00Z"))).isTrue();
         assertThat(account.billingDay()).isEqualTo(OptionalInt.of(31));
+    }
+
+    private static Account account(ZoneId timeZone, String country) {
+        return new Account(UUID.randomUUID(), Currency.getInstance("USD"), timeZone, country,
+                Instant.parse("2026-01-01T00:00:00Z"));
+    }
+
+    @Test
+    void aNewAccountOpenedWithTheFourArgumentConstructorHasCountryUs() {
+        assertThat(account(ZoneId.of("UTC")).country()).isEqualTo("US");
+    }
+
+    @Test
+    void theFiveArgumentConstructorKeepsAValidCode() {
+        assertThat(account(ZoneId.of("UTC"), "AE").country()).isEqualTo("AE");
+    }
+
+    @Test
+    void lowercaseAndPaddedCodesAreNormalisedToUpperCase() {
+        assertThat(account(ZoneId.of("UTC"), "ae").country()).isEqualTo("AE");
+        assertThat(account(ZoneId.of("UTC"), " ae ").country()).isEqualTo("AE");
+    }
+
+    @Test
+    void missingAndInvalidCodesAreRejected() {
+        assertThatThrownBy(() -> account(ZoneId.of("UTC"), null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> account(ZoneId.of("UTC"), "")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> account(ZoneId.of("UTC"), "  ")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> account(ZoneId.of("UTC"), "USA")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> account(ZoneId.of("UTC"), "A")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> account(ZoneId.of("UTC"), "A1")).isInstanceOf(IllegalArgumentException.class);
     }
 }

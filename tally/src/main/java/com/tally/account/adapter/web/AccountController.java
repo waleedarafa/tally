@@ -37,12 +37,13 @@ import tools.jackson.databind.json.JsonMapper;
 @RequestMapping("/v1/accounts")
 class AccountController {
 
-    record OpenAccount(String currency, String timeZone) {
+    record OpenAccount(String currency, String timeZone, String country) {
     }
 
-    record AccountResponse(UUID id, String currency, String timeZone) {
+    record AccountResponse(UUID id, String currency, String timeZone, String country) {
         static AccountResponse of(AccountView view) {
-            return new AccountResponse(view.id(), view.currency().getCurrencyCode(), view.timeZone().getId());
+            return new AccountResponse(view.id(), view.currency().getCurrencyCode(), view.timeZone().getId(),
+                    view.country());
         }
     }
 
@@ -74,7 +75,7 @@ class AccountController {
         // that user's own request, never this one's account.
         return endpoints.handle(keys, caller.keyScope(), key, request, () -> {
             AccountUsers.Opened opened = users.openFor(user, Currency.getInstance(request.currency()),
-                    ZoneId.of(request.timeZone()));
+                    ZoneId.of(request.timeZone()), request.country());
             return account(opened.opened() ? HttpStatus.CREATED : HttpStatus.OK, opened.account());
         }, failure -> {
             if (failure instanceof UserHasAnAccountException) {
@@ -83,7 +84,7 @@ class AccountController {
             return failure instanceof IllegalArgumentException || failure instanceof NullPointerException
                     || failure instanceof DateTimeException
                     ? Optional.of(endpoints.problem(HttpStatus.BAD_REQUEST, "about:blank", "Not an account",
-                            "currency must be an ISO 4217 code and timeZone an IANA time zone."))
+                            "currency must be an ISO 4217 code, timeZone an IANA time zone, and country an ISO 3166-1 alpha-2 code."))
                     : Optional.empty();
         });
     }

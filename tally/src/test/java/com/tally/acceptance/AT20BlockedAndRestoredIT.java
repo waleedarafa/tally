@@ -66,7 +66,7 @@ class AT20BlockedAndRestoredIT extends AbstractProviderIntegrationTest {
         RestClient tally = TestTokens.household().client("http://localhost:" + port);
         UUID account = UUID.fromString((String) tally.post().uri("/v1/accounts")
                 .header("Idempotency-Key", UUID.randomUUID().toString())
-                .body(Map.of("currency", "AED", "timeZone", "Asia/Dubai"))
+                .body(Map.of("currency", "AED", "timeZone", "Asia/Dubai", "country", "AE"))
                 .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { }).get("id"));
         int status = tally.post().uri("/v1/subscriptions")
                 .header("Idempotency-Key", UUID.randomUUID().toString())

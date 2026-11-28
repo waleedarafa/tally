@@ -121,7 +121,7 @@ class UpgradeCommandTest {
 
         @Override
         public Optional<AccountView> get(UUID accountId) {
-            return Optional.of(new AccountView(accountId, Currency.getInstance("AED"), ZoneId.of("UTC"), token, Standing.GOOD, OptionalInt.empty()));
+            return Optional.of(new AccountView(accountId, Currency.getInstance("AED"), ZoneId.of("UTC"), "AE", token, Standing.GOOD, OptionalInt.empty()));
         }
 
         @Override public void recordPaymentToken(UUID accountId, String paymentToken) {}
@@ -171,29 +171,51 @@ class UpgradeCommandTest {
 
     static final class FakeUpgradeIntents implements UpgradeIntents {
         final Map<String, UpgradeIntent> byReference = new LinkedHashMap<>();
+        boolean hideOpenOnce = false;
 
         @Override
-        public void save(UpgradeIntent intent) {
-            byReference.putIfAbsent(intent.paymentReference(), intent);
+        public boolean place(UpgradeIntent intent) {
+            if (byReference.containsKey(intent.paymentReference())) {
+                return false;
+            }
+            boolean anotherOpen = byReference.values().stream()
+                    .anyMatch(i -> i.open() && i.periodInvoiceId().equals(intent.periodInvoiceId()));
+            if (anotherOpen) {
+                return false;
+            }
+            byReference.put(intent.paymentReference(), intent);
+            return true;
         }
 
         @Override
-        public Optional<UpgradeIntent> findByReference(String paymentReference) {
+        public void close(String paymentReference, UpgradeIntent.Closure closure, Instant closedAt) {
+            UpgradeIntent intent = byReference.get(paymentReference);
+            if (intent != null && intent.open()) {
+                byReference.put(paymentReference, intent.closed(closure, closedAt));
+            }
+        }
+
+        @Override
+        public Optional<UpgradeIntent> forReference(String paymentReference) {
             return Optional.ofNullable(byReference.get(paymentReference));
         }
 
         @Override
         public void markCompleted(String paymentReference, Instant completedAt) {
             UpgradeIntent intent = byReference.get(paymentReference);
-            if (intent != null && !intent.completed()) {
+            if (intent != null && intent.open()) {
                 byReference.put(paymentReference, intent.completed(completedAt));
             }
         }
 
         @Override
-        public Optional<UpgradeIntent> findOpenForPeriodInvoice(UUID periodInvoiceId) {
+        public Optional<UpgradeIntent> openFor(UUID periodInvoiceId) {
+            if (hideOpenOnce) {
+                hideOpenOnce = false;
+                return Optional.empty();
+            }
             return byReference.values().stream()
-                    .filter(i -> !i.completed() && periodInvoiceId.equals(i.periodInvoiceId()))
+                    .filter(i -> i.open() && periodInvoiceId.equals(i.periodInvoiceId()))
                     .findFirst();
         }
     }
@@ -390,7 +412,7 @@ class UpgradeCommandTest {
         FakePayments payments = new FakePayments();
         FakeUpgradeIntents intents = new FakeUpgradeIntents();
         String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
-        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
+        intents.place(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
                 goldenQuote(subscriptionId)));
 
         assertThatThrownBy(() -> upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))),
@@ -411,7 +433,7 @@ class UpgradeCommandTest {
         FakePayments payments = new FakePayments();
         FakeUpgradeIntents intents = new FakeUpgradeIntents();
         String reference = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
-        intents.save(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
+        intents.place(UpgradeIntent.place(reference, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
                 goldenQuote(subscriptionId)));
 
         upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))), invoices,
@@ -422,6 +444,37 @@ class UpgradeCommandTest {
         assertThat(payments.calls).singleElement().satisfies(call ->
                 assertThat(call.reference()).isEqualTo(reference));
         assertThat(intents.byReference).containsOnlyKeys(reference);
+    }
+
+    @Test
+    void aCallerThatLosesThePlaceRaceChargesTheStoredIntent() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = paidPeriodInvoice(accountId, subscriptionId);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        FakePayments payments = new FakePayments();
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        intents.hideOpenOnce = true;
+        PriceQuote storedQuote = new PriceQuote(subscriptionId, "PRO", 2, new Period(PERIOD, PERIOD_START, PERIOD_END),
+                List.of(new PriceLine("Change", Money.of(1234, "AED"))), Money.of(1234, "AED"),
+                new QuoteReason("PRO", 2, "proration", Map.of()));
+        assertThat(intents.place(UpgradeIntent.place("INV-WINNER", subscriptionId, accountId, "PRO", 2,
+                periodInvoice.id(), storedQuote))).isTrue();
+        PriceQuote pricingQuote = new PriceQuote(subscriptionId, "PRO", 2, new Period(PERIOD, PERIOD_START, PERIOD_END),
+                List.of(new PriceLine("Change", Money.of(999, "AED"))), Money.of(999, "AED"),
+                new QuoteReason("PRO", 2, "proration", Map.of()));
+
+        upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))), invoices,
+                accounts(accountId), new FakeOffers(OptionalInt.of(2)),
+                new FakePricing(pricingQuote), payments, intents, new FakeCreditNotes(), new FakeEvents())
+                .upgrade(subscriptionId, "PRO");
+
+        assertThat(payments.calls).singleElement().satisfies(call -> {
+            assertThat(call.reference()).isEqualTo("INV-WINNER");
+            assertThat(call.amount()).isEqualTo(storedQuote.total());
+        });
+        assertThat(intents.byReference).containsOnlyKeys("INV-WINNER");
     }
 
     @Test
@@ -450,5 +503,58 @@ class UpgradeCommandTest {
         UpgradeIntent intent = intents.byReference.get(expectedReference);
         assertThat(intent.periodInvoiceId()).isEqualTo(periodInvoice.id());
         assertThat(intent.newPlanId()).isEqualTo("VIP");
+    }
+
+    @Test
+    void aRetryAfterADeclinedIntentChargesAFreshReference() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = paidPeriodInvoice(accountId, subscriptionId);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        FakePayments payments = new FakePayments();
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        String base = "INV-" + Invoice.idOfAdjustment(periodInvoice.id(), 1);
+        intents.place(UpgradeIntent.place(base, subscriptionId, accountId, "PRO", 2, periodInvoice.id(),
+                goldenQuote(subscriptionId)).closed(UpgradeIntent.Closure.DECLINED, NOW));
+
+        upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))), invoices,
+                accounts(accountId), new FakeOffers(OptionalInt.of(2)),
+                new FakePricing(goldenQuote(subscriptionId)), payments, intents, new FakeCreditNotes(), new FakeEvents())
+                .upgrade(subscriptionId, "PRO");
+
+        assertThat(payments.calls).singleElement().satisfies(call ->
+                assertThat(call.reference()).isEqualTo(base + "-retry-2"));
+        assertThat(intents.byReference.get(base).closed()).isTrue();
+        assertThat(intents.byReference.get(base).closure()).isEqualTo(UpgradeIntent.Closure.DECLINED);
+    }
+
+    @Test
+    void aCreditLargerThanWhatIsLeftToCreditIsRefusedBeforeCharging() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        Invoice periodInvoice = Invoice.issue(accountId, subscriptionId, "BASIC", PERIOD,
+                List.of(InvoiceLine.of("Price", Money.of(1000, "AED"))),
+                new PricingReason("BASIC", 1, "fixed-price-phase", Map.of()),
+                PERIOD_START, PERIOD_END, NOW, NOW);
+        periodInvoice.paid(NOW);
+        FakeInvoices invoices = new FakeInvoices();
+        invoices.add(periodInvoice);
+        FakePayments payments = new FakePayments();
+        FakeUpgradeIntents intents = new FakeUpgradeIntents();
+        PriceQuote quote = new PriceQuote(subscriptionId, "PRO", 2, new Period(PERIOD, PERIOD_START, PERIOD_END),
+                List.of(new PriceLine("Unused BASIC", Money.of(-5000, "AED")),
+                        new PriceLine("PRO remaining", Money.of(6000, "AED"))),
+                Money.of(1000, "AED"), new QuoteReason("PRO", 2, "proration", Map.of()));
+
+        assertThatThrownBy(() -> upgradeService(new StubSubscriptionApi(Optional.of(snapshot(subscriptionId, accountId, true))),
+                invoices, accounts(accountId), new FakeOffers(OptionalInt.of(2)),
+                new FakePricing(quote), payments, intents, new FakeCreditNotes(), new FakeEvents())
+                .upgrade(subscriptionId, "PRO"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("would credit");
+
+        assertThat(payments.calls).isEmpty();
+        assertThat(intents.byReference).isEmpty();
     }
 }

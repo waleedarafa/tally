@@ -220,7 +220,7 @@ class ContractIT extends AbstractIntegrationTest {
     void aKeyThatIsNotAUuidIsRefusedAndNotStored() throws Exception {
         String key = "not-a-uuid-" + UUID.randomUUID();
         MvcResult account = exchange(json(post("/v1/accounts").header("Idempotency-Key", key),
-                "{\"currency\":\"USD\",\"timeZone\":\"UTC\"}"));
+                "{\"currency\":\"USD\",\"timeZone\":\"UTC\",\"country\":\"US\"}"));
         UUID owned = account();
         MvcResult signUp = exchange(by(owned, json(post("/v1/subscriptions").header("Idempotency-Key", key),
                 signUp(owned, "BASIC"))));
@@ -243,7 +243,7 @@ class ContractIT extends AbstractIntegrationTest {
     /** Requests are checked too: one without its required Idempotency-Key does not conform. */
     @Test
     void theValidatorChecksRequestsAsWellAsResponses() throws Exception {
-        MvcResult result = exchange(json(post("/v1/accounts"), "{\"currency\":\"USD\",\"timeZone\":\"UTC\"}"));
+        MvcResult result = exchange(json(post("/v1/accounts"), "{\"currency\":\"USD\",\"timeZone\":\"UTC\",\"country\":\"US\"}"));
 
         assertThat(VALIDATOR.validateRequest(MockMvcRequest.of(result.getRequest())).getMessages())
                 .anySatisfy(message -> assertThat(message.getMessage()).contains("Idempotency-Key"));
@@ -251,14 +251,14 @@ class ContractIT extends AbstractIntegrationTest {
 
     @Test
     void openAccount() throws Exception {
-        String body = "{\"currency\":\"USD\",\"timeZone\":\"Europe/London\"}";
+        String body = "{\"currency\":\"USD\",\"timeZone\":\"Europe/London\",\"country\":\"US\"}";
         String key = key();
         valid(json(post("/v1/accounts").header("Idempotency-Key", key), body), 201);
-        valid(json(post("/v1/accounts").header("Idempotency-Key", key), "{\"currency\":\"AED\",\"timeZone\":\"UTC\"}"),
+        valid(json(post("/v1/accounts").header("Idempotency-Key", key), "{\"currency\":\"AED\",\"timeZone\":\"UTC\",\"country\":\"US\"}"),
                 422);
         // The user has an account: a new key answers 200 with it (WAR-84).
         valid(json(post("/v1/accounts").header("Idempotency-Key", key()), body), 200);
-        valid(json(post("/v1/accounts").header("Idempotency-Key", key()), "{\"currency\":\"XX\",\"timeZone\":\"UTC\"}"),
+        valid(json(post("/v1/accounts").header("Idempotency-Key", key()), "{\"currency\":\"XX\",\"timeZone\":\"UTC\",\"country\":\"US\"}"),
                 400);
         inFlight("account.idempotency_key", key);
         MvcResult inProgress = valid(json(post("/v1/accounts").header("Idempotency-Key", key), body), 409);
@@ -269,7 +269,7 @@ class ContractIT extends AbstractIntegrationTest {
     @Test
     void getMyAccount() throws Exception {
         valid(get("/v1/me/account"), 404);
-        valid(json(post("/v1/accounts").header("Idempotency-Key", key()), "{\"currency\":\"USD\",\"timeZone\":\"UTC\"}"),
+        valid(json(post("/v1/accounts").header("Idempotency-Key", key()), "{\"currency\":\"USD\",\"timeZone\":\"UTC\",\"country\":\"US\"}"),
                 201);
         valid(get("/v1/me/account"), 200);
     }

@@ -41,7 +41,7 @@ class OpenAccountApiIT extends AbstractIntegrationTest {
         if (key != null) {
             request = request.header("Idempotency-Key", key);
         }
-        return request.body(Map.of("currency", currency, "timeZone", "Europe/London")).retrieve()
+        return request.body(Map.of("currency", currency, "timeZone", "Europe/London", "country", "US")).retrieve()
                 .toEntity(String.class);
     }
 

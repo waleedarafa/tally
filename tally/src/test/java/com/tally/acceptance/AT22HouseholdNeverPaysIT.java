@@ -90,7 +90,7 @@ class AT22HouseholdNeverPaysIT extends AbstractProviderIntegrationTest {
         RestClient tally = TestTokens.household().client("http://localhost:" + port);
         UUID account = UUID.fromString((String) tally.post().uri("/v1/accounts")
                 .header("Idempotency-Key", UUID.randomUUID().toString())
-                .body(Map.of("currency", "USD", "timeZone", "UTC"))
+                .body(Map.of("currency", "USD", "timeZone", "UTC", "country", "US"))
                 .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { }).get("id"));
         int status = tally.post().uri("/v1/subscriptions")
                 .header("Idempotency-Key", UUID.randomUUID().toString())

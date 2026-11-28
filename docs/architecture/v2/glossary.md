@@ -31,6 +31,13 @@ From the Step 7 canvas and `design.md` §2 and §4.
 | Reason (QuoteReason) | Offer, offer version, kind and flags behind a PriceQuote; stored on the invoice so a charge can be explained (D7) |
 | Proration | By days: unused days are credited, remaining days are charged at the new price (O4) |
 
+## Feature flags (`flags`)
+
+| Word | Meaning |
+|---|---|
+| Feature flag | A named switch in `flags` (`ADR-010`, `ADR-048`, `ADR-049`), off by default, evaluated as account assignment, then country assignment, then default; changes are logged, persisted as a snapshot (`V56__flags.sql`), and every defined flag's state is recorded on `QuoteReason` |
+| Full release | Explicit release of a flag once its default is on and no assignment is off; starts a 30-day clock after which the flag is overdue and must be removed (`ADR-010`, `ADR-048`) |
+
 ## Subscription (`subscription`)
 
 | Word | Meaning |

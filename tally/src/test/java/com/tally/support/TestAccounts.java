@@ -26,8 +26,18 @@ public class TestAccounts {
         return users.openFor(UUID.randomUUID().toString(), currency, timeZone).account();
     }
 
+    /** An account for a new, random user. */
+    public AccountView open(Currency currency, ZoneId timeZone, String country) {
+        return users.openFor(UUID.randomUUID().toString(), currency, timeZone, country).account();
+    }
+
     /** The account of {@code household}, as its own {@code POST /v1/accounts} would open it. */
     public AccountView openFor(TestTokens.Household household, Currency currency, ZoneId timeZone) {
         return users.openFor(household.user(), currency, timeZone).account();
+    }
+
+    /** The account of {@code household}, as its own {@code POST /v1/accounts} would open it. */
+    public AccountView openFor(TestTokens.Household household, Currency currency, ZoneId timeZone, String country) {
+        return users.openFor(household.user(), currency, timeZone, country).account();
     }
 }

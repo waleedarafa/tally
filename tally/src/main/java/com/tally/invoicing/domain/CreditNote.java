@@ -81,16 +81,8 @@ public class CreditNote {
     }
 
     /**
-     * Issues one credit note against {@code invoiceId}, belonging to {@code accountId} (the invoice's
-     * account), carrying {@code lines} with the sum of their amounts as the total. The credit note
-     * refers to the invoice by its id only and never edits it (I1).
-     *
-     * @param available the amount still available on the invoice for credit, in the invoice's currency:
-     *            the invoice's total minus the total of the credit notes already issued against it
-     *            (ADR-040). The total must be greater than zero and not exceed this.
-     * @param issuedAt the time the credit note is issued, from the injected clock
+     * The id of the credit note for adjustment {@code adjustmentSequence} of a period invoice (an upgrade), for every sequence. The same inputs always spell the same id (D1).
      */
-    /** The credit note for the first adjustment of a period invoice (an upgrade). The same inputs always spell the same id (D1). */
     public static UUID idOfUpgradeCredit(UUID periodInvoiceId, int adjustmentSequence) {
         Objects.requireNonNull(periodInvoiceId, "periodInvoiceId");
         if (adjustmentSequence < 1) {
@@ -100,6 +92,16 @@ public class CreditNote {
                 .getBytes(StandardCharsets.UTF_8));
     }
 
+    /**
+     * Issues one credit note against {@code invoiceId}, belonging to {@code accountId} (the invoice's
+     * account), carrying {@code lines} with the sum of their amounts as the total. The credit note
+     * refers to the invoice by its id only and never edits it (I1).
+     *
+     * @param available the amount still available on the invoice for credit, in the invoice's currency:
+     *            the invoice's total minus the total of the credit notes already issued against it
+     *            (ADR-040). The total must be greater than zero and not exceed this.
+     * @param issuedAt the time the credit note is issued, from the injected clock
+     */
     public static CreditNote issue(UUID invoiceId, UUID accountId, List<InvoiceLine> lines, Money available,
             Instant issuedAt) {
         return issueWithId(UUID.randomUUID(), invoiceId, accountId, lines, available, issuedAt, null);

@@ -32,7 +32,7 @@ class CurrentVersionTest {
     final InMemoryOffers ports = new InMemoryOffers();
     final TestClock clock = new TestClock();
     final PricingService pricing = new PricingService(ports, ports,
-            new PricingRuleRegistry(List.of(new FixedPricePhaseRule(), new FreeTrialRule())), clock);
+            new PricingRuleRegistry(List.of(new FixedPricePhaseRule(), new FreeTrialRule())), ports, clock);
 
     static OfferKind approved() {
         OfferKind kind = OfferKind.experimental("fixed-price-phase");

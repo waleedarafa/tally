@@ -9,7 +9,7 @@ import java.util.List;
 final class InsideLayout {
 
     /** Ports and adapters inside: domain, application, adapter (CLAUDE.md rule 14). */
-    static final List<String> PORTS_AND_ADAPTERS = List.of("offers", "subscription", "invoicing", "payment");
+    static final List<String> PORTS_AND_ADAPTERS = List.of("offers", "subscription", "invoicing", "payment", "flags");
 
     static final JavaClasses CLASSES = new ClassFileImporter()
             .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)

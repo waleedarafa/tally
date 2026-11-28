@@ -46,7 +46,7 @@ class AT28OneAccountForEachUserIT extends AbstractIntegrationTest {
 
     ResponseEntity<Map<String, Object>> open(TestTokens.Household household, String currency) {
         return as(household).post().uri("/v1/accounts").header("Idempotency-Key", UUID.randomUUID().toString())
-                .body(Map.of("currency", currency, "timeZone", "UTC"))
+                .body(Map.of("currency", currency, "timeZone", "UTC", "country", "US"))
                 .retrieve().toEntity(new ParameterizedTypeReference<>() { });
     }
 
@@ -122,7 +122,7 @@ class AT28OneAccountForEachUserIT extends AbstractIntegrationTest {
             connection.setAutoCommit(false);
             Timestamp now = Timestamp.from(Instant.parse("2026-01-15T10:00:00Z"));
             try (PreparedStatement account = connection.prepareStatement("INSERT INTO account.account"
-                    + " (id, currency, time_zone, created_at, standing, version) VALUES (?, 'EUR', 'UTC', ?, 'GOOD', 0)");
+                    + " (id, currency, time_zone, country, created_at, standing, version) VALUES (?, 'EUR', 'UTC', 'US', ?, 'GOOD', 0)");
                     PreparedStatement link = connection.prepareStatement("INSERT INTO account.account_user"
                             + " (account_id, user_id, linked_at) VALUES (?, ?, ?)")) {
                 account.setObject(1, winner);
