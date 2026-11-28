@@ -33,6 +33,7 @@ import com.tally.platform.QueueHandler;
 import com.tally.platform.QueueItem;
 import com.tally.shared.Money;
 import com.tally.shared.Ratio;
+import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -74,7 +75,7 @@ class TaxQuoteFlowTest {
         /** Mimics a row loaded from the database: persisted, so the version the caller writes is the database's. */
         private static void markPersisted(Invoice invoice) {
             try {
-                java.lang.reflect.Field f = Invoice.class.getDeclaredField("persisted");
+                Field f = Invoice.class.getDeclaredField("persisted");
                 f.setAccessible(true);
                 f.setBoolean(invoice, true);
             } catch (ReflectiveOperationException e) {
@@ -103,7 +104,7 @@ class TaxQuoteFlowTest {
         @Override public void update(Invoice invoice) {
             updateCalls++;
             try {
-                java.lang.reflect.Field f = Invoice.class.getDeclaredField("version");
+                Field f = Invoice.class.getDeclaredField("version");
                 f.setAccessible(true);
                 f.setLong(invoice, invoice.version() + 1);
             } catch (ReflectiveOperationException e) {

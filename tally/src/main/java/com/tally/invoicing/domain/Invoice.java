@@ -186,8 +186,9 @@ public class Invoice {
     }
 
     /**
+     * Issues the invoice (ADR-050): TAX_QUOTED → PAYMENT_PENDING, or PAID when the gross total is zero.
      * A stored draft takes its version from the database, so a zero total is issued in two writes: the
-     * issue, then paid(now); the two events carry two versions (ADR-016).
+     * issue (PAYMENT_PENDING), then paid(now); the two events carry two versions (ADR-016).
      */
     public void issue(Instant now) {
         if (status != InvoiceStatus.TAX_QUOTED) {
