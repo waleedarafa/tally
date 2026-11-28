@@ -12,6 +12,7 @@ import com.tally.platform.IdempotencyStore;
 import com.tally.platform.IdempotentEndpoints;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -172,9 +173,10 @@ class FlagsAdminController {
             return endpoints.problem(HttpStatus.BAD_REQUEST, "about:blank", "Not a flag change",
                     "on is required.");
         }
+        String code = country.trim().toUpperCase(Locale.ROOT);
         return endpoints.handle(keys, caller.keyScope(), key,
-                new AdminChange("assign-country", name, country, request.on()),
-                () -> flagResponse(admin.assignCountry(name, country, request.on(), caller.id()), HttpStatus.OK),
+                new AdminChange("assign-country", name, code, request.on()),
+                () -> flagResponse(admin.assignCountry(name, code, request.on(), caller.id()), HttpStatus.OK),
                 this::refusal);
     }
 
@@ -182,9 +184,10 @@ class FlagsAdminController {
     @DeleteMapping("/{name}/countries/{country}")
     ResponseEntity<String> clearCountry(@PathVariable String name, @PathVariable String country,
             @RequestHeader(name = "Idempotency-Key", required = false) String key, Caller caller) {
+        String code = country.trim().toUpperCase(Locale.ROOT);
         return endpoints.handle(keys, caller.keyScope(), key,
-                new AdminChange("clear-country", name, country, null),
-                () -> flagResponse(admin.clearCountry(name, country, caller.id()), HttpStatus.OK), this::refusal);
+                new AdminChange("clear-country", name, code, null),
+                () -> flagResponse(admin.clearCountry(name, code, caller.id()), HttpStatus.OK), this::refusal);
     }
 
     /** Fully releases the flag. */

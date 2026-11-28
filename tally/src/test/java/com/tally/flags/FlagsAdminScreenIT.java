@@ -2,6 +2,7 @@ package com.tally.flags;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.tally.AbstractIntegrationTest;
@@ -75,6 +76,29 @@ class FlagsAdminScreenIT extends AbstractIntegrationTest {
         assertThat(body).as("no sessionStorage").doesNotContain("sessionStorage");
         assertThat(body).as("no document.cookie").doesNotContain("document.cookie");
         assertThat(body).as("no innerHTML").doesNotContain("innerHTML");
+    }
+
+    @Test
+    void theScreenIsAtItsAddress() throws Exception {
+        MvcResult direct = mvc.perform(get("/admin/flags/index.html"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String directBody = direct.getResponse().getContentAsString(StandardCharsets.UTF_8);
+
+        MvcResult atAddress = mvc.perform(get("/admin/flags/"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String forwardedUrl = atAddress.getResponse().getForwardedUrl();
+        if (forwardedUrl != null) {
+            assertThat(forwardedUrl).as("forwarded to the static page").isEqualTo("/admin/flags/index.html");
+        } else {
+            assertThat(atAddress.getResponse().getContentAsString(StandardCharsets.UTF_8))
+                    .as("the screen at its address is the page").isEqualTo(directBody);
+        }
+
+        mvc.perform(get("/admin/flags"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin/flags/"));
     }
 
     @Test

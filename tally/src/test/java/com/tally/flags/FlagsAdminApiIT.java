@@ -271,6 +271,49 @@ class FlagsAdminApiIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void aCountryRetriedInAnotherCaseIsTheSameRequest() throws Exception {
+        mvc.perform(post("/v1/admin/flags").header("Authorization", staffBearer())
+                        .header("Idempotency-Key", key())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"cased\"}"))
+                .andExpect(status().isCreated());
+
+        String keyK = key();
+        MvcResult firstPut = mvc.perform(put("/v1/admin/flags/cased/countries/ae")
+                        .header("Authorization", staffBearer())
+                        .header("Idempotency-Key", keyK)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"on\":true}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        MvcResult replayPut = mvc.perform(put("/v1/admin/flags/cased/countries/AE")
+                        .header("Authorization", staffBearer())
+                        .header("Idempotency-Key", keyK)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"on\":true}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(replayPut.getResponse().getContentAsString())
+                .as("put replay returns the stored body byte for byte")
+                .isEqualTo(firstPut.getResponse().getContentAsString());
+
+        String keyD = key();
+        MvcResult firstDelete = mvc.perform(delete("/v1/admin/flags/cased/countries/ae")
+                        .header("Authorization", staffBearer())
+                        .header("Idempotency-Key", keyD))
+                .andExpect(status().isOk())
+                .andReturn();
+        MvcResult replayDelete = mvc.perform(delete("/v1/admin/flags/cased/countries/AE")
+                        .header("Authorization", staffBearer())
+                        .header("Idempotency-Key", keyD))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(replayDelete.getResponse().getContentAsString())
+                .as("delete replay returns the stored body byte for byte")
+                .isEqualTo(firstDelete.getResponse().getContentAsString());
+    }
+
+    @Test
     void theReportListsOverdueFlags() throws Exception {
         Instant now = clock.instant();
 
