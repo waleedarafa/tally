@@ -99,7 +99,9 @@ class TaxQuoteWorker implements QueueHandler {
             invoices.update(fresh);
             events.publishEvent(new InvoiceIssued(UUID.randomUUID(), now, fresh.accountId(), fresh.id(),
                     fresh.paymentReference(), fresh.amount(), fresh.version()));
-            if (fresh.status() == InvoiceStatus.PAID) {
+            if (fresh.amount().minorUnits() == 0) {
+                fresh.paid(now);
+                invoices.update(fresh);
                 events.publishEvent(new InvoicePaid(UUID.randomUUID(), now, fresh.accountId(), fresh.id(),
                         fresh.paymentReference(), fresh.version()));
             }

@@ -2,10 +2,10 @@ package com.tally.invoicing.adapter.tax;
 
 import com.tally.invoicing.application.TaxProperties;
 import com.tally.invoicing.domain.TaxQuote;
+import com.tally.invoicing.domain.TaxQuoteRefusedException;
 import com.tally.invoicing.domain.TaxRates;
 import com.tally.invoicing.domain.TaxRequest;
 import com.tally.invoicing.domain.TaxUnavailableException;
-import com.tally.invoicing.domain.TaxQuoteRefusedException;
 import com.tally.shared.Ratio;
 import java.math.BigDecimal;
 import java.math.BigInteger;

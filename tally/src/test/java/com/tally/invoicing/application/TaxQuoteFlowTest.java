@@ -13,10 +13,10 @@ import com.tally.invoicing.domain.Invoice;
 import com.tally.invoicing.domain.InvoiceLine;
 import com.tally.invoicing.domain.Invoices;
 import com.tally.invoicing.domain.TaxQuote;
+import com.tally.invoicing.domain.TaxQuoteRefusedException;
 import com.tally.invoicing.domain.TaxRates;
 import com.tally.invoicing.domain.TaxRequest;
 import com.tally.invoicing.domain.TaxUnavailableException;
-import com.tally.invoicing.domain.TaxQuoteRefusedException;
 import com.tally.offers.ChangeRequest;
 import com.tally.offers.Period;
 import com.tally.offers.PriceLine;
@@ -71,11 +71,26 @@ class TaxQuoteFlowTest {
         int addIfAbsentCalls = 0;
         int updateCalls = 0;
 
-        void add(Invoice invoice) { byId.put(invoice.id(), invoice); }
+        /** Mimics a row loaded from the database: persisted, so the version the caller writes is the database's. */
+        private static void markPersisted(Invoice invoice) {
+            try {
+                java.lang.reflect.Field f = Invoice.class.getDeclaredField("persisted");
+                f.setAccessible(true);
+                f.setBoolean(invoice, true);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        void add(Invoice invoice) {
+            markPersisted(invoice);
+            byId.put(invoice.id(), invoice);
+        }
 
         @Override public boolean addIfAbsent(Invoice invoice) {
             addIfAbsentCalls++;
             if (byId.containsKey(invoice.id())) { return false; }
+            markPersisted(invoice);
             byId.put(invoice.id(), invoice);
             return true;
         }
@@ -84,7 +99,18 @@ class TaxQuoteFlowTest {
 
         @Override public Optional<Invoice> forPaymentReference(String paymentReference) { return Optional.empty(); }
 
-        @Override public void update(Invoice invoice) { updateCalls++; byId.put(invoice.id(), invoice); }
+        /** Bumps the version by one, as saveAndFlush does (JPA's @Version). */
+        @Override public void update(Invoice invoice) {
+            updateCalls++;
+            try {
+                java.lang.reflect.Field f = Invoice.class.getDeclaredField("version");
+                f.setAccessible(true);
+                f.setLong(invoice, invoice.version() + 1);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+            byId.put(invoice.id(), invoice);
+        }
 
         @Override public List<Invoice> ofAccount(UUID accountId) { return List.of(); }
 
