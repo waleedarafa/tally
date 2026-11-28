@@ -3,19 +3,24 @@ package com.tally.offers.application;
 import com.tally.account.AccountApi;
 import com.tally.account.AccountView;
 import com.tally.account.UnknownAccountException;
+import com.tally.offers.ChangeRequest;
 import com.tally.offers.Offers;
+import com.tally.offers.PriceLine;
 import com.tally.offers.PriceQuote;
 import com.tally.offers.Pricing;
 import com.tally.offers.QuoteReason;
 import com.tally.offers.QuoteRequest;
 import com.tally.offers.UnknownPlanException;
-import com.tally.offers.domain.Offer;
 import com.tally.offers.domain.OfferCatalogue;
 import com.tally.offers.domain.OfferVersion;
+import com.tally.offers.domain.PeriodPrice;
+import com.tally.offers.domain.ProrationPolicy;
 import com.tally.offers.domain.PricingRuleRegistry;
 import com.tally.shared.Money;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -23,7 +28,10 @@ import org.springframework.stereotype.Service;
 /**
  * Quotes the offer version a subscription is on through the rule of its kind (ADR-015; decision A). The
  * account gives the currency; the version's terms give the price in it; the rule gives the lines. New
- * sign-ups get the offer's current version ({@link #currentVersion}).
+ * sign-ups get the offer's current version ({@link #currentVersion}): the version in force on the
+ * account's local date (ADR-047), not the latest published row. A mid-period change is priced by
+ * {@link ProrationPolicy} instead of a kind's rule: unused days are credited at the old price and
+ * remaining days are charged at the new, by days (O4; ADR-040).
  */
 @Service
 class PricingService implements Pricing, Offers {
@@ -31,11 +39,13 @@ class PricingService implements Pricing, Offers {
     private final AccountApi accounts;
     private final OfferCatalogue catalogue;
     private final PricingRuleRegistry rules;
+    private final Clock clock;
 
-    PricingService(AccountApi accounts, OfferCatalogue catalogue, PricingRuleRegistry rules) {
+    PricingService(AccountApi accounts, OfferCatalogue catalogue, PricingRuleRegistry rules, Clock clock) {
         this.accounts = accounts;
         this.catalogue = catalogue;
         this.rules = rules;
+        this.clock = clock;
     }
 
     @Override
@@ -46,23 +56,53 @@ class PricingService implements Pricing, Offers {
                 .orElseThrow(() -> new UnknownPlanException(request.offerId(), currency));
         Money price = version.terms().priceIn(account.currency())
                 .orElseThrow(() -> new UnknownPlanException(request.offerId(), currency));
+        if (account.billingDay().isPresent()) {
+            // A short first period is priced by days (ADR-043, O4). A regular period is the full price.
+            price = PeriodPrice.of(price, request.period(), account.billingDay().getAsInt());
+        }
         return PriceQuote.of(request, version.number(),
                 rules.ruleFor(version.kind()).lines(version.terms(), price, request.period()),
                 new QuoteReason(request.offerId(), version.number(), version.kind(), Map.of()));
     }
 
     @Override
+    public PriceQuote quoteChange(ChangeRequest request) {
+        AccountView account = account(request.accountId());
+        String currency = account.currency().getCurrencyCode();
+        OfferVersion oldVersion = version(request.oldOfferId(), request.oldOfferVersion(), currency);
+        OfferVersion newVersion = version(request.newOfferId(), request.newOfferVersion(), currency);
+        Money oldPrice = oldVersion.terms().priceIn(account.currency())
+                .orElseThrow(() -> new UnknownPlanException(request.oldOfferId(), currency));
+        Money newPrice = newVersion.terms().priceIn(account.currency())
+                .orElseThrow(() -> new UnknownPlanException(request.newOfferId(), currency));
+        List<PriceLine> lines = ProrationPolicy.lines(oldPrice, newPrice, request.period(), request.effectiveDate());
+        Money total = lines.stream().map(PriceLine::amount).reduce(Money::plus)
+                .orElseThrow(() -> new IllegalArgumentException("A change quote has at least one line"));
+        return new PriceQuote(request.subscriptionId(), request.newOfferId(), newVersion.number(), request.period(),
+                lines, total, new QuoteReason(request.newOfferId(), newVersion.number(), newVersion.kind(), Map.of()));
+    }
+
+    private OfferVersion version(String offerId, int number, String currency) {
+        return catalogue.offer(offerId).flatMap(o -> o.version(number))
+                .orElseThrow(() -> new UnknownPlanException(offerId, currency));
+    }
+
+    /**
+     * The version in force on the account's local date (ADR-047): the clock instant in the account's
+     * time zone, as a {@link LocalDate}. Not the latest published row, even if it is not yet in force.
+     *
+     * @throws com.tally.account.UnknownAccountException if there is no such account
+     */
+    @Override
     public OptionalInt currentVersion(String offerId, UUID accountId) {
         AccountView account = account(accountId);
-        return currentVersion(offerId).filter(v -> v.terms().priceIn(account.currency()).isPresent())
+        LocalDate asOf = LocalDate.ofInstant(clock.instant(), account.timeZone());
+        return catalogue.offer(offerId).flatMap(offer -> offer.currentOn(asOf))
+                .filter(v -> v.terms().priceIn(account.currency()).isPresent())
                 .map(v -> OptionalInt.of(v.number())).orElse(OptionalInt.empty());
     }
 
     private AccountView account(UUID accountId) {
         return accounts.get(accountId).orElseThrow(() -> new UnknownAccountException(accountId));
-    }
-
-    private Optional<OfferVersion> currentVersion(String offerId) {
-        return catalogue.offer(offerId).flatMap(Offer::current);
     }
 }

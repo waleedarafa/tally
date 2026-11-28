@@ -11,6 +11,7 @@ import com.tally.offers.domain.Offer;
 import com.tally.offers.domain.OfferKind;
 import com.tally.offers.domain.OfferTerms;
 import com.tally.offers.domain.PricingRuleRegistry;
+import com.tally.platform.TestClock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -25,7 +26,7 @@ final class GoldenQuotes {
 
     final InMemoryOffers ports = new InMemoryOffers();
     final PricingService pricing = new PricingService(ports, ports,
-            new PricingRuleRegistry(List.of(new FixedPricePhaseRule(), new FreeTrialRule())));
+            new PricingRuleRegistry(List.of(new FixedPricePhaseRule(), new FreeTrialRule())), new TestClock());
 
     /** Publishes version 1 of an offer of the given kind. */
     void offer(String id, String kind, OfferTerms terms) {

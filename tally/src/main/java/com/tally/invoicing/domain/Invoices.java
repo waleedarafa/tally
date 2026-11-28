@@ -34,4 +34,7 @@ public interface Invoices {
 
     /** Issued in {@code [from, to)}. */
     List<Invoice> issuedBetween(Instant from, Instant to);
+
+    /** The adjustments tied to {@code periodInvoiceId}, oldest first. */
+    List<Invoice> adjustmentsOf(UUID periodInvoiceId);
 }

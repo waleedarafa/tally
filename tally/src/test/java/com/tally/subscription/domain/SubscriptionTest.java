@@ -97,4 +97,64 @@ class SubscriptionTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(subscription.status()).isEqualTo(SubscriptionStatus.ACTIVE);
     }
+
+    @Test
+    void aSignUpKeyDeterminesTheSubscriptionId() {
+        UUID account = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        UUID key = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        UUID otherKey = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        UUID otherAccount = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        Instant now = Instant.parse("2026-01-31T10:00:00Z");
+        ZoneId utc = ZoneId.of("UTC");
+
+        assertThat(Subscription.idOfSignUp(account, key))
+                .isEqualTo(Subscription.idOfSignUp(account, key))
+                .isEqualTo(Subscription.start(account, "BASIC", 1, now, utc, key).id());
+        assertThat(Subscription.idOfSignUp(account, key)).isNotEqualTo(Subscription.idOfSignUp(account, otherKey));
+        assertThat(Subscription.idOfSignUp(account, key)).isNotEqualTo(Subscription.idOfSignUp(otherAccount, key));
+    }
+
+
+    @Test
+    void aStartOnTheAccountBillingDayIsAFullFirstPeriod() {
+        Subscription subscription = Subscription.start(UUID.randomUUID(), "BASIC", 1,
+                Instant.parse("2026-04-05T10:00:00Z"), ZoneId.of("UTC"), 5);
+
+        assertThat(subscription.anchorDay()).isEqualTo(5);
+        assertThat(subscription.currentPeriod())
+                .isEqualTo(new SubscriptionPeriod(1, LocalDate.parse("2026-04-05"), LocalDate.parse("2026-05-05")));
+    }
+
+    @Test
+    void aStartAfterTheAccountBillingDayIsAShortFirstPeriod() {
+        Subscription subscription = Subscription.start(UUID.randomUUID(), "BASIC", 1,
+                Instant.parse("2026-04-20T10:00:00Z"), ZoneId.of("UTC"), 5);
+
+        assertThat(subscription.anchorDay()).isEqualTo(5);
+        assertThat(subscription.currentPeriod())
+                .isEqualTo(new SubscriptionPeriod(1, LocalDate.parse("2026-04-20"), LocalDate.parse("2026-05-05")));
+    }
+
+    @Test
+    void aStartBeforeTheAccountBillingDayEndsOnIt() {
+        Subscription subscription = Subscription.start(UUID.randomUUID(), "BASIC", 1,
+                Instant.parse("2026-04-01T10:00:00Z"), ZoneId.of("UTC"), 5);
+
+        assertThat(subscription.anchorDay()).isEqualTo(5);
+        assertThat(subscription.currentPeriod())
+                .isEqualTo(new SubscriptionPeriod(1, LocalDate.parse("2026-04-01"), LocalDate.parse("2026-04-05")));
+    }
+
+    @Test
+    void theAnchorIsTheAccountBillingDayEvenWhenTheStartIsNotOnIt() {
+        Subscription subscription = Subscription.start(UUID.randomUUID(), "BASIC", 1,
+                Instant.parse("2026-02-15T10:00:00Z"), ZoneId.of("UTC"), 31);
+
+        assertThat(subscription.anchorDay()).isEqualTo(31);
+        assertThat(subscription.currentPeriod())
+                .isEqualTo(new SubscriptionPeriod(1, LocalDate.parse("2026-02-15"), LocalDate.parse("2026-02-28")));
+        assertThat(subscription.renew(2)).isTrue();
+        assertThat(subscription.periods().get(1))
+                .isEqualTo(new SubscriptionPeriod(2, LocalDate.parse("2026-02-28"), LocalDate.parse("2026-03-31")));
+    }
 }

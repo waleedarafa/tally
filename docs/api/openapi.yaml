@@ -177,7 +177,9 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "201":
-          description: The subscription started.
+          description: >
+            The subscription started. A different Idempotency-Key starts another subscription
+            of the same account (ADR-046). A retry of the same key returns the existing one.
           content:
             application/json:
               schema:
@@ -193,10 +195,9 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "409":
           description: >
-            `already-subscribed`: the account already has a subscription.
             `account-blocked`: the account's standing is BLOCKED.
             `request-in-progress`: a request with this Idempotency-Key is still being handled; see Retry-After.
-            `concurrent-change`: the request met a change made at the same time (a standing set during the sign-up);
+            `concurrent-change`: the request met a change made at the same time (a lost lock or a deadlock);
             nothing was changed and the key was not used up; send the same request again, with the same key, after
             Retry-After.
           headers:

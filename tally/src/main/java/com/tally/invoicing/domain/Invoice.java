@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /** An invoice for one billing period. Refers to the account and subscription by identifier only. */
@@ -38,6 +39,15 @@ public class Invoice {
 
     @Column(name = "plan_id", nullable = false)
     private String planId;
+
+    /** What kind of document the invoice is (ADR-040): the period invoice, or an adjustment for it. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "invoice_type", nullable = false)
+    private InvoiceKind invoiceType;
+
+    /** A period invoice is never tied to one; an adjustment is tied to the period invoice it bills for (ADR-040). */
+    @Column(name = "period_invoice_id")
+    private UUID periodInvoiceId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -124,6 +134,7 @@ public class Invoice {
         i.offerVersion = quoteReason.offerVersion();
         i.quoteReason = quoteReason;
         i.id = idOf(subscriptionId, periodNumber);
+        i.invoiceType = InvoiceKind.PERIOD;
         i.periodNumber = periodNumber;
         i.accountId = accountId;
         i.subscriptionId = subscriptionId;
@@ -151,6 +162,80 @@ public class Invoice {
     public static UUID idOf(UUID subscriptionId, int periodNumber) {
         return UUID.nameUUIDFromBytes(("invoice:" + subscriptionId + ":" + periodNumber)
                 .getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * I2, as amended by ADR-040: an adjustment invoice is a separate document, tied to the period
+     * invoice it bills for. Its ID is a pure function of the period invoice and the sequence for the
+     * period, so a retry of the same adjustment derives the same ID and issues the same document (D1).
+     * The prefix keeps it distinct from the period invoice's ID. ADR-040's open question 1 is still
+     * open; this is the scheme this code uses.
+     */
+    public static UUID idOfAdjustment(UUID periodInvoiceId, int sequence) {
+        return UUID.nameUUIDFromBytes(("adjustment-invoice:" + periodInvoiceId + ":" + sequence)
+                .getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Issues an adjustment invoice tied to {@code periodInvoice}: the same account, subscription,
+     * period number and period dates, a different ID, and the same rules as a period invoice (an
+     * issued invoice never changes; a zero total is paid when issued; a negative total is refused:
+     * owing the customer money is a credit note's job, I1, never an invoice's). The adjustment
+     * carries its own PriceQuote reason, exactly like the period invoice it follows (D7).
+     *
+     * @param sequence which adjustment of the period this is, numbered from 1; a period and sequence
+     *            always spell the same document, so a retry issues the same document (D1)
+     * @param planId the plan the adjustment bills at (for an upgrade, the new plan)
+     * @param billedFor when the invoice was due to be billed (D6), usually the change date
+     * @param now the time the adjustment is issued, from the injected clock
+     */
+    public static Invoice issueAdjustment(Invoice periodInvoice, int sequence, String planId,
+            List<InvoiceLine> lines, PricingReason quoteReason, Instant billedFor, Instant now) {
+        Objects.requireNonNull(periodInvoice, "periodInvoice");
+        Objects.requireNonNull(planId, "planId");
+        Objects.requireNonNull(quoteReason, "quoteReason");
+        Objects.requireNonNull(lines, "lines");
+        if (sequence < 1) {
+            throw new IllegalArgumentException("An adjustment's sequence starts at 1: " + sequence);
+        }
+        if (lines.isEmpty()) {
+            throw new IllegalArgumentException("An invoice has at least one line");
+        }
+        Money amount = lines.stream().map(InvoiceLine::amount).reduce(Money::plus).orElseThrow();
+        if (amount.minorUnits() < 0) {
+            // Owing the customer money is a credit note's job (I1), never an invoice's (FR-024).
+            throw new IllegalArgumentException("An invoice cannot total less than zero: " + amount
+                    + " for period " + periodInvoice.periodNumber() + " of subscription "
+                    + periodInvoice.subscriptionId());
+        }
+        Invoice i = new Invoice();
+        i.lines = new ArrayList<>(lines);
+        i.offerVersion = quoteReason.offerVersion();
+        i.quoteReason = quoteReason;
+        i.id = idOfAdjustment(periodInvoice.id(), sequence);
+        i.invoiceType = InvoiceKind.ADJUSTMENT;
+        i.periodInvoiceId = periodInvoice.id();
+        i.periodNumber = periodInvoice.periodNumber();
+        i.accountId = periodInvoice.accountId();
+        i.subscriptionId = periodInvoice.subscriptionId();
+        i.planId = planId;
+        i.status = InvoiceStatus.PAYMENT_PENDING;
+        i.amountMinor = amount.minorUnits();
+        i.currency = amount.currency().getCurrencyCode();
+        i.periodStart = periodInvoice.periodStart();
+        i.periodEnd = periodInvoice.periodEnd();
+        // The opaque reference Payment reports results by (FR-014).
+        i.paymentReference = "INV-" + i.id;
+        i.issuedAt = now;
+        i.billedFor = billedFor;
+        i.version = ISSUED_VERSION;
+        if (amount.minorUnits() == 0) {
+            // Issued and paid in one insert: two changes, so InvoiceIssued and InvoicePaid stay in order.
+            i.status = InvoiceStatus.PAID;
+            i.paidAt = now;
+            i.version = ISSUED_VERSION + 1;
+        }
+        return i;
     }
 
     /**
@@ -205,6 +290,16 @@ public class Invoice {
 
     public Integer periodNumber() {
         return periodNumber;
+    }
+
+    /** The kind of document this invoice is (ADR-040): the period invoice, or an adjustment for it. */
+    public InvoiceKind invoiceType() {
+        return invoiceType;
+    }
+
+    /** The period invoice this adjustment bills for; null on a period invoice. */
+    public UUID periodInvoiceId() {
+        return periodInvoiceId;
     }
 
     /** After {@link Invoices#update}, the version the last change committed. */

@@ -13,14 +13,18 @@ class InvoicingInvariants {
     static final String JOBS = "invoicing.jobs";
 
     /**
-     * D1, FR-024: no account has two invoices for overlapping periods. The unique constraint already
-     * stops two invoices on one billing date; this also catches overlaps from any other cause.
+     * D1, FR-024, ADR-046: no subscription has two period invoices for overlapping periods. The unique
+     * constraint already stops two period invoices of one subscription for the same period number;
+     * this also catches overlaps from any other cause. Adjustment invoices share a period invoice's
+     * dates (ADR-040, I2) and are not period invoices, so they are excluded. Two period invoices of
+     * different subscriptions of the same account may overlap: they can share the account billing day.
      */
     @Bean
     InvariantCheck duplicateInvoices(JdbcTemplate jdbc) {
         return check("invoicing.duplicate-invoices", () -> jdbc.queryForObject("""
                 SELECT count(*) FROM invoicing.invoice a
-                JOIN invoicing.invoice b ON a.account_id = b.account_id AND a.id < b.id
+                JOIN invoicing.invoice b ON a.subscription_id = b.subscription_id AND a.id < b.id
+                 AND a.invoice_type = 'PERIOD' AND b.invoice_type = 'PERIOD'
                  AND a.period_start < b.period_end AND b.period_start < a.period_end
                 """, Long.class));
     }

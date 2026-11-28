@@ -24,7 +24,7 @@ From the Step 7 canvas and `design.md` §2 and §4.
 | Word | Meaning |
 |---|---|
 | Offer | A sellable plan with its phases and terms |
-| Offer version | A published offer, which never changes; a change makes a new version (O2). A subscription keeps the version it signed up to (Slice 1R) |
+| Offer version | A published offer, which never changes; a change makes a new version (O2). Each version has an effective-from date (ADR-047). A new subscription signs up to the version in force on the account's local date; a subscription keeps the version it signed up to (Slice 1R, WAR-65) |
 | Kind of offer | Discount, free trial, fixed-price phase, bundle price; anything else is a new kind, and needs finance's sign-off before publication (O1, H1) |
 | Phase | A stretch of time with one price, such as "first month free" |
 | PriceQuote | The answer to "what does this subscription owe for this period, and why": amount lines, currency, period and reason. The same subscription, period and version always give the same PriceQuote (O3) |
@@ -38,7 +38,7 @@ From the Step 7 canvas and `design.md` §2 and §4.
 | Subscription | One plan bought by one account |
 | Period | The stretch of time one invoice covers, `[start, end)`, numbered from 1. Periods never overlap or leave gaps (S2) |
 | Renewal | Creating the next period; `renew(n)` creates period n once and changes nothing if it exists |
-| Billing day | The day each period starts; set by the account's first subscription (S5) |
+| Billing day | The day each period starts; set by the account's first subscription and then unchanged (S5, ADR-043) |
 | Billing time | 00:00 on the billing day in the account's time zone, when a renewal falls due (H8, `BillingCalendar`) |
 | Plan change | An upgrade or downgrade, with its effective date. Upgrade at once; downgrade at period end (S3) |
 | Cancellation | An end date, always a period end; no refund for the current period (S4, H11) |
@@ -80,7 +80,7 @@ Billing's side of the access facts (ADR-033). It holds no access rule.
 
 | Word | Meaning |
 |---|---|
-| Invoice | A legal record of what an account owes for a period. Its ID is subscription + period number, so there is at most one per subscription per period (I2) |
+| Invoice | A legal record of what an account owes for a period. At most one period invoice per subscription per period; an adjustment invoice is a separate document with its own ID, tied to the period (I2, ADR-040) |
 | Line | One amount from a PriceQuote (I3) |
 | Credit note | The only way to correct an issued invoice; an issued invoice never changes (I1) |
 | Reference | The opaque label Payment collects against |

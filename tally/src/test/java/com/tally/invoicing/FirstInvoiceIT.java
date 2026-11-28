@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.tally.account.AccountApi;
+import com.tally.platform.TestClock;
 import com.tally.payment.FailureReason;
 import com.tally.payment.PaymentFailed;
 import com.tally.payment.PaymentSucceeded;
 import com.tally.shared.Money;
+import com.tally.subscription.EndReason;
 import com.tally.subscription.SubscriptionApi;
 import com.tally.subscription.SubscriptionChangeType;
 import com.tally.subscription.SubscriptionChanged;
@@ -16,11 +18,14 @@ import com.tally.support.AbstractProviderIntegrationTest;
 import com.tally.support.FakeProvider;
 import com.tally.support.TestAccounts;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -55,6 +60,11 @@ class FirstInvoiceIT extends AbstractProviderIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @AfterEach
+    void resetClock() {
+        clock.set(TestClock.DEFAULT_START);
+    }
 
     UUID account(String currency, String zone, String token) {
         UUID id = testAccounts.open(Currency.getInstance(currency), ZoneId.of(zone)).id();
@@ -145,5 +155,34 @@ class FirstInvoiceIT extends AbstractProviderIntegrationTest {
     int incompletePublications(String reference) {
         return jdbc.queryForObject("SELECT count(*) FROM event_publication"
                 + " WHERE completion_date IS NULL AND serialized_event LIKE ?", Integer.class, "%" + reference + "%");
+    }
+
+
+    @Test
+    void aLaterSubscriptionGetsAShortFirstPeriodInvoice() {
+        UUID account = account("USD", "UTC", FakeProvider.token());
+        SubscriptionView first = subscriptions.subscribe(account, "PREMIUM");
+        InvoiceView firstInvoice = awaitInvoice(account, InvoiceStatus.PAID);
+        assertThat(firstInvoice.periodStart()).isEqualTo(LocalDate.parse("2026-01-15"));
+        assertThat(firstInvoice.periodEnd()).isEqualTo(LocalDate.parse("2026-02-15"));
+        assertThat(firstInvoice.amount()).isEqualTo(Money.of(2999, "USD"));
+        assertThat(accounts.get(account).orElseThrow().billingDay()).isEqualTo(OptionalInt.of(15));
+
+        assertThat(subscriptions.end(first.id(), EndReason.WRITE_OFF)).isTrue();
+        clock.set(Instant.parse("2026-02-20T10:00:00Z"));
+
+        SubscriptionView second = subscriptions.subscribe(account, "PREMIUM");
+        assertThat(second.id()).isNotEqualTo(first.id());
+        await().atMost(Duration.ofSeconds(10)).until(() -> invoicing.invoicesForSubscription(second.id()).stream()
+                .anyMatch(i -> i.status() == InvoiceStatus.PAID));
+        InvoiceView secondInvoice = invoicing.invoicesForSubscription(second.id()).getFirst();
+        // [2026-02-20, 2026-03-15) is 23 days; the regular period ending 2026-03-15 is [2026-02-15, 2026-03-15), 28 days.
+        assertThat(secondInvoice.periodStart()).isEqualTo(LocalDate.parse("2026-02-20"));
+        assertThat(secondInvoice.periodEnd()).isEqualTo(LocalDate.parse("2026-03-15"));
+        assertThat(secondInvoice.amount()).isEqualTo(Money.of(2463, "USD")); // 2999 * 23/28 half up
+        assertThat(invoicing.invoicesForSubscription(second.id())).hasSize(1);
+        assertThat(jdbc.queryForObject("SELECT invoice_type FROM invoicing.invoice WHERE id = ?", String.class,
+                secondInvoice.id())).isEqualTo("PERIOD");
+        assertThat(accounts.get(account).orElseThrow().billingDay()).isEqualTo(OptionalInt.of(15));
     }
 }

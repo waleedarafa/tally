@@ -102,28 +102,26 @@ class SignUpApiIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void aSecondSubscriptionWithAnotherKeyIsAlreadySubscribed() {
+    void aSecondSubscriptionWithAnotherKeyIsCreated() {
         UUID account = account();
-        assertThat(signUp(UUID.randomUUID().toString(), account, "BASIC").getStatusCode().value()).isEqualTo(201);
+        ResponseEntity<String> first = signUp(UUID.randomUUID().toString(), account, "BASIC");
+        ResponseEntity<String> second = signUp(UUID.randomUUID().toString(), account, "BASIC");
 
-        assertProblem(signUp(UUID.randomUUID().toString(), account, "BASIC"), 409, "/problems/already-subscribed");
+        assertThat(first.getStatusCode().value()).isEqualTo(201);
+        assertThat(second.getStatusCode().value()).isEqualTo(201);
+        assertThat(second.getBody()).isNotEqualTo(first.getBody());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM subscription.subscription WHERE account_id = ?",
+                Long.class, account)).isEqualTo(2);
     }
 
     /**
-     * One person signs up in two browser tabs at once: one account, two keys, two tokens. Both requests read the
-     * account before either commits: the test holds the account's row lock until both are waiting on a lock, so
-     * neither can commit first, whichever order Hibernate writes in. One request subscribes; the other is told the
-     * account already has a subscription. Account's version (an optimistic lock since Slice 2 PR-2) must not turn
-     * the loser into a 500.
-     *
-     * <p>Observed (the {@code SIGN-UP-RACE} lines): the winner waits on the test's lock with its account update;
-     * the loser waits with its subscription insert, on the winner's unique entry. Hibernate writes inserts before
-     * updates, so the loser fails on {@code subscription_one_per_account} before its versioned account update
-     * runs. A change that writes the account update first, such as a query in the act that flushes it early,
-     * turns the loser into an optimistic-lock failure and a 500, and fails this test.
+     * One person signs up in two browser tabs at once: one account, two keys, two tokens (ADR-046). Both
+     * requests take the account's row lock when they record the payment token. The test holds that lock
+     * until both are waiting, then releases it: the two writes then run one after the other, both
+     * subscribe, and neither fails as {@code /problems/concurrent-change}.
      */
     @Test
-    void twoSignUpsForOneAccountAtTheSameTimeGiveOneSubscriptionAndOneAlreadySubscribed() throws Exception {
+    void twoSignUpsForOneAccountAtTheSameTimeBothSucceed() throws Exception {
         UUID account = account();
         List<CompletableFuture<ResponseEntity<String>>> tabs;
         try (Connection holder = dataSource.getConnection()) {
@@ -148,9 +146,10 @@ class SignUpApiIT extends AbstractIntegrationTest {
 
         System.out.println("SIGN-UP-RACE answers: " + answers.stream()
                 .map(a -> a.getStatusCode().value() + " " + a.getBody()).toList());
-        assertThat(answers).extracting(a -> a.getStatusCode().value()).containsExactlyInAnyOrder(201, 409);
-        assertProblem(answers.stream().filter(a -> a.getStatusCode().value() == 409).findFirst().orElseThrow(), 409,
-                "/problems/already-subscribed");
+        assertThat(answers).extracting(a -> a.getStatusCode().value()).containsExactlyInAnyOrder(201, 201);
+        assertThat(answers.get(0).getBody()).isNotEqualTo(answers.get(1).getBody());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM subscription.subscription WHERE account_id = ?",
+                Long.class, account)).isEqualTo(2);
     }
 
     /** Sessions of this test class's database that wait on a lock (ADR-029: other classes have other databases). */

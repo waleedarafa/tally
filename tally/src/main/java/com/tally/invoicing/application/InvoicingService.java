@@ -22,10 +22,18 @@ class InvoicingService implements InvoicingApi {
 
     private final Invoices invoices;
     private final PaymentApi payments;
+    private final UpgradeService upgradeService;
 
-    InvoicingService(Invoices invoices, PaymentApi payments) {
+    InvoicingService(Invoices invoices, PaymentApi payments, UpgradeService upgradeService) {
         this.invoices = invoices;
         this.payments = payments;
+        this.upgradeService = upgradeService;
+    }
+
+    /** Delegates to UpgradeService: the upgrade is not issued in a transaction (rule 6). */
+    @Override
+    public void upgrade(UUID subscriptionId, String newPlanId) {
+        upgradeService.upgrade(subscriptionId, newPlanId);
     }
 
     /** No transaction: Payment asks the provider (rule 6). The invoice is read, never changed, here. */

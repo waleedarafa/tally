@@ -9,9 +9,11 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 @Entity
@@ -49,6 +51,13 @@ public class Account {
     @Column(nullable = false)
     private long version;
 
+    /**
+     * The account's billing day (ADR-043): set once, by the first subscription, from its start instant in the
+     * account's time zone, and never changed. Unset until a subscription's start sets it.
+     */
+    @Column(name = "billing_day")
+    private Integer billingDay;
+
     protected Account() {
     }
 
@@ -73,6 +82,25 @@ public class Account {
 
     public Optional<String> paymentToken() {
         return Optional.ofNullable(paymentToken);
+    }
+
+    /** The account's billing day (1-31), or empty while no subscription has started. */
+    public OptionalInt billingDay() {
+        return billingDay == null ? OptionalInt.empty() : OptionalInt.of(billingDay);
+    }
+
+    /**
+     * Sets the billing day from a subscription start, the local calendar day of {@code startedAt} in this account's
+     * time zone. Returns true only if this call set the day; an already-set day is left unchanged and returned as
+     * false, even when the new start would be a different day.
+     */
+    public boolean setBillingDayFrom(Instant startedAt) {
+        if (billingDay != null) {
+            return false;
+        }
+        LocalDate startedOn = LocalDate.ofInstant(startedAt, timeZone());
+        billingDay = startedOn.getDayOfMonth();
+        return true;
     }
 
     public Standing standing() {

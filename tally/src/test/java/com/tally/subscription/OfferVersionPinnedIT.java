@@ -15,6 +15,7 @@ import com.tally.support.TestAccounts;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
@@ -54,8 +55,10 @@ class OfferVersionPinnedIT extends AbstractProviderIntegrationTest {
         if (version == 1) {
             jdbc.update("INSERT INTO offers.offer (id, name) VALUES ('PINNED', 'Pinned')");
         }
-        jdbc.update("INSERT INTO offers.offer_version (offer_id, version, kind, published_at)"
-                + " VALUES ('PINNED', ?, 'fixed-price-phase', now())", version);
+        // Sign-up uses the test clock, not the database's now(), for the account's local date (ADR-047).
+        var published = clock.instant().atOffset(ZoneOffset.UTC);
+        jdbc.update("INSERT INTO offers.offer_version (offer_id, version, kind, published_at, effective_from)"
+                + " VALUES ('PINNED', ?, 'fixed-price-phase', ?, ?)", version, published, published.toLocalDate());
         jdbc.update("INSERT INTO offers.offer_version_price (offer_id, version, currency, amount_minor)"
                 + " VALUES ('PINNED', ?, 'USD', ?)", version, usdMinorUnits);
     }

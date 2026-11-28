@@ -12,6 +12,7 @@ import com.tally.account.domain.AccountUser;
 import com.tally.account.domain.AccountUserRepository;
 import com.tally.platform.CallerAccounts;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Currency;
 import java.util.Optional;
@@ -95,9 +96,17 @@ class AccountService implements AccountApi, AccountStanding, AccountUsers, Calle
     @Override
     @Transactional
     public void recordPaymentToken(UUID accountId, String paymentToken) {
-        accounts.findById(accountId)
+        accounts.lockById(accountId)
                 .orElseThrow(() -> new UnknownAccountException(accountId))
                 .recordPaymentToken(paymentToken);
+    }
+
+    @Override
+    @Transactional
+    public boolean setBillingDayFrom(UUID accountId, Instant startedAt) {
+        return accounts.lockById(accountId)
+                .orElseThrow(() -> new UnknownAccountException(accountId))
+                .setBillingDayFrom(startedAt);
     }
 
     /**
@@ -107,7 +116,7 @@ class AccountService implements AccountApi, AccountStanding, AccountUsers, Calle
     @Override
     @Transactional
     public void set(UUID accountId, Standing standing, String cause) {
-        Account account = accounts.findById(accountId).orElseThrow(() -> new UnknownAccountException(accountId));
+        Account account = accounts.lockById(accountId).orElseThrow(() -> new UnknownAccountException(accountId));
         if (account.setStanding(standing, cause)) {
             accounts.flush();
             events.publishEvent(new StandingChanged(UUID.randomUUID(), clock.instant(), accountId, account.version(),
@@ -117,6 +126,6 @@ class AccountService implements AccountApi, AccountStanding, AccountUsers, Calle
 
     private static AccountView view(Account account) {
         return new AccountView(account.id(), account.currency(), account.timeZone(), account.paymentToken(),
-                account.standing());
+                account.standing(), account.billingDay());
     }
 }

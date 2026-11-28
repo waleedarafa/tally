@@ -46,12 +46,12 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
         return meters.get("tally.invariant.violations").tag("check", "invoicing.duplicate-invoices").gauge().value();
     }
 
-    void invoice(UUID account, String start, String end) {
+    void invoice(UUID account, UUID subscription, String start, String end) {
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO invoicing.invoice (id, account_id, subscription_id, plan_id, status, amount_minor,"
                         + " currency, period_start, period_end, payment_reference, issued_at)"
                         + " VALUES (?, ?, ?, 'BASIC', 'PAID', 999, 'USD', ?, ?, ?, ?)",
-                id, account, UUID.randomUUID(), LocalDate.parse(start), LocalDate.parse(end), "INV-" + id,
+                id, account, subscription, LocalDate.parse(start), LocalDate.parse(end), "INV-" + id,
                 clock.instant().atOffset(ZoneOffset.UTC));
     }
 
@@ -68,11 +68,13 @@ class AT12InvariantCheckIT extends AbstractIntegrationTest {
         await().atMost(Duration.ofSeconds(10)).until(() -> lastRun() != null);
         long before = duplicateInvoices.violations();
 
-        // A second invoice for a period the account was already invoiced for, on another start date,
-        // so the unique constraint on (account, period start) does not stop it.
+        // A second period invoice of the same subscription, on another start date, so the unique
+        // constraint on (subscription, period number) does not stop it (ADR-046: overlap is per
+        // subscription; two subscriptions of one account may overlap).
         UUID account = UUID.randomUUID();
-        invoice(account, "2026-01-15", "2026-02-15");
-        invoice(account, "2026-01-20", "2026-02-20");
+        UUID subscription = UUID.randomUUID();
+        invoice(account, subscription, "2026-01-15", "2026-02-15");
+        invoice(account, subscription, "2026-01-20", "2026-02-20");
 
         // A day later the check runs again. Only this context's runner sets this context's gauge.
         clock.advance(Duration.ofDays(1));

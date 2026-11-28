@@ -1,5 +1,6 @@
 package com.tally.account;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,4 +19,13 @@ public interface AccountApi {
      * @throws UnknownAccountException if there is no such account
      */
     void recordPaymentToken(UUID accountId, String paymentToken);
+
+    /**
+     * Sets the account's billing day from a subscription start, if it is not already set (ADR-043).
+     * The day is the local calendar day of {@code startedAt} in the account's time zone. Returns true
+     * only if this call set the day.
+     *
+     * @throws UnknownAccountException if there is no such account
+     */
+    boolean setBillingDayFrom(UUID accountId, Instant startedAt);
 }
