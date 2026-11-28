@@ -43,7 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Charges a mid-period plan change and, after that charge succeeds, issues the credit note and
  * adjustment and moves the subscription onto the new plan (ADR-041, ADR-042). {@link #upgrade} calls
  * Payment, so it runs outside a transaction (CLAUDE.md rule 6). {@link #completeAfterCharge} is
- * transactional, forward-only, and idempotent (decision 005).
+ * transactional, forward-only, and idempotent (ADR-041).
  */
 @Service
 class UpgradeService {

@@ -9,7 +9,7 @@ import java.util.UUID;
  * Remembers a mid-period upgrade between the charge and the documents. The charge uses the
  * adjustment's payment reference before that invoice exists (ADR-041), so PaymentSucceeded looks
  * this up by reference and then the upgrade is finished from that intent. Completed intents are
- * never restarted (decision 005).
+ * never restarted (ADR-041).
  */
 public final class UpgradeIntent {
 
