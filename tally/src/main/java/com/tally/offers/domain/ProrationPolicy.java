@@ -13,15 +13,17 @@ import java.util.Objects;
  * from that date to the period end at the old price, and charges the same days at the new price. Days
  * are the days of {@code [start, end)}: a change on day {@code k} of a {@code n}-day period uses
  * {@code k - 1} days and leaves {@code n - k + 1} remaining. Rounding happens only inside
- * {@link Money#times(Ratio)}, half up (ADR-017); totals are sums, never re-rounded.
+ * {@link Money#times(Ratio)}, half up (ADR-017); totals are sums, never re-rounded. A short first
+ * period is prorated over the regular period's days, so the credit never exceeds what the period
+ * invoice billed.
  */
 public final class ProrationPolicy {
 
     private ProrationPolicy() {}
 
-    /** The lines for a change effective on {@code effectiveDate}: a credit at the old price, a charge at the new. */
+    /** The lines for a change effective on {@code effectiveDate}: a credit at the old price, a charge at the new. {@code regularDays} is the number of days of the regular period the old price is for, which may exceed the period's days for a short first period. */
     public static List<PriceLine> lines(Money oldPricePerPeriod, Money newPricePerPeriod, Period period,
-            LocalDate effectiveDate) {
+            LocalDate effectiveDate, long regularDays) {
         Objects.requireNonNull(oldPricePerPeriod, "oldPricePerPeriod");
         Objects.requireNonNull(newPricePerPeriod, "newPricePerPeriod");
         Objects.requireNonNull(period, "period");
@@ -38,14 +40,19 @@ public final class ProrationPolicy {
             throw new IllegalArgumentException("The change date " + effectiveDate + " is not in period "
                     + period.number() + " (" + period.start() + " to " + period.end() + ")");
         }
+        if (regularDays < totalDays) {
+            throw new IllegalArgumentException("The regular period is " + regularDays + " days, fewer than the "
+                    + totalDays + " days of period " + period.number() + " (" + period.start() + " to "
+                    + period.end() + ")");
+        }
         long remainingDays = end - change;
-        Money credit = oldPricePerPeriod.times(Ratio.of(remainingDays, totalDays));
-        Money charge = newPricePerPeriod.times(Ratio.of(remainingDays, totalDays));
+        Money credit = oldPricePerPeriod.times(Ratio.of(remainingDays, regularDays));
+        Money charge = newPricePerPeriod.times(Ratio.of(remainingDays, regularDays));
         return List.of(
-                new PriceLine("Credit, " + remainingDays + " of " + totalDays + " days at the old price ("
+                new PriceLine("Credit, " + remainingDays + " of " + regularDays + " days at the old price ("
                         + oldPricePerPeriod.toDecimal().toPlainString() + ")",
                         new Money(-credit.minorUnits(), charge.currency())),
-                new PriceLine("Charge, " + remainingDays + " of " + totalDays + " days at the new price ("
+                new PriceLine("Charge, " + remainingDays + " of " + regularDays + " days at the new price ("
                         + newPricePerPeriod.toDecimal().toPlainString() + ")", charge));
     }
 }

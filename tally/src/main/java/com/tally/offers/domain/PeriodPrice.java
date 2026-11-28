@@ -16,16 +16,21 @@ public final class PeriodPrice {
 
     private PeriodPrice() {}
 
-    /** {@code pricePerPeriod} times the day ratio of {@code period} against {@code billingDay}. */
-    public static Money of(Money pricePerPeriod, Period period, int billingDay) {
-        Objects.requireNonNull(pricePerPeriod, "pricePerPeriod");
+    /** The number of days of the regular period that ends on {@code period.end()} (the same computation of {@link #of(Money, Period, int)}). */
+    public static long regularDays(Period period, int billingDay) {
         Objects.requireNonNull(period, "period");
         if (billingDay < 1 || billingDay > 31) {
             throw new IllegalArgumentException("Billing day must be 1 to 31: " + billingDay);
         }
         YearMonth previousMonth = YearMonth.from(period.end()).minusMonths(1);
-        long fullPeriodDays = period.end().toEpochDay()
+        return period.end().toEpochDay()
                 - previousMonth.atDay(Math.min(billingDay, previousMonth.lengthOfMonth())).toEpochDay();
+    }
+
+    /** {@code pricePerPeriod} times the day ratio of {@code period} against {@code billingDay}. */
+    public static Money of(Money pricePerPeriod, Period period, int billingDay) {
+        Objects.requireNonNull(pricePerPeriod, "pricePerPeriod");
+        long fullPeriodDays = regularDays(period, billingDay);
         long periodDays = period.end().toEpochDay() - period.start().toEpochDay();
         return pricePerPeriod.times(Ratio.of(periodDays, fullPeriodDays));
     }

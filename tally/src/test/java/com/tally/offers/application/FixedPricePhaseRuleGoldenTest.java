@@ -68,4 +68,19 @@ class FixedPricePhaseRuleGoldenTest {
                 new PriceLine("Period 1, 2026-01-25 to 2026-02-15", Money.of(677, "USD"))); // 999 * 21/31 half up
         assertThat(quote.total()).isEqualTo(Money.of(677, "USD"));
     }
+
+    @Test
+    void aRenewalIsTheFullPriceWhateverTheAccountBillingDay() {
+        UUID account = golden.account("AED");
+        golden.ports.setBillingDayFrom(account, Instant.parse("2026-02-05T10:00:00Z"));
+        golden.offer("BASIC-3100", "fixed-price-phase", new OfferTerms(Map.of(
+                Currency.getInstance("AED"), Money.of(3100, "AED")), 0));
+        Period period = new Period(2, LocalDate.parse("2026-02-20"), LocalDate.parse("2026-03-20"));
+
+        PriceQuote quote = golden.quoteTwice(account, "BASIC-3100", period);
+
+        assertThat(quote.lines()).containsExactly(
+                new PriceLine("Period 2, 2026-02-20 to 2026-03-20", Money.of(3100, "AED")));
+        assertThat(quote.total()).isEqualTo(Money.of(3100, "AED"));
+    }
 }
