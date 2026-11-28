@@ -1,6 +1,6 @@
 # ADR-056. Telecom partner bundles reach Access through a translator in Access
 
-**Status:** Accepted (by delegation, Waleed 2026-11-18 "Feel free to take decisions"), 27 November 2026 (A-11 follow-up).
+**Status:** Accepted (confirmed by Waleed Arafa, 2026-11-28), 27 November 2026 (A-11 follow-up).
 
 ## Context
 

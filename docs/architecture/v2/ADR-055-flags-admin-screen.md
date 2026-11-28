@@ -1,6 +1,6 @@
 # ADR-055. A minimal flags admin screen: static files over the admin API
 
-**Status:** Accepted (by delegation, Waleed 2026-11-18 "Feel free to take decisions"), 27 November 2026 (WAR-66 follow-up).
+**Status:** Accepted (confirmed by Waleed Arafa, 2026-11-28), 27 November 2026 (WAR-66 follow-up).
 
 ## Context
 

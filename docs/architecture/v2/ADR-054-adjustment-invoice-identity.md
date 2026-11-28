@@ -1,6 +1,6 @@
 # ADR-054. Adjustment invoice identity: a name-based UUID of the period invoice and a sequence
 
-**Status:** Accepted (by delegation, Waleed 2026-11-18 "Feel free to take decisions"), 27 November 2026 (closes ADR-040 open question 1).
+**Status:** Accepted (confirmed by Waleed Arafa, 2026-11-28), 27 November 2026 (closes ADR-040 open question 1).
 
 ## Context
 
