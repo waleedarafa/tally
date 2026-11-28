@@ -17,6 +17,7 @@ import com.tally.invoicing.domain.TaxQuote;
 import com.tally.invoicing.domain.TaxRates;
 import com.tally.invoicing.domain.TaxRequest;
 import com.tally.invoicing.domain.TaxUnavailableException;
+import com.tally.invoicing.domain.TaxQuoteRefusedException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -87,8 +88,9 @@ class InvoiceIssuer {
         TaxQuote tax;
         try {
             tax = taxRates.quote(taxRequest);
-        } catch (TaxUnavailableException e) {
-            log.warn("Tax for invoice {} is unavailable; it will be retried on the tax-quote queue", invoice.id(), e);
+        } catch (TaxUnavailableException | TaxQuoteRefusedException e) {
+            log.warn("Tax for invoice {} could not be quoted; it is stored as DRAFT and goes to the tax-quote queue",
+                    invoice.id(), e);
             return transactions.execute(tx -> {
                 if (!invoices.addIfAbsent(invoice)) {
                     return Optional.empty();

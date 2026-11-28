@@ -16,6 +16,7 @@ import com.tally.invoicing.domain.TaxQuote;
 import com.tally.invoicing.domain.TaxRates;
 import com.tally.invoicing.domain.TaxRequest;
 import com.tally.invoicing.domain.TaxUnavailableException;
+import com.tally.invoicing.domain.TaxQuoteRefusedException;
 import com.tally.offers.ChangeRequest;
 import com.tally.offers.Period;
 import com.tally.offers.PriceLine;
@@ -118,7 +119,7 @@ class TaxQuoteFlowTest {
 
     static final class FakeTaxRates implements TaxRates {
         private final TaxQuote quote;
-        private final TaxUnavailableException exception;
+        private final RuntimeException exception;
 
         int calls = 0;
         boolean transactionActiveInsideQuote = false;
@@ -126,6 +127,8 @@ class TaxQuoteFlowTest {
         FakeTaxRates(TaxQuote quote) { this.quote = quote; this.exception = null; }
 
         FakeTaxRates(TaxUnavailableException exception) { this.quote = null; this.exception = exception; }
+
+        FakeTaxRates(TaxQuoteRefusedException exception) { this.quote = null; this.exception = exception; }
 
         @Override public TaxQuote quote(TaxRequest request) {
             calls++;
@@ -263,6 +266,38 @@ class TaxQuoteFlowTest {
         FakeAccounts accounts = new FakeAccounts(account);
         FakePricing pricing = new FakePricing(quoteOneLine(subscriptionId, 1417, "AED"));
         FakeTaxRates taxRates = new FakeTaxRates(new TaxUnavailableException("service down"));
+        FakeEvents events = new FakeEvents();
+        FakeQueues queues = new FakeQueues();
+        TransactionTemplate transactions = transactions();
+        TaxQuoteWorker worker = worker(queues, invoices, accounts, taxRates, events, transactions);
+        InvoiceIssuer issuer = issuer(queues, invoices, accounts, pricing, taxRates, events, transactions, worker);
+
+        Optional<Invoice> result = issuer.issue(accountId, subscriptionId, "BASIC", 1, 1, PERIOD_START, PERIOD_END, NOW);
+
+        assertThat(result).isPresent();
+        Invoice invoice = result.get();
+        assertThat(invoice.status()).isEqualTo(InvoiceStatus.DRAFT);
+        assertThat(invoice.issuedAt()).isNull();
+        assertThat(invoice.version()).isZero();
+        assertThat(invoice.lines()).hasSize(1);
+        assertThat(invoices.find(invoice.id())).isPresent();
+        assertThat(events.published).noneMatch(e -> e instanceof InvoiceIssued);
+        assertThat(events.published).noneMatch(e -> e instanceof InvoicePaid);
+        assertThat(queues.queue.keys).containsExactly(invoice.id().toString());
+        assertThat(queues.queue.dueAts).containsExactly(NOW.plus(RETRY_DELAY));
+        assertThat(taxRates.calls).isEqualTo(1);
+        assertThat(taxRates.transactionActiveInsideQuote).isFalse();
+    }
+
+    @Test
+    void aRefusedQuoteStoresADraftAndQueuesIt() {
+        UUID accountId = UUID.randomUUID();
+        UUID subscriptionId = UUID.randomUUID();
+        AccountView account = account(accountId, "AED", "AE");
+        FakeInvoices invoices = new FakeInvoices();
+        FakeAccounts accounts = new FakeAccounts(account);
+        FakePricing pricing = new FakePricing(quoteOneLine(subscriptionId, 1417, "AED"));
+        FakeTaxRates taxRates = new FakeTaxRates(new TaxQuoteRefusedException("service refused the request"));
         FakeEvents events = new FakeEvents();
         FakeQueues queues = new FakeQueues();
         TransactionTemplate transactions = transactions();

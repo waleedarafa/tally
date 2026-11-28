@@ -81,6 +81,7 @@ class TaxQuoteWorker implements QueueHandler {
                 : draft.periodStart();
         TaxRequest request = new TaxRequest(account.country(), draft.amount().currency(), draft.amount(), taxPointDate);
         TaxQuote quote;
+        // A TaxQuoteRefusedException is not caught: it marks the item FAILED, which pages (MoneyQueueItemsFailed).
         try {
             quote = taxRates.quote(request);
         } catch (TaxUnavailableException e) {
